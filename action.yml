@@ -1,15 +1,9 @@
 name: Terraform Module Releaser
-description: >
-  This action identifies affected Terraform directories in a pull request, determines the necessary
-  release type based on commit messages, and calculates the next version tag for each module. It then
-  generates a pull request comment summarizing module changes and release types, commits, tags, and
-  pushes new versions for each module individually, and creates a GitHub release for each module with
-  a dynamically generated description. With this action, you can efficiently manage your Terraform
-  modules, reduce manual overhead, and improve collaboration.
-author: "TechPivot"
+description: Automate versioning, releases, and documentation for Terraform modules in GitHub monorepos.
+author: TechPivot
 branding:
-  icon: "heart"
-  color: "red"
+  icon: package
+  color: purple
 
 inputs:
   major-keywords:
