@@ -48,3 +48,4 @@ jobs:
           default-first-tag: v1.0.0
           disable-wiki: false
           wiki-sidebar-changelog-max: 10
+          delete-legacy-tags: false # Note: We don't want to delete tags in this repository
