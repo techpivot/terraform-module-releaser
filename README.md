@@ -38,12 +38,40 @@ details, and a full changelog.
 - **Flexible Configuration**: Offers advanced input options for customization, allowing you to tailor the action to your
   specific needs.
 
+## Screenshots
+
+<p float="left" align="center">
+  <img src="screenshots/wiki-sidebar.jpg"
+    alt="Wiki Sidebar" style="width: 299px; height: auto; " />
+  <img src="screenshots/pr-initial-module-release.jpg"
+    alt="PR Initial Module Release" style="width: 619px; height: auto;" />
+  <img src="screenshots/pr-separate-modules-updating.jpg"
+    alt="PR Separate Modules Updating" style="width: 504px; height: auto;" />
+  <img src="screenshots/wiki-changelog.jpg"
+    alt="Wiki Changelog" style="width: 500px; height: auto;" />
+  <img src="screenshots/wiki-usage.jpg"
+    alt="Wiki Usage" style="width: 500px; height: auto;" />
+  <img src="screenshots/module-contents-explicit-dir-only.jpg"
+    alt="Module Contents Explicit Dir Only" style="width: 500px;" />
+  <img src="screenshots/release-details.jpg"
+    alt="Release Details" style="width: 500px; height: auto;" />
+  <img src="screenshots/wiki-module-example.jpg"
+    alt="Wiki Module Example" style="width: 500px; height:" />
+</p>
+
 ## Getting Started
 
-### Step 1: Create a Wiki
+### Step 1: Ensure GitHub Wiki is Enabled
 
-Before using this action, you need to create a wiki for your repository. To do this, click the green "Wiki" button on
-your repository's homepage and follow the prompts to create a new wiki.
+Before using this action, make sure that the wiki is enabled and initialized for your repository:
+
+1. Go to your repository's homepage.
+1. Navigate to the "Settings" tab.
+1. Under the "Features" section, ensure the "Wikis" option is checked to enable the GitHub Wiki.
+1. Navigate to the "Wiki" tab on your repository.
+1. Click the "Create the first page" button and add a basic title like "Home" to initialize the wiki with an initial
+   commit.
+1. Save the changes to ensure your wiki is not empty when the GitHub Action updates it with module information.
 
 ### Step 2: Configure the Action
 
