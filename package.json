@@ -55,8 +55,8 @@
     "@biomejs/biome": "^1.9.2",
     "@jest/globals": "^29.7.0",
     "@types/jest": "^29.5.13",
-    "@types/node": "^22.7.4",
+    "@types/node": "^22.7.5",
     "@vercel/ncc": "^0.38.1",
-    "typescript": "^5.6.2"
+    "typescript": "^5.6.3"
   }
 }
