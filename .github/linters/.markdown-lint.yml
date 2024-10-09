@@ -22,6 +22,8 @@ MD033:
   allowed_elements:
     - sup
     - b
+    - p
+    - img
 
 # Code block style
 MD046:

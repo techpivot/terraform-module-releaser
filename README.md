@@ -38,6 +38,19 @@ details, and a full changelog.
 - **Flexible Configuration**: Offers advanced input options for customization, allowing you to tailor the action to your
   specific needs.
 
+## Screenshots
+
+<p float="left">
+  <img src="screenshots/wiki-sidebar.jpg" alt="Wiki Sidebar" style="width: 299px; height: auto; " />
+  <img src="screenshots/pr-initial-module-release.jpg" alt="PR Initial Module Release" style="width: 619px; height: auto;" />
+  <img src="screenshots/pr-separate-modules-updating.jpg" alt="PR Separate Modules Updating" style="width: 450px; height: auto;" />
+  <img src="screenshots/wiki-changelog.jpg" alt="Wiki Changelog" style="width: 500px; height: auto;" />
+  <img src="screenshots/wiki-usage.jpg" alt="Wiki Usage" style="width: 500px; height: auto;" />
+  <img src="screenshots/module-contents-explicit-dir-only.jpg" alt="Module Contents Explicit Dir Only" style="width: 455px;" />
+  <img src="screenshots/release-details.jpg" alt="Release Details" style="width: 400px; height: auto;" />
+  <img src="screenshots/wiki-module-example.jpg" alt="Wiki Module Example" style="width: 200px; height: auto; border: 2px solid #ccc; margin: 5px;" />
+</p>
+
 ## Getting Started
 
 ### Step 1: Create a Wiki
