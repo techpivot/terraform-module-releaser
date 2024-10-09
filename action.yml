@@ -1,0 +1,67 @@
+name: Terraform Module Releaser
+description: >
+  This action identifies affected Terraform directories in a pull request, determines the necessary
+  release type based on commit messages, and calculates the next version tag for each module. It then
+  generates a pull request comment summarizing module changes and release types, commits, tags, and
+  pushes new versions for each module individually, and creates a GitHub release for each module with
+  a dynamically generated description. With this action, you can efficiently manage your Terraform
+  modules, reduce manual overhead, and improve collaboration.
+author: "TechPivot"
+branding:
+  icon: "heart"
+  color: "red"
+
+inputs:
+  major-keywords:
+    description: Keywords in commit messages that indicate a major release.
+    required: true
+    default: major change,breaking change
+  minor-keywords:
+    description: Keywords in commit messages that indicate a minor release.
+    required: true
+    default: feat,feature
+  patch-keywords:
+    description: >
+      Keywords in commit messages that indicate a patch release. By default, everything will be a patch
+      release if major or minor keywords are not found.
+    required: true
+    default: fix,chore,docs
+  default-first-tag:
+    description: Specifies the default tag version. (Should be in format v#.#.#)
+    required: true
+    default: v1.0.0
+  github_token:
+    description: Use this if you wish to use a different GitHub token than the one provided by the workflow.
+    required: true
+    default: ${{ github.token }}default
+  terraform-docs-version:
+    description: >
+      Specifies the terraform-docs version used to generate documentation for the wiki.
+
+      See: https://github.com/terraform-docs/terraform-docs/releases
+    required: true
+    default: v0.19.0
+  delete-legacy-tags:
+    description: >
+      Specifies a boolean that determines whether tags from Terraform modules that have been deleted
+      should be automatically removed. By default this is true as the purpose of the repository is to keep
+      releases/tags clean. When removing a module, this will ensure the tags/releases are automatically
+      cleaned.
+    required: true
+    default: "true"
+  disable-wiki:
+    description: >
+      Whether to disable wiki generation for Terraform modules.
+      By default, this is set to false. Set to true to prevent wiki documentation from being generated.
+    required: true
+    default: "false"
+  wiki-sidebar-changelog-max:
+    description: >
+      An integer that specifies how many changelog entries are displayed in the sidebar per module.
+      Adjust this value to control the visibility of changelog entries in the module sidebar.
+    required: true
+    default: "5"
+
+runs:
+  using: node20
+  main: dist/index.js

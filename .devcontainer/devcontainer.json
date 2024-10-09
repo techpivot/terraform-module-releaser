@@ -1,0 +1,45 @@
+{
+  "name": "typescript-node:22",
+  "image": "mcr.microsoft.com/devcontainers/typescript-node:22",
+  "mounts": [
+    "source=${localWorkspaceFolderBasename}-node_modules,target=${containerWorkspaceFolder}/node_modules,type=volume"
+  ],
+  "postCreateCommand": "./.devcontainer/postCreateCommand.bash",
+  "customizations": {
+    "codespaces": {
+      "openFiles": ["README.md"]
+    },
+    "vscode": {
+      "extensions": [
+        "bierner.markdown-preview-github-styles",
+        "davidanson.vscode-markdownlint",
+        "github.vscode-github-actions",
+        "github.vscode-pull-request-github",
+        "me-dutour-mathieu.vscode-github-actions",
+        "yzhang.markdown-all-in-one",
+        "esbenp.prettier-vscode"
+      ],
+      "settings": {
+        "editor.tabSize": 2,
+        "editor.formatOnSave": false,
+        "markdown.extension.list.indentationSize": "adaptive",
+        "markdown.extension.italic.indicator": "_",
+        "markdown.extension.orderedList.marker": "one",
+        "remote.SSH.enableAgentForwarding": true,
+        "[json]": {
+          "editor.defaultFormatter": "esbenp.prettier-vscode"
+        },
+        "[markdown]": {
+          "editor.defaultFormatter": "esbenp.prettier-vscode"
+        }
+      }
+    }
+  },
+  "remoteEnv": {
+    "GITHUB_TOKEN": "${localEnv:GITHUB_TOKEN}"
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/devcontainers-contrib/features/prettier:1": {}
+  }
+}

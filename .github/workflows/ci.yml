@@ -1,0 +1,50 @@
+name: Continuous Integration
+
+on:
+  pull_request:
+    # Note: We only test our internal action locally in the pull request branch to avoid
+    # actually creating releases for terraform modules in this primary github action
+    # repository. Thus, we ensure that the "closed" option is not present. Separately,
+    # we test the action as designed in a separate terraform-module repository.
+    types: [opened, edited, synchronize]
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  test-action:
+    name: GitHub Actions Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        id: checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        id: setup-node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install Dependencies
+        id: npm-ci
+        run: npm ci --no-fund
+
+      - name: Package
+        id: npm-package
+        run: npm run package
+
+      - name: Test Local Action
+        id: test-action
+        uses: ./
+        with:
+          major-keywords: major change,breaking change
+          minor-keywords: feat,feature
+          patch-keywords: fix,chore,docs
+          default-first-tag: v1.0.0
+          disable-wiki: false
+          wiki-sidebar-changelog-max: 10

@@ -1,0 +1,62 @@
+{
+  "name": "terraform-module-releaser",
+  "description": "GitHub Actions TypeScript template",
+  "version": "1.0.0",
+  "author": "virgofx",
+  "type": "module",
+  "main": "lib/index.js",
+  "homepage": "https://github.com/techpivot/terraform-module-releaser",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/techpivot/terraform-module-releaser.git"
+  },
+  "bugs": {
+    "url": "https://github.com/techpivot/terraform-module-releaser/issues"
+  },
+  "keywords": [
+    "terraform",
+    "module",
+    "releaser",
+    "github-action",
+    "monorepo"
+  ],
+  "license": "MIT",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "prettier": {
+    "overrides": [
+      {
+        "files": "*.md",
+        "options": {
+          "printWidth": 120,
+          "proseWrap": "always"
+        }
+      }
+    ]
+  },
+  "scripts": {
+    "bundle": "npm run check:fix && npm run package",
+    "check": "biome check ./src",
+    "check:fix": "biome check --write --unsafe .",
+    "typecheck": "tsc --noEmit",
+    "package": "ncc build src/index.ts --source-map -o dist"
+  },
+  "dependencies": {
+    "@actions/core": "^1.10.1",
+    "@actions/github": "6.0.0",
+    "@octokit/request-error": "^6.1.5",
+    "p-limit": "^6.1.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.2",
+    "@jest/globals": "^29.7.0",
+    "@types/jest": "^29.5.13",
+    "@types/node": "^22.7.4",
+    "@vercel/ncc": "^0.38.1",
+    "typescript": "^5.6.2"
+  }
+}
