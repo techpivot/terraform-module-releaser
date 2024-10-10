@@ -13,6 +13,17 @@ import { GITHUB_ACTIONS_BOT_EMAIL, GITHUB_ACTIONS_BOT_NAME } from './github';
 import { generateTerraformDocs } from './terraform-docs';
 import type { TerraformModule } from './terraform-module';
 
+export enum WikiStatus {
+  SUCCESS = 'SUCCESS',
+  FAILURE = 'FAILURE',
+  DISABLED = 'DISABLED',
+}
+
+interface ChildProcessError extends Error {
+  stdout?: Buffer;
+  stderr?: Buffer;
+}
+
 // Special subdirectory inside the primary repository where the wiki is checked out.
 const WIKI_SUBDIRECTORY = '.wiki';
 
@@ -43,25 +54,58 @@ export const checkoutWiki = (): void => {
 
   startGroup(`Checking out wiki repository [${wikiHtmlUrl}]`);
 
-  // @todo wrap this in a try/catch and handle the case where the wiki doesn't exist or not enabled yet
-  const checkoutCommand = `git clone --no-progress --no-recurse-submodules --depth=1 ${wikiHtmlUrl} ${WIKI_SUBDIRECTORY}`;
-  execSync(checkoutCommand, { stdio: 'inherit' });
+  info('Adding repository directory to the temporary git global config as a safe directory');
+  execSync(`git config --global --add safe.directory ${WIKI_DIRECTORY}`, { stdio: 'inherit' });
 
+  info('Initializing the repository');
+  if (!fs.existsSync(WIKI_SUBDIRECTORY)) {
+    fs.mkdirSync(WIKI_SUBDIRECTORY);
+  }
+  execSync(`git init --initial-branch=master ${WIKI_DIRECTORY}`, execWikiOpts);
+
+  info('Setting up origin');
+  execSync(`git remote add origin ${wikiHtmlUrl}`, execWikiOpts);
+
+  info('Configuring authentication');
   // Configure Git to use the PAT for the wiki repository (emulating the behavior of GitHub Actions
   // from the checkout@v4 action.
   const basicCredential = Buffer.from(`x-access-token:${config.githubToken}`, 'utf8').toString('base64');
+  try {
+    execSync(`git config --local --unset-all 'http.https://github.com/.extraheader'`, execWikiOpts);
+  } catch (error) {
+    // This returns exit code 5 if not set. Not a problem. Let's ignore./
+  }
   execSync(
-    `git config --local http.https://github.com/.extraheader "AUTHORIZATION: basic ${basicCredential}"`,
+    `git config --local http.https://github.com/.extraheader "Authorization: Basic ${basicCredential}"`,
     execWikiOpts,
   );
 
-  // Since we 100% regenerate 100% of the modules, we can simply remove the generated folder if it exists
-  // as this helps us 100% ensure we don't have any stale content.
-  if (fs.existsSync(WIKI_GENERATED_DIRECTORY)) {
-    fs.rmSync(WIKI_GENERATED_DIRECTORY, { recursive: true });
-  }
+  try {
+    info('Fetching the repository');
 
-  endGroup();
+    execSync(
+      [
+        'git',
+        '-c protocol.version=2',
+        'fetch --no-tags --prune --no-recurse-submodules --depth=1 origin',
+        '+refs/heads/master*:refs/remotes/origin/master*',
+        '+refs/tags/master*:refs/tags/master*',
+      ].join(' '),
+      execWikiOpts,
+    );
+    execSync('git checkout master', execWikiOpts);
+
+    info('Successfully checked out wiki repository');
+
+    // Since we 100% regenerate 100% of the modules, we can simply remove the generated folder if it exists
+    // as this helps us 100% ensure we don't have any stale content.
+    if (fs.existsSync(WIKI_GENERATED_DIRECTORY)) {
+      fs.rmSync(WIKI_GENERATED_DIRECTORY, { recursive: true });
+      info(`Removed existing wiki generated directory [${WIKI_GENERATED_DIRECTORY}]`);
+    }
+  } finally {
+    endGroup();
+  }
 };
 
 /**
@@ -143,8 +187,6 @@ const updateWikiSidebar = async (terraformModules: TerraformModule[]): Promise<v
     // did much of this sidebar behavior would be potentially unnecessary.
     const gitHubSlug = path.basename(moduleName).replace(/\.[^/.]+$/, '');
     const baselink = `${repoBaseUrl}/wiki/${gitHubSlug}`;
-
-    //changelog += `<li><a href="${baselink}#${idString}">${heading.replace(/[`]/g, '')}</a>`;
 
     // Generate module changelog string by limiting to wikiSidebarChangelogMax
     const changelogContent = getModuleReleaseChangelog(module);
@@ -241,8 +283,6 @@ export const updateWiki = async (terraformModules: TerraformModule[]): Promise<s
 
   // Generate sidebar
   await updateWikiSidebar(terraformModules);
-  // enumerate over all modules (there should exist tags, if there's not we have a bug. or somehow someone manually removed the latest tag)
-  // If we have no tags, then we should remove from the sidebar.
 
   startGroup('Committing and pushing changes to wiki');
 
@@ -250,16 +290,18 @@ export const updateWiki = async (terraformModules: TerraformModule[]): Promise<s
     const { prBody, prNumber, prTitle } = config;
     const commitMessage = `PR #${prNumber} - ${prTitle}\n\n${prBody}`.trim();
 
-    execSync(`git config --local user.name "${GITHUB_ACTIONS_BOT_NAME}"`, execWikiOpts);
-    execSync(`git config --local user.email "${GITHUB_ACTIONS_BOT_EMAIL}"`, execWikiOpts);
-
     // Check if there are any changes (otherwise add/commit/push will error)
+    info('Checking for changes in wiki repository');
     const status = execSync('git status --porcelain', { cwd: WIKI_DIRECTORY }); // ensure stdio is not set to inherit
+    info(`git status output: ${status.toString().trim()}`);
+
     if (status !== null && status.toString().trim() !== '') {
       // There are changes, commit and push
+      execSync(`git config --local user.name "${GITHUB_ACTIONS_BOT_NAME}"`, execWikiOpts);
+      execSync(`git config --local user.email "${GITHUB_ACTIONS_BOT_EMAIL}"`, execWikiOpts);
       execSync('git add .', execWikiOpts);
       execSync(`git commit -m "${commitMessage.trim()}"`, execWikiOpts);
-      execSync('git push origin', execWikiOpts);
+      execSync('git push --set-upstream origin master', execWikiOpts);
       info('Changes committed and pushed to wiki repository');
     } else {
       info('No changes detected, skipping commit and push');

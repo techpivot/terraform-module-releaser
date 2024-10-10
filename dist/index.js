@@ -31905,7 +31905,498 @@ function getModuleReleaseChangelog(terraformModule) {
     return terraformModule.releases.map((release) => `${release.body}`).join('\n\n');
 }
 
+;// CONCATENATED MODULE: external "node:fs/promises"
+const promises_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:fs/promises");
+;// CONCATENATED MODULE: external "node:os"
+const external_node_os_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:os");
+var external_node_os_default = /*#__PURE__*/__nccwpck_require__.n(external_node_os_namespaceObject);
+;// CONCATENATED MODULE: ./node_modules/yocto-queue/index.js
+/*
+How it works:
+`this.#head` is an instance of `Node` which keeps track of its current value and nests another instance of `Node` that keeps the value that comes after it. When a value is provided to `.enqueue()`, the code needs to iterate through `this.#head`, going deeper and deeper to find the last value. However, iterating through every single item is slow. This problem is solved by saving a reference to the last value as `this.#tail` so that it can reference it to add a new value.
+*/
+
+class Node {
+	value;
+	next;
+
+	constructor(value) {
+		this.value = value;
+	}
+}
+
+class Queue {
+	#head;
+	#tail;
+	#size;
+
+	constructor() {
+		this.clear();
+	}
+
+	enqueue(value) {
+		const node = new Node(value);
+
+		if (this.#head) {
+			this.#tail.next = node;
+			this.#tail = node;
+		} else {
+			this.#head = node;
+			this.#tail = node;
+		}
+
+		this.#size++;
+	}
+
+	dequeue() {
+		const current = this.#head;
+		if (!current) {
+			return;
+		}
+
+		this.#head = this.#head.next;
+		this.#size--;
+		return current.value;
+	}
+
+	peek() {
+		if (!this.#head) {
+			return;
+		}
+
+		return this.#head.value;
+
+		// TODO: Node.js 18.
+		// return this.#head?.value;
+	}
+
+	clear() {
+		this.#head = undefined;
+		this.#tail = undefined;
+		this.#size = 0;
+	}
+
+	get size() {
+		return this.#size;
+	}
+
+	* [Symbol.iterator]() {
+		let current = this.#head;
+
+		while (current) {
+			yield current.value;
+			current = current.next;
+		}
+	}
+}
+
+;// CONCATENATED MODULE: ./node_modules/p-limit/index.js
+
+
+function pLimit(concurrency) {
+	validateConcurrency(concurrency);
+
+	const queue = new Queue();
+	let activeCount = 0;
+
+	const resumeNext = () => {
+		if (activeCount < concurrency && queue.size > 0) {
+			queue.dequeue()();
+			// Since `pendingCount` has been decreased by one, increase `activeCount` by one.
+			activeCount++;
+		}
+	};
+
+	const next = () => {
+		activeCount--;
+
+		resumeNext();
+	};
+
+	const run = async (function_, resolve, arguments_) => {
+		const result = (async () => function_(...arguments_))();
+
+		resolve(result);
+
+		try {
+			await result;
+		} catch {}
+
+		next();
+	};
+
+	const enqueue = (function_, resolve, arguments_) => {
+		// Queue `internalResolve` instead of the `run` function
+		// to preserve asynchronous context.
+		new Promise(internalResolve => {
+			queue.enqueue(internalResolve);
+		}).then(
+			run.bind(undefined, function_, resolve, arguments_),
+		);
+
+		(async () => {
+			// This function needs to wait until the next microtask before comparing
+			// `activeCount` to `concurrency`, because `activeCount` is updated asynchronously
+			// after the `internalResolve` function is dequeued and called. The comparison in the if-statement
+			// needs to happen asynchronously as well to get an up-to-date value for `activeCount`.
+			await Promise.resolve();
+
+			if (activeCount < concurrency) {
+				resumeNext();
+			}
+		})();
+	};
+
+	const generator = (function_, ...arguments_) => new Promise(resolve => {
+		enqueue(function_, resolve, arguments_);
+	});
+
+	Object.defineProperties(generator, {
+		activeCount: {
+			get: () => activeCount,
+		},
+		pendingCount: {
+			get: () => queue.size,
+		},
+		clearQueue: {
+			value() {
+				queue.clear();
+			},
+		},
+		concurrency: {
+			get: () => concurrency,
+
+			set(newConcurrency) {
+				validateConcurrency(newConcurrency);
+				concurrency = newConcurrency;
+
+				queueMicrotask(() => {
+					// eslint-disable-next-line no-unmodified-loop-condition
+					while (activeCount < concurrency && queue.size > 0) {
+						resumeNext();
+					}
+				});
+			},
+		},
+	});
+
+	return generator;
+}
+
+function validateConcurrency(concurrency) {
+	if (!((Number.isInteger(concurrency) || concurrency === Number.POSITIVE_INFINITY) && concurrency > 0)) {
+		throw new TypeError('Expected `concurrency` to be a number from 1 and up');
+	}
+}
+
+// EXTERNAL MODULE: external "node:util"
+var external_node_util_ = __nccwpck_require__(7975);
+;// CONCATENATED MODULE: ./src/terraform-docs.ts
+
+
+
+const exec = (0,external_node_util_.promisify)(external_node_child_process_namespaceObject.exec);
+/**
+ * Installs the specified version of terraform-docs.
+ *
+ * Note: We don't check if already installed as we want to ensure we have the specified version
+ *
+ * @param {string} terraformDocsVersion - The version of terraform-docs to install.
+ */
+const installTerraformDocs = (terraformDocsVersion) => {
+    (0,core.startGroup)(`Installing terraform-docs ${terraformDocsVersion}`);
+    (0,external_node_child_process_namespaceObject.execSync)(`curl -sSLo ./terraform-docs.tar.gz https://terraform-docs.io/dl/${terraformDocsVersion}/terraform-docs-${terraformDocsVersion}-$(uname)-$(dpkg --print-architecture).tar.gz`);
+    (0,external_node_child_process_namespaceObject.execSync)('tar -xzf terraform-docs.tar.gz');
+    (0,external_node_child_process_namespaceObject.execSync)('chmod +x terraform-docs');
+    (0,external_node_child_process_namespaceObject.execSync)('sudo mv terraform-docs /usr/local/bin/terraform-docs');
+    (0,external_node_child_process_namespaceObject.execSync)('terraform-docs --version', { stdio: 'inherit' });
+    (0,core.endGroup)();
+};
+/**
+ * Generates Terraform documentation for a given module.
+ *
+ * This function runs the `terraform-docs` CLI tool to generate a Markdown table format of the Terraform documentation
+ * for the specified module. It will sort the output by required fields.
+ *
+ * @param {TerraformModule} terraformModule - An object containing the module details, including:
+ *   - `moduleName`: The name of the Terraform module.
+ *   - `directory`: The directory path where the Terraform module is located.
+ * @returns {Promise<string>} A promise that resolves with the generated Terraform documentation in Markdown format.
+ * @throws {Error} Throws an error if the `terraform-docs` command fails or produces an error in the `stderr` output.
+ */
+const generateTerraformDocs = async ({ moduleName, directory }) => {
+    (0,core.info)(`Generating tf-docs for: ${moduleName}`);
+    const { stdout, stderr } = await exec(`terraform-docs markdown table --sort-by required "${directory}"`);
+    if (stderr) {
+        console.error(`Error generating tf-docs for ${moduleName}: ${stderr}`);
+        throw new Error(`Terraform-docs generation failed for module: ${moduleName}\n${stderr}`);
+    }
+    (0,core.info)(`Finished tf-docs for: ${moduleName}`);
+    return stdout;
+};
+
+;// CONCATENATED MODULE: ./src/wiki.ts
+
+
+
+
+
+
+
+
+
+
+
+
+var WikiStatus;
+(function (WikiStatus) {
+    WikiStatus["SUCCESS"] = "SUCCESS";
+    WikiStatus["FAILURE"] = "FAILURE";
+    WikiStatus["DISABLED"] = "DISABLED";
+})(WikiStatus || (WikiStatus = {}));
+// Special subdirectory inside the primary repository where the wiki is checked out.
+const WIKI_SUBDIRECTORY = '.wiki';
+const WIKI_DIRECTORY = external_node_path_default().resolve(config.workspaceDir, WIKI_SUBDIRECTORY);
+// Directory where the wiki generated Terraform modules will reside. Since GitHub doesn't use
+// folder/namespacing this folder will be transparent but will be helpful to keep generated
+// content separated from some special top level files (e.g. _Sidebar.md).
+const WIKI_GENERATED_DIRECTORY = external_node_path_default().resolve(WIKI_DIRECTORY, 'generated');
+const execWikiOpts = { cwd: WIKI_DIRECTORY, stdio: 'inherit' };
+/**
+ * Clones the wiki repository for the current GitHub repository into a specified subdirectory.
+ *
+ * This function constructs the wiki Git URL using the current repository context and executes
+ * a `git clone` command with a depth of 1 to fetch only the latest commit. The subdirectory
+ * for the wiki is created if it doesn't already exist. If the wiki does not exist or is not enabled,
+ * an error will be caught and logged.
+ *
+ * Note: It's important we clone via SSH and not HTTPS. Will likely need to test cloning this for
+ * self-hosted GitHub enterprise on custom domain as this hasn't been done.
+ *
+ * @throws {Error} If the `git clone` command fails due to issues such as the wiki not existing.
+ */
+const checkoutWiki = () => {
+    const wikiHtmlUrl = `${config.repoUrl}.wiki`;
+    (0,core.startGroup)(`Checking out wiki repository [${wikiHtmlUrl}]`);
+    (0,core.info)('Adding repository directory to the temporary git global config as a safe directory');
+    (0,external_node_child_process_namespaceObject.execSync)(`git config --global --add safe.directory ${WIKI_DIRECTORY}`, { stdio: 'inherit' });
+    (0,core.info)('Initializing the repository');
+    if (!external_node_fs_default().existsSync(WIKI_SUBDIRECTORY)) {
+        external_node_fs_default().mkdirSync(WIKI_SUBDIRECTORY);
+    }
+    (0,external_node_child_process_namespaceObject.execSync)(`git init --initial-branch=master ${WIKI_DIRECTORY}`, execWikiOpts);
+    (0,core.info)('Setting up origin');
+    (0,external_node_child_process_namespaceObject.execSync)(`git remote add origin ${wikiHtmlUrl}`, execWikiOpts);
+    (0,core.info)('Configuring authentication');
+    // Configure Git to use the PAT for the wiki repository (emulating the behavior of GitHub Actions
+    // from the checkout@v4 action.
+    const basicCredential = Buffer.from(`x-access-token:${config.githubToken}`, 'utf8').toString('base64');
+    try {
+        (0,external_node_child_process_namespaceObject.execSync)(`git config --local --unset-all 'http.https://github.com/.extraheader'`, execWikiOpts);
+    }
+    catch (error) {
+        // This returns exit code 5 if not set. Not a problem. Let's ignore./
+    }
+    (0,external_node_child_process_namespaceObject.execSync)(`git config --local http.https://github.com/.extraheader "Authorization: Basic ${basicCredential}"`, execWikiOpts);
+    try {
+        (0,core.info)('Fetching the repository');
+        (0,external_node_child_process_namespaceObject.execSync)([
+            'git',
+            '-c protocol.version=2',
+            'fetch --no-tags --prune --no-recurse-submodules --depth=1 origin',
+            '+refs/heads/master*:refs/remotes/origin/master*',
+            '+refs/tags/master*:refs/tags/master*',
+        ].join(' '), execWikiOpts);
+        (0,external_node_child_process_namespaceObject.execSync)('git checkout master', execWikiOpts);
+        (0,core.info)('Successfully checked out wiki repository');
+        // Since we 100% regenerate 100% of the modules, we can simply remove the generated folder if it exists
+        // as this helps us 100% ensure we don't have any stale content.
+        if (external_node_fs_default().existsSync(WIKI_GENERATED_DIRECTORY)) {
+            external_node_fs_default().rmSync(WIKI_GENERATED_DIRECTORY, { recursive: true });
+            (0,core.info)(`Removed existing wiki generated directory [${WIKI_GENERATED_DIRECTORY}]`);
+        }
+    }
+    finally {
+        (0,core.endGroup)();
+    }
+};
+/**
+ * Generates the markdown content for a Terraform module's wiki file.
+ *
+ * This function creates a markdown file that includes usage instructions, generated Terraform documentation,
+ * and the changelog for the module. The generated usage section provides a sample HCL configuration for referencing
+ * the module. The Terraform documentation is auto-generated and included between special tags.
+ *
+ * @param {TerraformModule} terraformModule - An object containing details of the Terraform module, including:
+ *   - `moduleName`: The name of the Terraform module.
+ *   - `currentTag`: The current version tag of the module.
+ * @param {string} changelog - The changelog content for the module, detailing recent changes.
+ * @returns {Promise<string>} A promise that resolves with the generated markdown content for the wiki file.
+ * @throws {Error} Throws an error if the Terraform documentation generation fails.
+ */
+const getWikiFileMarkdown = async ($terraformModule, $changelog) => {
+    const { moduleName, latestTag } = $terraformModule;
+    return [
+        '# Usage\n',
+        'To use this module in your Terraform, refer to the below module example:\n',
+        '```hcl',
+        `module "${moduleName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()}" {`,
+        `  source = "git::${config.repoUrl}.git?ref=${latestTag}"`,
+        '\n  # See inputs below for additional required parameters',
+        '}',
+        '```',
+        '\n# Attributes\n',
+        '<!-- BEGIN_TF_DOCS -->',
+        await generateTerraformDocs($terraformModule),
+        '<!-- END_TF_DOCS -->',
+        '\n# Changelog\n',
+        $changelog,
+    ].join('\n');
+};
+/**
+ * Writes the provided content to the appropriate wiki file for the specified Terraform module.
+ * Ensures that the directory structure is created if it doesn't exist and handles overwriting
+ * the existing wiki file.
+ *
+ * @param {string} moduleName - The name of the Terraform module.
+ * @param {string} content - The markdown content to write to the wiki file.
+ * @returns {Promise<string>} The path to the wiki file that was written.
+ * @throws Will throw an error if the file cannot be written.
+ */
+const writeFileToWiki = async (moduleName, content) => {
+    try {
+        // Define the path for the module's wiki file
+        const wikiFile = external_node_path_default().join(WIKI_GENERATED_DIRECTORY, `${moduleName}.md`);
+        const wikiFilePath = external_node_path_default().dirname(wikiFile);
+        // Ensure the wiki subdirectory exists, create if it doesn't
+        // Note that the wiki file can be nested in directories and therefore we need to account for this.
+        await promises_namespaceObject.mkdir(wikiFilePath, { recursive: true });
+        // Write the markdown content to the wiki file, overwriting if it exists
+        await promises_namespaceObject.writeFile(wikiFile, content, 'utf8');
+        (0,core.info)(`Successfully wrote wiki file for module: ${moduleName}`);
+        return wikiFile;
+    }
+    catch (error) {
+        console.error(`Error writing wiki file for module: ${moduleName}`, error);
+        throw error;
+    }
+};
+const updateWikiSidebar = async (terraformModules) => {
+    const { owner, repo } = github.context.repo;
+    const sideBarFile = external_node_path_default().join(WIKI_DIRECTORY, '_Sidebar.md');
+    const repoBaseUrl = `/${owner}/${repo}`;
+    let moduleSidebarContent = '';
+    for (const module of terraformModules) {
+        const { moduleName } = module;
+        // The wiki file slug needs to match GitHub syntax. It doesn't take into account folder/namespace. If it
+        // did much of this sidebar behavior would be potentially unnecessary.
+        const gitHubSlug = external_node_path_default().basename(moduleName).replace(/\.[^/.]+$/, '');
+        const baselink = `${repoBaseUrl}/wiki/${gitHubSlug}`;
+        // Generate module changelog string by limiting to wikiSidebarChangelogMax
+        const changelogContent = getModuleReleaseChangelog(module);
+        // Regex to capture all headings starting with '## ' on a single line
+        const headingRegex = /^(?:#{2,3})\s+(.+)$/gm; // Matches '##' or '###' headings
+        // Initialize changelog entries
+        const changelogEntries = [];
+        let headingMatch = null;
+        do {
+            // If a match is found, process it
+            if (headingMatch) {
+                const heading = headingMatch[1].trim();
+                // Convert heading into a valid ID string (keep only [a-zA-Z0-9-_]) But we need spaces to go to a '-'
+                const idString = heading.replace(/[ ]+/g, '-').replace(/[^a-zA-Z0-9-_]/g, '');
+                // Append the entry to changelogEntries
+                changelogEntries.push(`<li><a href="${baselink}#${idString}">${heading.replace(/[`]/g, '')}</a></li>`);
+            }
+            // Execute the regex again for the next match
+            headingMatch = headingRegex.exec(changelogContent);
+        } while (headingMatch);
+        // Limit to the maximum number of changelog entries defined in config
+        let limitedChangelogEntries = changelogEntries.slice(0, config.wikiSidebarChangelogMax).join('');
+        // Wrap changelog in <ul> if it's not empty
+        if (limitedChangelogEntries.length > 0) {
+            limitedChangelogEntries = `<ul>${limitedChangelogEntries}</ul>`;
+        }
+        moduleSidebarContent += [
+            '<li>',
+            '<details>',
+            `<summary><a href="${baselink}"><b>${moduleName}</b></a></summary>`,
+            '<ul>',
+            `<li><a href="${baselink}#usage">Usage</a></li>`,
+            `<li><a href="${baselink}#attributes">Attributes</a></li>`,
+            `<li><a href="${baselink}#changelog">Changelog</a>`,
+            limitedChangelogEntries,
+            '</li>',
+            '</ul>',
+            '</details>',
+            '</li>',
+        ].join('\n');
+    }
+    const content = `[Home](${repoBaseUrl}/wiki/Home)\n\n## Terraform Modules\n\n<ul>${moduleSidebarContent}</ul>`;
+    await promises_namespaceObject.writeFile(sideBarFile, content, 'utf8');
+};
+/**
+ * Updates the wiki documentation for a list of Terraform modules.
+ *
+ * This function generates markdown content for each Terraform module by calling
+ * `getWikiFileMarkdown` and appending its associated changelog, then writes the
+ * content to the wiki. It commits and pushes the changes to the wiki repository.
+ *
+ * The function limits the number of concurrent wiki updates by using `pLimit`.
+ * Once all wiki files are updated, it commits and pushes the changes to the repository.
+ *
+ * @param {TerraformModule[]} terraformModules - A list of Terraform modules to update in the wiki.
+ *
+ * @returns {Promise<string[]>} A promise that resolves to a list of file paths of the updated wiki files.
+ */
+const updateWiki = async (terraformModules) => {
+    (0,core.startGroup)('Generating wiki documentation');
+    const parallelism = external_node_os_default().cpus().length + 2;
+    (0,core.info)(`Using parallelism: ${parallelism}`);
+    const limit = pLimit(parallelism);
+    const updatedFiles = [];
+    const tasks = terraformModules.map((module) => {
+        return limit(async () => {
+            const { moduleName } = module;
+            const changelog = getModuleReleaseChangelog(module);
+            const wikiFileContent = await getWikiFileMarkdown(module, changelog);
+            await writeFileToWiki(moduleName, wikiFileContent);
+            updatedFiles.push(external_node_path_default().join(WIKI_GENERATED_DIRECTORY, `${moduleName}.md`));
+        });
+    });
+    await Promise.all(tasks);
+    (0,core.info)('Wiki files generated:');
+    console.log(updatedFiles);
+    (0,core.endGroup)();
+    // Generate sidebar
+    await updateWikiSidebar(terraformModules);
+    (0,core.startGroup)('Committing and pushing changes to wiki');
+    try {
+        const { prBody, prNumber, prTitle } = config;
+        const commitMessage = `PR #${prNumber} - ${prTitle}\n\n${prBody}`.trim();
+        // Check if there are any changes (otherwise add/commit/push will error)
+        const status = (0,external_node_child_process_namespaceObject.execSync)('git status --porcelain', { cwd: WIKI_DIRECTORY }); // ensure stdio is not set to inherit
+        if (status !== null && status.toString().trim() !== '') {
+            // There are changes, commit and push
+            (0,external_node_child_process_namespaceObject.execSync)(`git config --local user.name "${GITHUB_ACTIONS_BOT_NAME}"`, execWikiOpts);
+            (0,external_node_child_process_namespaceObject.execSync)(`git config --local user.email "${GITHUB_ACTIONS_BOT_EMAIL}"`, execWikiOpts);
+            (0,external_node_child_process_namespaceObject.execSync)('git add .', execWikiOpts);
+            (0,external_node_child_process_namespaceObject.execSync)(`git commit -m "${commitMessage.trim()}"`, execWikiOpts);
+            (0,external_node_child_process_namespaceObject.execSync)('git push --set-upstream origin master', execWikiOpts);
+            (0,core.info)('Changes committed and pushed to wiki repository');
+        }
+        else {
+            (0,core.info)('No changes detected, skipping commit and push');
+        }
+    }
+    finally {
+        (0,core.endGroup)();
+    }
+    return updatedFiles;
+};
+
 ;// CONCATENATED MODULE: ./src/github.ts
+
 
 
 
@@ -32047,7 +32538,7 @@ const getAllReleases = async () => {
  *
  * @throws {Error} Throws an error if the GitHub API call to create a comment or delete existing comments fails.
  */
-async function commentOnPullRequest(terraformChangedModules, terraformModuleNamesToRemove) {
+async function commentOnPullRequest(terraformChangedModules, terraformModuleNamesToRemove, wikiStatus) {
     (0,core.startGroup)('Commenting on pull request');
     const { owner, repo } = github.context.repo;
     const { number: issue_number } = github.context.issue;
@@ -32070,13 +32561,26 @@ async function commentOnPullRequest(terraformChangedModules, terraformModuleName
         modulesToRemove += `\n${terraformModuleNamesToRemove.map((moduleName) => `> - \`${moduleName}\``).join('\n')}`;
         modulesToRemove += '\n\n';
     }
+    let wikiMessage = '';
+    switch (wikiStatus.status) {
+        case WikiStatus.SUCCESS:
+            wikiMessage = '> ###### ✅ Wiki Check\n\n';
+            break;
+        case WikiStatus.FAILURE:
+            wikiMessage = `> ##### ⚠️ Wiki Check: Failed to checkout wiki. ${wikiStatus.errorMessage}<br><br>Please consult the README for additional information and review logs in the latest GitHub workflow run.\n\n`;
+            break;
+        case WikiStatus.DISABLED:
+            wikiMessage = '> ###### 🚫 Wiki Check: Generation is disabled.\n\n';
+            break;
+    }
     let body;
     // Let's update the body depending on how many modules we have
     if (terraformChangedModules.length === 0) {
-        body = `# Release Plan\n\nNo terraform modules updated in this pull request.\n\n${modulesToRemove}`;
+        body = `# Release Plan\n\nNo terraform modules updated in this pull request.\n\n${wikiMessage}${modulesToRemove}`;
     }
     else {
-        body = `${lines.join('\n')}\n\n${modulesToRemove}# Changelog\n\n${getPullRequestChangelog(terraformChangedModules)}`;
+        const changelog = getPullRequestChangelog(terraformChangedModules);
+        body = `${lines.join('\n')}\n\n${wikiMessage}${modulesToRemove}# Changelog\n\n${changelog}`;
     }
     // Create new PR comment (Requires permission > pull-requests: write)
     const { data: newComment } = await github_github.rest.issues.createComment({ issue_number, owner, repo, body: body.trim() });
@@ -32235,52 +32739,6 @@ async function deleteLegacyTerraformModuleTagsAndReleases(terraformModuleNames, 
     }
     (0,core.endGroup)();
 }
-
-// EXTERNAL MODULE: external "node:util"
-var external_node_util_ = __nccwpck_require__(7975);
-;// CONCATENATED MODULE: ./src/terraform-docs.ts
-
-
-
-const exec = (0,external_node_util_.promisify)(external_node_child_process_namespaceObject.exec);
-/**
- * Installs the specified version of terraform-docs.
- *
- * Note: We don't check if already installed as we want to ensure we have the specified version
- *
- * @param {string} terraformDocsVersion - The version of terraform-docs to install.
- */
-const installTerraformDocs = (terraformDocsVersion) => {
-    (0,core.startGroup)(`Installing terraform-docs ${terraformDocsVersion}`);
-    (0,external_node_child_process_namespaceObject.execSync)(`curl -sSLo ./terraform-docs.tar.gz https://terraform-docs.io/dl/${terraformDocsVersion}/terraform-docs-${terraformDocsVersion}-$(uname)-$(dpkg --print-architecture).tar.gz`);
-    (0,external_node_child_process_namespaceObject.execSync)('tar -xzf terraform-docs.tar.gz');
-    (0,external_node_child_process_namespaceObject.execSync)('chmod +x terraform-docs');
-    (0,external_node_child_process_namespaceObject.execSync)('sudo mv terraform-docs /usr/local/bin/terraform-docs');
-    (0,external_node_child_process_namespaceObject.execSync)('terraform-docs --version', { stdio: 'inherit' });
-    (0,core.endGroup)();
-};
-/**
- * Generates Terraform documentation for a given module.
- *
- * This function runs the `terraform-docs` CLI tool to generate a Markdown table format of the Terraform documentation
- * for the specified module. It will sort the output by required fields.
- *
- * @param {TerraformModule} terraformModule - An object containing the module details, including:
- *   - `moduleName`: The name of the Terraform module.
- *   - `directory`: The directory path where the Terraform module is located.
- * @returns {Promise<string>} A promise that resolves with the generated Terraform documentation in Markdown format.
- * @throws {Error} Throws an error if the `terraform-docs` command fails or produces an error in the `stderr` output.
- */
-const generateTerraformDocs = async ({ moduleName, directory }) => {
-    (0,core.info)(`Generating tf-docs for: ${moduleName}`);
-    const { stdout, stderr } = await exec(`terraform-docs markdown table --sort-by required "${directory}"`);
-    if (stderr) {
-        console.error(`Error generating tf-docs for ${moduleName}: ${stderr}`);
-        throw new Error(`Terraform-docs generation failed for module: ${moduleName}\n${stderr}`);
-    }
-    (0,core.info)(`Finished tf-docs for: ${moduleName}`);
-    return stdout;
-};
 
 ;// CONCATENATED MODULE: ./src/semver.ts
 
@@ -32594,420 +33052,8 @@ const getTerraformModulesToRemove = (allTags, terraformModules) => {
     return moduleNamesToRemove;
 };
 
-;// CONCATENATED MODULE: external "node:fs/promises"
-const promises_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:fs/promises");
-;// CONCATENATED MODULE: external "node:os"
-const external_node_os_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:os");
-var external_node_os_default = /*#__PURE__*/__nccwpck_require__.n(external_node_os_namespaceObject);
-;// CONCATENATED MODULE: ./node_modules/yocto-queue/index.js
-/*
-How it works:
-`this.#head` is an instance of `Node` which keeps track of its current value and nests another instance of `Node` that keeps the value that comes after it. When a value is provided to `.enqueue()`, the code needs to iterate through `this.#head`, going deeper and deeper to find the last value. However, iterating through every single item is slow. This problem is solved by saving a reference to the last value as `this.#tail` so that it can reference it to add a new value.
-*/
-
-class Node {
-	value;
-	next;
-
-	constructor(value) {
-		this.value = value;
-	}
-}
-
-class Queue {
-	#head;
-	#tail;
-	#size;
-
-	constructor() {
-		this.clear();
-	}
-
-	enqueue(value) {
-		const node = new Node(value);
-
-		if (this.#head) {
-			this.#tail.next = node;
-			this.#tail = node;
-		} else {
-			this.#head = node;
-			this.#tail = node;
-		}
-
-		this.#size++;
-	}
-
-	dequeue() {
-		const current = this.#head;
-		if (!current) {
-			return;
-		}
-
-		this.#head = this.#head.next;
-		this.#size--;
-		return current.value;
-	}
-
-	peek() {
-		if (!this.#head) {
-			return;
-		}
-
-		return this.#head.value;
-
-		// TODO: Node.js 18.
-		// return this.#head?.value;
-	}
-
-	clear() {
-		this.#head = undefined;
-		this.#tail = undefined;
-		this.#size = 0;
-	}
-
-	get size() {
-		return this.#size;
-	}
-
-	* [Symbol.iterator]() {
-		let current = this.#head;
-
-		while (current) {
-			yield current.value;
-			current = current.next;
-		}
-	}
-}
-
-;// CONCATENATED MODULE: ./node_modules/p-limit/index.js
-
-
-function pLimit(concurrency) {
-	validateConcurrency(concurrency);
-
-	const queue = new Queue();
-	let activeCount = 0;
-
-	const resumeNext = () => {
-		if (activeCount < concurrency && queue.size > 0) {
-			queue.dequeue()();
-			// Since `pendingCount` has been decreased by one, increase `activeCount` by one.
-			activeCount++;
-		}
-	};
-
-	const next = () => {
-		activeCount--;
-
-		resumeNext();
-	};
-
-	const run = async (function_, resolve, arguments_) => {
-		const result = (async () => function_(...arguments_))();
-
-		resolve(result);
-
-		try {
-			await result;
-		} catch {}
-
-		next();
-	};
-
-	const enqueue = (function_, resolve, arguments_) => {
-		// Queue `internalResolve` instead of the `run` function
-		// to preserve asynchronous context.
-		new Promise(internalResolve => {
-			queue.enqueue(internalResolve);
-		}).then(
-			run.bind(undefined, function_, resolve, arguments_),
-		);
-
-		(async () => {
-			// This function needs to wait until the next microtask before comparing
-			// `activeCount` to `concurrency`, because `activeCount` is updated asynchronously
-			// after the `internalResolve` function is dequeued and called. The comparison in the if-statement
-			// needs to happen asynchronously as well to get an up-to-date value for `activeCount`.
-			await Promise.resolve();
-
-			if (activeCount < concurrency) {
-				resumeNext();
-			}
-		})();
-	};
-
-	const generator = (function_, ...arguments_) => new Promise(resolve => {
-		enqueue(function_, resolve, arguments_);
-	});
-
-	Object.defineProperties(generator, {
-		activeCount: {
-			get: () => activeCount,
-		},
-		pendingCount: {
-			get: () => queue.size,
-		},
-		clearQueue: {
-			value() {
-				queue.clear();
-			},
-		},
-		concurrency: {
-			get: () => concurrency,
-
-			set(newConcurrency) {
-				validateConcurrency(newConcurrency);
-				concurrency = newConcurrency;
-
-				queueMicrotask(() => {
-					// eslint-disable-next-line no-unmodified-loop-condition
-					while (activeCount < concurrency && queue.size > 0) {
-						resumeNext();
-					}
-				});
-			},
-		},
-	});
-
-	return generator;
-}
-
-function validateConcurrency(concurrency) {
-	if (!((Number.isInteger(concurrency) || concurrency === Number.POSITIVE_INFINITY) && concurrency > 0)) {
-		throw new TypeError('Expected `concurrency` to be a number from 1 and up');
-	}
-}
-
-;// CONCATENATED MODULE: ./src/wiki.ts
-
-
-
-
-
-
-
-
-
-
-
-
-// Special subdirectory inside the primary repository where the wiki is checked out.
-const WIKI_SUBDIRECTORY = '.wiki';
-const WIKI_DIRECTORY = external_node_path_default().resolve(config.workspaceDir, WIKI_SUBDIRECTORY);
-// Directory where the wiki generated Terraform modules will reside. Since GitHub doesn't use
-// folder/namespacing this folder will be transparent but will be helpful to keep generated
-// content separated from some special top level files (e.g. _Sidebar.md).
-const WIKI_GENERATED_DIRECTORY = external_node_path_default().resolve(WIKI_DIRECTORY, 'generated');
-const execWikiOpts = { cwd: WIKI_DIRECTORY, stdio: 'inherit' };
-/**
- * Clones the wiki repository for the current GitHub repository into a specified subdirectory.
- *
- * This function constructs the wiki Git URL using the current repository context and executes
- * a `git clone` command with a depth of 1 to fetch only the latest commit. The subdirectory
- * for the wiki is created if it doesn't already exist. If the wiki does not exist or is not enabled,
- * an error will be caught and logged.
- *
- * Note: It's important we clone via SSH and not HTTPS. Will likely need to test cloning this for
- * self-hosted GitHub enterprise on custom domain as this hasn't been done.
- *
- * @throws {Error} If the `git clone` command fails due to issues such as the wiki not existing.
- */
-const checkoutWiki = () => {
-    const wikiHtmlUrl = `${config.repoUrl}.wiki`;
-    (0,core.startGroup)(`Checking out wiki repository [${wikiHtmlUrl}]`);
-    // @todo wrap this in a try/catch and handle the case where the wiki doesn't exist or not enabled yet
-    const checkoutCommand = `git clone --no-progress --no-recurse-submodules --depth=1 ${wikiHtmlUrl} ${WIKI_SUBDIRECTORY}`;
-    (0,external_node_child_process_namespaceObject.execSync)(checkoutCommand, { stdio: 'inherit' });
-    // Configure Git to use the PAT for the wiki repository (emulating the behavior of GitHub Actions
-    // from the checkout@v4 action.
-    const basicCredential = Buffer.from(`x-access-token:${config.githubToken}`, 'utf8').toString('base64');
-    (0,external_node_child_process_namespaceObject.execSync)(`git config --local http.https://github.com/.extraheader "AUTHORIZATION: basic ${basicCredential}"`, execWikiOpts);
-    // Since we 100% regenerate 100% of the modules, we can simply remove the generated folder if it exists
-    // as this helps us 100% ensure we don't have any stale content.
-    if (external_node_fs_default().existsSync(WIKI_GENERATED_DIRECTORY)) {
-        external_node_fs_default().rmSync(WIKI_GENERATED_DIRECTORY, { recursive: true });
-    }
-    (0,core.endGroup)();
-};
-/**
- * Generates the markdown content for a Terraform module's wiki file.
- *
- * This function creates a markdown file that includes usage instructions, generated Terraform documentation,
- * and the changelog for the module. The generated usage section provides a sample HCL configuration for referencing
- * the module. The Terraform documentation is auto-generated and included between special tags.
- *
- * @param {TerraformModule} terraformModule - An object containing details of the Terraform module, including:
- *   - `moduleName`: The name of the Terraform module.
- *   - `currentTag`: The current version tag of the module.
- * @param {string} changelog - The changelog content for the module, detailing recent changes.
- * @returns {Promise<string>} A promise that resolves with the generated markdown content for the wiki file.
- * @throws {Error} Throws an error if the Terraform documentation generation fails.
- */
-const getWikiFileMarkdown = async ($terraformModule, $changelog) => {
-    const { moduleName, latestTag } = $terraformModule;
-    return [
-        '# Usage\n',
-        'To use this module in your Terraform, refer to the below module example:\n',
-        '```hcl',
-        `module "${moduleName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()}" {`,
-        `  source = "git::${config.repoUrl}.git?ref=${latestTag}"`,
-        '\n  # See inputs below for additional required parameters',
-        '}',
-        '```',
-        '\n# Attributes\n',
-        '<!-- BEGIN_TF_DOCS -->',
-        await generateTerraformDocs($terraformModule),
-        '<!-- END_TF_DOCS -->',
-        '\n# Changelog\n',
-        $changelog,
-    ].join('\n');
-};
-/**
- * Writes the provided content to the appropriate wiki file for the specified Terraform module.
- * Ensures that the directory structure is created if it doesn't exist and handles overwriting
- * the existing wiki file.
- *
- * @param {string} moduleName - The name of the Terraform module.
- * @param {string} content - The markdown content to write to the wiki file.
- * @returns {Promise<string>} The path to the wiki file that was written.
- * @throws Will throw an error if the file cannot be written.
- */
-const writeFileToWiki = async (moduleName, content) => {
-    try {
-        // Define the path for the module's wiki file
-        const wikiFile = external_node_path_default().join(WIKI_GENERATED_DIRECTORY, `${moduleName}.md`);
-        const wikiFilePath = external_node_path_default().dirname(wikiFile);
-        // Ensure the wiki subdirectory exists, create if it doesn't
-        // Note that the wiki file can be nested in directories and therefore we need to account for this.
-        await promises_namespaceObject.mkdir(wikiFilePath, { recursive: true });
-        // Write the markdown content to the wiki file, overwriting if it exists
-        await promises_namespaceObject.writeFile(wikiFile, content, 'utf8');
-        (0,core.info)(`Successfully wrote wiki file for module: ${moduleName}`);
-        return wikiFile;
-    }
-    catch (error) {
-        console.error(`Error writing wiki file for module: ${moduleName}`, error);
-        throw error;
-    }
-};
-const updateWikiSidebar = async (terraformModules) => {
-    const { owner, repo } = github.context.repo;
-    const sideBarFile = external_node_path_default().join(WIKI_DIRECTORY, '_Sidebar.md');
-    const repoBaseUrl = `/${owner}/${repo}`;
-    let moduleSidebarContent = '';
-    for (const module of terraformModules) {
-        const { moduleName } = module;
-        // The wiki file slug needs to match GitHub syntax. It doesn't take into account folder/namespace. If it
-        // did much of this sidebar behavior would be potentially unnecessary.
-        const gitHubSlug = external_node_path_default().basename(moduleName).replace(/\.[^/.]+$/, '');
-        const baselink = `${repoBaseUrl}/wiki/${gitHubSlug}`;
-        //changelog += `<li><a href="${baselink}#${idString}">${heading.replace(/[`]/g, '')}</a>`;
-        // Generate module changelog string by limiting to wikiSidebarChangelogMax
-        const changelogContent = getModuleReleaseChangelog(module);
-        // Regex to capture all headings starting with '## ' on a single line
-        const headingRegex = /^(?:#{2,3})\s+(.+)$/gm; // Matches '##' or '###' headings
-        // Initialize changelog entries
-        const changelogEntries = [];
-        let headingMatch = null;
-        do {
-            // If a match is found, process it
-            if (headingMatch) {
-                const heading = headingMatch[1].trim();
-                // Convert heading into a valid ID string (keep only [a-zA-Z0-9-_]) But we need spaces to go to a '-'
-                const idString = heading.replace(/[ ]+/g, '-').replace(/[^a-zA-Z0-9-_]/g, '');
-                // Append the entry to changelogEntries
-                changelogEntries.push(`<li><a href="${baselink}#${idString}">${heading.replace(/[`]/g, '')}</a></li>`);
-            }
-            // Execute the regex again for the next match
-            headingMatch = headingRegex.exec(changelogContent);
-        } while (headingMatch);
-        // Limit to the maximum number of changelog entries defined in config
-        let limitedChangelogEntries = changelogEntries.slice(0, config.wikiSidebarChangelogMax).join('');
-        // Wrap changelog in <ul> if it's not empty
-        if (limitedChangelogEntries.length > 0) {
-            limitedChangelogEntries = `<ul>${limitedChangelogEntries}</ul>`;
-        }
-        moduleSidebarContent += [
-            '<li>',
-            '<details>',
-            `<summary><a href="${baselink}"><b>${moduleName}</b></a></summary>`,
-            '<ul>',
-            `<li><a href="${baselink}#usage">Usage</a></li>`,
-            `<li><a href="${baselink}#attributes">Attributes</a></li>`,
-            `<li><a href="${baselink}#changelog">Changelog</a>`,
-            limitedChangelogEntries,
-            '</li>',
-            '</ul>',
-            '</details>',
-            '</li>',
-        ].join('\n');
-    }
-    const content = `[Home](${repoBaseUrl}/wiki/Home)\n\n## Terraform Modules\n\n<ul>${moduleSidebarContent}</ul>`;
-    await promises_namespaceObject.writeFile(sideBarFile, content, 'utf8');
-};
-/**
- * Updates the wiki documentation for a list of Terraform modules.
- *
- * This function generates markdown content for each Terraform module by calling
- * `getWikiFileMarkdown` and appending its associated changelog, then writes the
- * content to the wiki. It commits and pushes the changes to the wiki repository.
- *
- * The function limits the number of concurrent wiki updates by using `pLimit`.
- * Once all wiki files are updated, it commits and pushes the changes to the repository.
- *
- * @param {TerraformModule[]} terraformModules - A list of Terraform modules to update in the wiki.
- *
- * @returns {Promise<string[]>} A promise that resolves to a list of file paths of the updated wiki files.
- */
-const updateWiki = async (terraformModules) => {
-    (0,core.startGroup)('Generating wiki documentation');
-    const parallelism = external_node_os_default().cpus().length + 2;
-    (0,core.info)(`Using parallelism: ${parallelism}`);
-    const limit = pLimit(parallelism);
-    const updatedFiles = [];
-    const tasks = terraformModules.map((module) => {
-        return limit(async () => {
-            const { moduleName } = module;
-            const changelog = getModuleReleaseChangelog(module);
-            const wikiFileContent = await getWikiFileMarkdown(module, changelog);
-            await writeFileToWiki(moduleName, wikiFileContent);
-            updatedFiles.push(external_node_path_default().join(WIKI_GENERATED_DIRECTORY, `${moduleName}.md`));
-        });
-    });
-    await Promise.all(tasks);
-    (0,core.info)('Wiki files generated:');
-    console.log(updatedFiles);
-    (0,core.endGroup)();
-    // Generate sidebar
-    await updateWikiSidebar(terraformModules);
-    // enumerate over all modules (there should exist tags, if there's not we have a bug. or somehow someone manually removed the latest tag)
-    // If we have no tags, then we should remove from the sidebar.
-    (0,core.startGroup)('Committing and pushing changes to wiki');
-    try {
-        const { prBody, prNumber, prTitle } = config;
-        const commitMessage = `PR #${prNumber} - ${prTitle}\n\n${prBody}`.trim();
-        (0,external_node_child_process_namespaceObject.execSync)(`git config --local user.name "${GITHUB_ACTIONS_BOT_NAME}"`, execWikiOpts);
-        (0,external_node_child_process_namespaceObject.execSync)(`git config --local user.email "${GITHUB_ACTIONS_BOT_EMAIL}"`, execWikiOpts);
-        // Check if there are any changes (otherwise add/commit/push will error)
-        const status = (0,external_node_child_process_namespaceObject.execSync)('git status --porcelain', { cwd: WIKI_DIRECTORY }); // ensure stdio is not set to inherit
-        if (status !== null && status.toString().trim() !== '') {
-            // There are changes, commit and push
-            (0,external_node_child_process_namespaceObject.execSync)('git add .', execWikiOpts);
-            (0,external_node_child_process_namespaceObject.execSync)(`git commit -m "${commitMessage.trim()}"`, execWikiOpts);
-            (0,external_node_child_process_namespaceObject.execSync)('git push origin', execWikiOpts);
-            (0,core.info)('Changes committed and pushed to wiki repository');
-        }
-        else {
-            (0,core.info)('No changes detected, skipping commit and push');
-        }
-    }
-    finally {
-        (0,core.endGroup)();
-    }
-    return updatedFiles;
-};
-
 ;// CONCATENATED MODULE: ./src/main.ts
+
 
 
 
@@ -33056,7 +33102,35 @@ async function run() {
         const terraformModuleNamesToRemove = getTerraformModulesToRemove(allTags, terraformModules);
         (0,core.info)(`Found ${terraformModuleNamesToRemove.length} Terraform module${terraformModuleNamesToRemove.length !== 1 ? 's' : ''} to remove.`);
         if (!isPrMergeEvent) {
-            await commentOnPullRequest(terraformChangedModules, terraformModuleNamesToRemove);
+            let wikiStatus = WikiStatus.DISABLED;
+            let failure;
+            let error;
+            try {
+                if (!disableWiki) {
+                    checkoutWiki();
+                    wikiStatus = WikiStatus.SUCCESS;
+                }
+            }
+            catch (err) {
+                // Capture error message if the checkout fails
+                const errorMessage = err.message.split('\n')[0] || 'Unknown error during wiki checkout';
+                wikiStatus = WikiStatus.FAILURE;
+                failure = errorMessage;
+                error = err;
+            }
+            finally {
+                await commentOnPullRequest(terraformChangedModules, terraformModuleNamesToRemove, {
+                    status: wikiStatus,
+                    errorMessage: failure,
+                });
+            }
+            // If we have an error, let's throw it so that the action fails after we've successfully commented on the PR.
+            if (error !== undefined) {
+                throw error;
+            }
+            // temp for tag
+            installTerraformDocs(terraformDocsVersion);
+            updateWiki(terraformModules);
         }
         else {
             await createTaggedRelease(terraformChangedModules);
