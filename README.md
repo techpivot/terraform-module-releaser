@@ -38,6 +38,17 @@ details, and a full changelog.
 - **Flexible Configuration**: Offers advanced input options for customization, allowing you to tailor the action to your
   specific needs.
 
+## Demo
+
+Check out our [Terraform Modules Demo](https://github.com/techpivot/terraform-modules-demo) repository for a practical
+example of how to use this action in a monorepo setup. See real-world usage in action:
+
+- [**Pull Request - Initial**](https://github.com/techpivot/terraform-modules-demo/pull/1)
+- [**Pull Request - Module Changes**](https://github.com/techpivot/terraform-modules-demo/pull/2)
+- [**Wiki**](https://github.com/techpivot/terraform-modules-demo/wiki)
+- [**Releases**](https://github.com/techpivot/terraform-modules-demo/releases)
+- [**_More Pull Request Examples_**](https://github.com/techpivot/terraform-modules-demo/pulls?q=is%3Apr+is%3Aclosed)
+
 ## Screenshots
 
 <p float="left" align="center">
@@ -66,10 +77,10 @@ details, and a full changelog.
 Before using this action, make sure that the wiki is enabled and initialized for your repository:
 
 1. Go to your repository's homepage.
-1. Navigate to the "Settings" tab.
-1. Under the "Features" section, ensure the "Wikis" option is checked to enable the GitHub Wiki.
-1. Navigate to the "Wiki" tab on your repository.
-1. Click the "Create the first page" button and add a basic title like "Home" to initialize the wiki with an initial
+1. Navigate to the **Settings** tab.
+1. Under the **Features** section, ensure the **Wikis** option is checked to enable the GitHub Wiki.
+1. Navigate to the **Wiki** tab on your repository.
+1. Click the **Create the first page** button and add a basic title like **Home** to initialize the wiki with an initial
    commit.
 1. Save the changes to ensure your wiki is not empty when the GitHub Action updates it with module information.
 
@@ -101,6 +112,23 @@ jobs:
       - name: Terraform Module Releaser
         uses: techpivot/terraform-module-releaser@v1
 ```
+
+## Permissions
+
+Before executing the GitHub Actions workflow, ensure that you have the necessary permissions set for accessing pull
+requests and creating releases.
+
+- By default, this GitHub Action uses the
+  [`GITHUB_TOKEN`](https://docs.github.com/en/actions/security-for-github-actions/security-guides/automatic-token-authentication)
+  associated with the workflow. To properly comment on pull requests and create tags/releases, the workflow permission
+  for `pull-requests` must be set to `"write"`.
+- Additionally, the workflow permission for `contents` must also be set to `"write"` to allow the action to create tags
+  and releases.
+- If you are using a Personal Access Token (PAT), ensure that it has the `repo` scope granted. This permission is
+  required for the action to read and write to the repository, including managing pull requests and creating releases.
+
+If the permissions are insufficient, the action may fail with a 403 error, indicating a lack of access to the necessary
+resources.
 
 ## Optional Inputs
 
