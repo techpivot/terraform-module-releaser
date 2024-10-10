@@ -17,7 +17,8 @@
         "github.vscode-pull-request-github",
         "me-dutour-mathieu.vscode-github-actions",
         "yzhang.markdown-all-in-one",
-        "esbenp.prettier-vscode"
+        "esbenp.prettier-vscode",
+        "biomejs.biome"
       ],
       "settings": {
         "editor.tabSize": 2,
@@ -31,6 +32,12 @@
         },
         "[markdown]": {
           "editor.defaultFormatter": "esbenp.prettier-vscode"
+        },
+        "[typescript]": {
+          "editor.defaultFormatter": "biomejs.biome"
+        },
+        "[javascript]": {
+          "editor.defaultFormatter": "biomejs.biome"
         }
       }
     }
