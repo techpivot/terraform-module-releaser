@@ -15,6 +15,7 @@ import {
   getTerraformModulesToRemove,
 } from './terraform-module';
 import { checkoutWiki, updateWiki } from './wiki';
+import { WikiStatus } from './wiki';
 
 /**
  * The main function for the action.
@@ -89,7 +90,31 @@ export async function run(): Promise<void> {
     );
 
     if (!isPrMergeEvent) {
-      await commentOnPullRequest(terraformChangedModules, terraformModuleNamesToRemove);
+      let wikiStatus = WikiStatus.DISABLED;
+      let failure: string | undefined;
+      let error: Error | undefined;
+      try {
+        if (!disableWiki) {
+          checkoutWiki();
+          wikiStatus = WikiStatus.SUCCESS;
+        }
+      } catch (err) {
+        // Capture error message if the checkout fails
+        const errorMessage = (err as Error).message.split('\n')[0] || 'Unknown error during wiki checkout';
+        wikiStatus = WikiStatus.FAILURE;
+        failure = errorMessage;
+        error = err as Error;
+      } finally {
+        await commentOnPullRequest(terraformChangedModules, terraformModuleNamesToRemove, {
+          status: wikiStatus,
+          errorMessage: failure,
+        });
+      }
+
+      // If we have an error, let's throw it so that the action fails after we've successfully commented on the PR.
+      if (error !== undefined) {
+        throw error;
+      }
     } else {
       await createTaggedRelease(terraformChangedModules);
       await deleteLegacyTerraformModuleTagsAndReleases(terraformModuleNamesToRemove, allTags, allReleases);
