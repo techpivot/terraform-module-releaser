@@ -8,6 +8,7 @@ import type { RequestError } from '@octokit/request-error';
 import { getModuleChangelog, getPullRequestChangelog } from './changelog';
 import { config } from './config';
 import type { TerraformChangedModule } from './terraform-module';
+import { WikiStatus } from './wiki';
 
 export const GITHUB_ACTIONS_BOT_NAME = 'GitHub Actions';
 export const GITHUB_ACTIONS_BOT_EMAIL = '41898282+github-actions[bot]@users.noreply.github.com';
@@ -198,7 +199,8 @@ export const getAllReleases = async (): Promise<GitHubRelease[]> => {
 export async function commentOnPullRequest(
   terraformChangedModules: TerraformChangedModule[],
   terraformModuleNamesToRemove: string[],
-) {
+  wikiStatus: { status: WikiStatus; errorMessage?: string | undefined },
+): Promise<void> {
   startGroup('Commenting on pull request');
 
   const { owner, repo } = context.repo;
@@ -227,12 +229,26 @@ export async function commentOnPullRequest(
     modulesToRemove += '\n\n';
   }
 
+  let wikiMessage = '';
+  switch (wikiStatus.status) {
+    case WikiStatus.SUCCESS:
+      wikiMessage = '> ###### ✅ Wiki Check\n\n';
+      break;
+    case WikiStatus.FAILURE:
+      wikiMessage = `> ##### ⚠️ Wiki Check: Failed to checkout wiki. ${wikiStatus.errorMessage}<br><br>Please consult the README for additional information and review logs in the latest GitHub workflow run.\n\n`;
+      break;
+    case WikiStatus.DISABLED:
+      wikiMessage = '> ###### 🚫 Wiki Check: Generation is disabled.\n\n';
+      break;
+  }
+
   let body: string;
   // Let's update the body depending on how many modules we have
   if (terraformChangedModules.length === 0) {
-    body = `# Release Plan\n\nNo terraform modules updated in this pull request.\n\n${modulesToRemove}`;
+    body = `# Release Plan\n\nNo terraform modules updated in this pull request.\n\n${wikiMessage}${modulesToRemove}`;
   } else {
-    body = `${lines.join('\n')}\n\n${modulesToRemove}# Changelog\n\n${getPullRequestChangelog(terraformChangedModules)}`;
+    const changelog = getPullRequestChangelog(terraformChangedModules);
+    body = `${lines.join('\n')}\n\n${wikiMessage}${modulesToRemove}# Changelog\n\n${changelog}`;
   }
 
   // Create new PR comment (Requires permission > pull-requests: write)
