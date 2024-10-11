@@ -19,11 +19,6 @@ export enum WikiStatus {
   DISABLED = 'DISABLED',
 }
 
-interface ChildProcessError extends Error {
-  stdout?: Buffer;
-  stderr?: Buffer;
-}
-
 // Special subdirectory inside the primary repository where the wiki is checked out.
 const WIKI_SUBDIRECTORY = '.wiki';
 
