@@ -1,4 +1,4 @@
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import type { ExecSyncOptions } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -314,12 +314,12 @@ export async function createTaggedRelease(terraformModules: TerraformChangedModu
     try {
       const commitMessage = `${nextTag}\n\n${prTitle}\n\n${prBody}`.trim();
 
-      execSync(`git config --local user.name "${GITHUB_ACTIONS_BOT_NAME}"`, gitOpts);
-      execSync(`git config --local user.email "${GITHUB_ACTIONS_BOT_EMAIL}"`, gitOpts);
-      execSync('git add .', gitOpts);
-      execSync(`git commit -m "${commitMessage.trim()}"`, gitOpts);
-      execSync(`git tag ${nextTag}`, gitOpts);
-      execSync(`git push origin ${nextTag}`, gitOpts);
+      execFileSync('git', ['config', '--local', 'user.name', GITHUB_ACTIONS_BOT_NAME], gitOpts);
+      execFileSync('git', ['config', '--local', 'user.email', GITHUB_ACTIONS_BOT_EMAIL], gitOpts);
+      execFileSync('git', ['add', '.'], gitOpts);
+      execFileSync('git', ['commit', '-m', commitMessage.trim()], gitOpts);
+      execFileSync('git', ['tag', nextTag], gitOpts);
+      execFileSync('git', ['push', 'origin', nextTag], gitOpts);
 
       // Create a GitHub release using the tag
       info(`Creating GitHub release for ${moduleName}@${nextTag}`);

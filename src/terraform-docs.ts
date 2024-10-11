@@ -1,9 +1,35 @@
-import { exec as execCallback, execSync } from 'node:child_process';
+import { execFile as execFileCallback, execFileSync } from 'node:child_process';
 import { promisify } from 'node:util';
 import { endGroup, info, startGroup } from '@actions/core';
 import type { TerraformModule } from './terraform-module';
 
-const exec = promisify(execCallback);
+const execFile = promisify(execFileCallback);
+
+type SupportedArchitectures = 'x64' | 'arm' | 'arm64';
+
+const nodeToGoArchMap: { [key in SupportedArchitectures]: string } = {
+  x64: 'amd64',
+  arm: 'arm',
+  arm64: 'arm64',
+};
+
+/**
+ * Returns the Go architecture name corresponding to the given Node.js architecture.
+ *
+ * @param nodeArch - The Node.js architecture (e.g. 'x64', 'arm', 'arm64')
+ * @returns The Go architecture name (e.g. 'amd64', 'arm', 'arm64')
+ * @throws {Error} If the Node.js architecture is not supported
+ */
+const getGoArch = (nodeArch: string): string => {
+  switch (nodeArch) {
+    case 'x64':
+    case 'arm':
+    case 'arm64':
+      return nodeToGoArchMap[nodeArch as SupportedArchitectures];
+    default:
+      throw new Error(`Unsupported architecture: ${nodeArch}`);
+  }
+};
 
 /**
  * Installs the specified version of terraform-docs.
@@ -15,14 +41,19 @@ const exec = promisify(execCallback);
 export const installTerraformDocs = (terraformDocsVersion: string): void => {
   startGroup(`Installing terraform-docs ${terraformDocsVersion}`);
 
-  execSync(
-    `curl -sSLo ./terraform-docs.tar.gz https://terraform-docs.io/dl/${terraformDocsVersion}/terraform-docs-${terraformDocsVersion}-$(uname)-$(dpkg --print-architecture).tar.gz`,
-  );
-  execSync('tar -xzf terraform-docs.tar.gz');
-  execSync('chmod +x terraform-docs');
-  execSync('sudo mv terraform-docs /usr/local/bin/terraform-docs');
-  execSync('terraform-docs --version', { stdio: 'inherit' });
+  const platform = process.platform;
+  const goArch = getGoArch(process.arch);
 
+  execFileSync('curl', [
+    '-sSLo',
+    './terraform-docs.tar.gz',
+    `https://terraform-docs.io/dl/${terraformDocsVersion}/terraform-docs-${terraformDocsVersion}-${platform}-${goArch}.tar.gz`,
+  ]);
+
+  execFileSync('tar', ['-xzf', 'terraform-docs.tar.gz']);
+  execFileSync('chmod', ['+x', 'terraform-docs']);
+  execFileSync('sudo', ['mv', 'terraform-docs', '/usr/local/bin/terraform-docs']); // Alternatively, use custom non elevated path
+  execFileSync('terraform-docs', ['--version'], { stdio: 'inherit' });
   endGroup();
 };
 
@@ -41,7 +72,13 @@ export const installTerraformDocs = (terraformDocsVersion: string): void => {
 export const generateTerraformDocs = async ({ moduleName, directory }: TerraformModule) => {
   info(`Generating tf-docs for: ${moduleName}`);
 
-  const { stdout, stderr } = await exec(`terraform-docs markdown table --sort-by required "${directory}"`);
+  const { stdout, stderr } = await execFile('terraform-docs', [
+    'markdown',
+    'table',
+    '--sort-by',
+    'required',
+    directory,
+  ]);
 
   if (stderr) {
     console.error(`Error generating tf-docs for ${moduleName}: ${stderr}`);

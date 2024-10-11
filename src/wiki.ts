@@ -1,4 +1,4 @@
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import type { ExecSyncOptions } from 'node:child_process';
 import fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
@@ -17,11 +17,6 @@ export enum WikiStatus {
   SUCCESS = 'SUCCESS',
   FAILURE = 'FAILURE',
   DISABLED = 'DISABLED',
-}
-
-interface ChildProcessError extends Error {
-  stdout?: Buffer;
-  stderr?: Buffer;
 }
 
 // Special subdirectory inside the primary repository where the wiki is checked out.
@@ -55,45 +50,50 @@ export const checkoutWiki = (): void => {
   startGroup(`Checking out wiki repository [${wikiHtmlUrl}]`);
 
   info('Adding repository directory to the temporary git global config as a safe directory');
-  execSync(`git config --global --add safe.directory ${WIKI_DIRECTORY}`, { stdio: 'inherit' });
+  execFileSync('git', ['config', '--global', '--add', 'safe.directory', WIKI_DIRECTORY], { stdio: 'inherit' });
 
-  info('Initializing the repository');
+  info('Initializing the repository3');
   if (!fs.existsSync(WIKI_SUBDIRECTORY)) {
     fs.mkdirSync(WIKI_SUBDIRECTORY);
   }
-  execSync(`git init --initial-branch=master ${WIKI_DIRECTORY}`, execWikiOpts);
+  execFileSync('git', ['init', '--initial-branch=master', WIKI_DIRECTORY], execWikiOpts);
 
   info('Setting up origin');
-  execSync(`git remote add origin ${wikiHtmlUrl}`, execWikiOpts);
+  execFileSync('git', ['remote', 'add', 'origin', wikiHtmlUrl], execWikiOpts);
 
   info('Configuring authentication');
   // Configure Git to use the PAT for the wiki repository (emulating the behavior of GitHub Actions
   // from the checkout@v4 action.
   const basicCredential = Buffer.from(`x-access-token:${config.githubToken}`, 'utf8').toString('base64');
   try {
-    execSync(`git config --local --unset-all 'http.https://github.com/.extraheader'`, execWikiOpts);
+    execFileSync('git', ['config', '--local', '--unset-all', 'http.https://github.com/.extraheader'], execWikiOpts);
   } catch (error) {
     // This returns exit code 5 if not set. Not a problem. Let's ignore./
   }
-  execSync(
-    `git config --local http.https://github.com/.extraheader "Authorization: Basic ${basicCredential}"`,
+  execFileSync(
+    'git',
+    ['config', '--local', 'http.https://github.com/.extraheader', `Authorization: Basic ${basicCredential}`],
     execWikiOpts,
   );
 
   try {
     info('Fetching the repository');
-
-    execSync(
+    execFileSync(
+      'git',
       [
-        'git',
-        '-c protocol.version=2',
-        'fetch --no-tags --prune --no-recurse-submodules --depth=1 origin',
+        'fetch',
+        '--no-tags',
+        '--prune',
+        '--no-recurse-submodules',
+        '--depth=1',
+        'origin',
         '+refs/heads/master*:refs/remotes/origin/master*',
         '+refs/tags/master*:refs/tags/master*',
-      ].join(' '),
+      ],
       execWikiOpts,
     );
-    execSync('git checkout master', execWikiOpts);
+
+    execFileSync('git', ['checkout', 'master'], execWikiOpts);
 
     info('Successfully checked out wiki repository');
 
@@ -292,16 +292,16 @@ export const updateWiki = async (terraformModules: TerraformModule[]): Promise<s
 
     // Check if there are any changes (otherwise add/commit/push will error)
     info('Checking for changes in wiki repository');
-    const status = execSync('git status --porcelain', { cwd: WIKI_DIRECTORY }); // ensure stdio is not set to inherit
+    const status = execFileSync('git', ['status', '--porcelain'], { cwd: WIKI_DIRECTORY });
     info(`git status output: ${status.toString().trim()}`);
 
     if (status !== null && status.toString().trim() !== '') {
       // There are changes, commit and push
-      execSync(`git config --local user.name "${GITHUB_ACTIONS_BOT_NAME}"`, execWikiOpts);
-      execSync(`git config --local user.email "${GITHUB_ACTIONS_BOT_EMAIL}"`, execWikiOpts);
-      execSync('git add .', execWikiOpts);
-      execSync(`git commit -m "${commitMessage.trim()}"`, execWikiOpts);
-      execSync('git push --set-upstream origin master', execWikiOpts);
+      execFileSync('git', ['config', '--local', 'user.name', GITHUB_ACTIONS_BOT_NAME], execWikiOpts);
+      execFileSync('git', ['config', '--local', 'user.email', GITHUB_ACTIONS_BOT_EMAIL], execWikiOpts);
+      execFileSync('git', ['add', '.'], execWikiOpts);
+      execFileSync('git', ['commit', '-m', commitMessage.trim()], execWikiOpts);
+      execFileSync('git', ['push', 'origin'], execWikiOpts);
       info('Changes committed and pushed to wiki repository');
     } else {
       info('No changes detected, skipping commit and push');
