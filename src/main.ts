@@ -116,6 +116,8 @@ export async function run(): Promise<void> {
         throw error;
       }
     } else {
+      console.log('>>');
+      /*
       await createTaggedRelease(terraformChangedModules);
       await deleteLegacyTerraformModuleTagsAndReleases(terraformModuleNamesToRemove, allTags, allReleases);
 
@@ -125,7 +127,7 @@ export async function run(): Promise<void> {
         installTerraformDocs(terraformDocsVersion);
         checkoutWiki();
         updateWiki(terraformModules);
-      }
+      }*/
     }
   } catch (error) {
     if (error instanceof Error) {
