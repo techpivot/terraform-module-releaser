@@ -126,6 +126,8 @@ requests and creating releases.
   and releases.
 - If you are using a Personal Access Token (PAT), ensure that it has the `repo` scope granted. This permission is
   required for the action to read and write to the repository, including managing pull requests and creating releases.
+- Ensure the **Restrict editing to users in teams with push access only** setting is enabled for public repositories, as
+  the GitHub Actions Bot can write to the wiki by default.
 
 If the permissions are insufficient, the action may fail with a 403 error, indicating a lack of access to the necessary
 resources.
