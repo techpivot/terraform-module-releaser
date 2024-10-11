@@ -32095,7 +32095,29 @@ var external_node_util_ = __nccwpck_require__(7975);
 
 
 
-const exec = (0,external_node_util_.promisify)(external_node_child_process_namespaceObject.exec);
+const execFile = (0,external_node_util_.promisify)(external_node_child_process_namespaceObject.execFile);
+const nodeToGoArchMap = {
+    x64: 'amd64',
+    arm: 'arm',
+    arm64: 'arm64',
+};
+/**
+ * Returns the Go architecture name corresponding to the given Node.js architecture.
+ *
+ * @param nodeArch - The Node.js architecture (e.g. 'x64', 'arm', 'arm64')
+ * @returns The Go architecture name (e.g. 'amd64', 'arm', 'arm64')
+ * @throws {Error} If the Node.js architecture is not supported
+ */
+const getGoArch = (nodeArch) => {
+    switch (nodeArch) {
+        case 'x64':
+        case 'arm':
+        case 'arm64':
+            return nodeToGoArchMap[nodeArch];
+        default:
+            throw new Error(`Unsupported architecture: ${nodeArch}`);
+    }
+};
 /**
  * Installs the specified version of terraform-docs.
  *
@@ -32105,11 +32127,17 @@ const exec = (0,external_node_util_.promisify)(external_node_child_process_names
  */
 const installTerraformDocs = (terraformDocsVersion) => {
     (0,core.startGroup)(`Installing terraform-docs ${terraformDocsVersion}`);
-    (0,external_node_child_process_namespaceObject.execSync)(`curl -sSLo ./terraform-docs.tar.gz https://terraform-docs.io/dl/${terraformDocsVersion}/terraform-docs-${terraformDocsVersion}-$(uname)-$(dpkg --print-architecture).tar.gz`);
-    (0,external_node_child_process_namespaceObject.execSync)('tar -xzf terraform-docs.tar.gz');
-    (0,external_node_child_process_namespaceObject.execSync)('chmod +x terraform-docs');
-    (0,external_node_child_process_namespaceObject.execSync)('sudo mv terraform-docs /usr/local/bin/terraform-docs');
-    (0,external_node_child_process_namespaceObject.execSync)('terraform-docs --version', { stdio: 'inherit' });
+    const platform = process.platform;
+    const goArch = getGoArch(process.arch);
+    (0,external_node_child_process_namespaceObject.execFileSync)('curl', [
+        '-sSLo',
+        './terraform-docs.tar.gz',
+        `https://terraform-docs.io/dl/${terraformDocsVersion}/terraform-docs-${terraformDocsVersion}-${platform}-${goArch}.tar.gz`,
+    ]);
+    (0,external_node_child_process_namespaceObject.execFileSync)('tar', ['-xzf', 'terraform-docs.tar.gz']);
+    (0,external_node_child_process_namespaceObject.execFileSync)('chmod', ['+x', 'terraform-docs']);
+    (0,external_node_child_process_namespaceObject.execFileSync)('sudo', ['mv', 'terraform-docs', '/usr/local/bin/terraform-docs']); // Alternatively, use custom non elevated path
+    (0,external_node_child_process_namespaceObject.execFileSync)('terraform-docs', ['--version'], { stdio: 'inherit' });
     (0,core.endGroup)();
 };
 /**
@@ -32126,7 +32154,13 @@ const installTerraformDocs = (terraformDocsVersion) => {
  */
 const generateTerraformDocs = async ({ moduleName, directory }) => {
     (0,core.info)(`Generating tf-docs for: ${moduleName}`);
-    const { stdout, stderr } = await exec(`terraform-docs markdown table --sort-by required "${directory}"`);
+    const { stdout, stderr } = await execFile('terraform-docs', [
+        'markdown',
+        'table',
+        '--sort-by',
+        'required',
+        directory,
+    ]);
     if (stderr) {
         console.error(`Error generating tf-docs for ${moduleName}: ${stderr}`);
         throw new Error(`Terraform-docs generation failed for module: ${moduleName}\n${stderr}`);
@@ -32179,35 +32213,38 @@ const checkoutWiki = () => {
     const wikiHtmlUrl = `${config.repoUrl}.wiki`;
     (0,core.startGroup)(`Checking out wiki repository [${wikiHtmlUrl}]`);
     (0,core.info)('Adding repository directory to the temporary git global config as a safe directory');
-    (0,external_node_child_process_namespaceObject.execSync)(`git config --global --add safe.directory ${WIKI_DIRECTORY}`, { stdio: 'inherit' });
-    (0,core.info)('Initializing the repository');
+    (0,external_node_child_process_namespaceObject.execFileSync)('git', ['config', '--global', '--add', 'safe.directory', WIKI_DIRECTORY], { stdio: 'inherit' });
+    (0,core.info)('Initializing the repository3');
     if (!external_node_fs_default().existsSync(WIKI_SUBDIRECTORY)) {
         external_node_fs_default().mkdirSync(WIKI_SUBDIRECTORY);
     }
-    (0,external_node_child_process_namespaceObject.execSync)(`git init --initial-branch=master ${WIKI_DIRECTORY}`, execWikiOpts);
+    (0,external_node_child_process_namespaceObject.execFileSync)('git', ['init', '--initial-branch=master', WIKI_DIRECTORY], execWikiOpts);
     (0,core.info)('Setting up origin');
-    (0,external_node_child_process_namespaceObject.execSync)(`git remote add origin ${wikiHtmlUrl}`, execWikiOpts);
+    (0,external_node_child_process_namespaceObject.execFileSync)('git', ['remote', 'add', 'origin', wikiHtmlUrl], execWikiOpts);
     (0,core.info)('Configuring authentication');
     // Configure Git to use the PAT for the wiki repository (emulating the behavior of GitHub Actions
     // from the checkout@v4 action.
     const basicCredential = Buffer.from(`x-access-token:${config.githubToken}`, 'utf8').toString('base64');
     try {
-        (0,external_node_child_process_namespaceObject.execSync)(`git config --local --unset-all 'http.https://github.com/.extraheader'`, execWikiOpts);
+        (0,external_node_child_process_namespaceObject.execFileSync)('git', ['config', '--local', '--unset-all', 'http.https://github.com/.extraheader'], execWikiOpts);
     }
     catch (error) {
         // This returns exit code 5 if not set. Not a problem. Let's ignore./
     }
-    (0,external_node_child_process_namespaceObject.execSync)(`git config --local http.https://github.com/.extraheader "Authorization: Basic ${basicCredential}"`, execWikiOpts);
+    (0,external_node_child_process_namespaceObject.execFileSync)('git', ['config', '--local', 'http.https://github.com/.extraheader', `Authorization: Basic ${basicCredential}`], execWikiOpts);
     try {
         (0,core.info)('Fetching the repository');
-        (0,external_node_child_process_namespaceObject.execSync)([
-            'git',
-            '-c protocol.version=2',
-            'fetch --no-tags --prune --no-recurse-submodules --depth=1 origin',
+        (0,external_node_child_process_namespaceObject.execFileSync)('git', [
+            'fetch',
+            '--no-tags',
+            '--prune',
+            '--no-recurse-submodules',
+            '--depth=1',
+            'origin',
             '+refs/heads/master*:refs/remotes/origin/master*',
             '+refs/tags/master*:refs/tags/master*',
-        ].join(' '), execWikiOpts);
-        (0,external_node_child_process_namespaceObject.execSync)('git checkout master', execWikiOpts);
+        ], execWikiOpts);
+        (0,external_node_child_process_namespaceObject.execFileSync)('git', ['checkout', 'master'], execWikiOpts);
         (0,core.info)('Successfully checked out wiki repository');
         // Since we 100% regenerate 100% of the modules, we can simply remove the generated folder if it exists
         // as this helps us 100% ensure we don't have any stale content.
@@ -32376,15 +32413,15 @@ const updateWiki = async (terraformModules) => {
         const commitMessage = `PR #${prNumber} - ${prTitle}\n\n${prBody}`.trim();
         // Check if there are any changes (otherwise add/commit/push will error)
         (0,core.info)('Checking for changes in wiki repository');
-        const status = (0,external_node_child_process_namespaceObject.execSync)('git status --porcelain', { cwd: WIKI_DIRECTORY }); // ensure stdio is not set to inherit
+        const status = (0,external_node_child_process_namespaceObject.execFileSync)('git', ['status', '--porcelain'], { cwd: WIKI_DIRECTORY });
         (0,core.info)(`git status output: ${status.toString().trim()}`);
         if (status !== null && status.toString().trim() !== '') {
             // There are changes, commit and push
-            (0,external_node_child_process_namespaceObject.execSync)(`git config --local user.name "${GITHUB_ACTIONS_BOT_NAME}"`, execWikiOpts);
-            (0,external_node_child_process_namespaceObject.execSync)(`git config --local user.email "${GITHUB_ACTIONS_BOT_EMAIL}"`, execWikiOpts);
-            (0,external_node_child_process_namespaceObject.execSync)('git add .', execWikiOpts);
-            (0,external_node_child_process_namespaceObject.execSync)(`git commit -m "${commitMessage.trim()}"`, execWikiOpts);
-            (0,external_node_child_process_namespaceObject.execSync)('git push --set-upstream origin master', execWikiOpts);
+            (0,external_node_child_process_namespaceObject.execFileSync)('git', ['config', '--local', 'user.name', GITHUB_ACTIONS_BOT_NAME], execWikiOpts);
+            (0,external_node_child_process_namespaceObject.execFileSync)('git', ['config', '--local', 'user.email', GITHUB_ACTIONS_BOT_EMAIL], execWikiOpts);
+            (0,external_node_child_process_namespaceObject.execFileSync)('git', ['add', '.'], execWikiOpts);
+            (0,external_node_child_process_namespaceObject.execFileSync)('git', ['commit', '-m', commitMessage.trim()], execWikiOpts);
+            (0,external_node_child_process_namespaceObject.execFileSync)('git', ['push', 'origin'], execWikiOpts);
             (0,core.info)('Changes committed and pushed to wiki repository');
         }
         else {
@@ -32635,12 +32672,12 @@ async function createTaggedRelease(terraformModules) {
         // Git operations: commit the changes and tag the release. Wrap the error message here
         try {
             const commitMessage = `${nextTag}\n\n${prTitle}\n\n${prBody}`.trim();
-            (0,external_node_child_process_namespaceObject.execSync)(`git config --local user.name "${GITHUB_ACTIONS_BOT_NAME}"`, gitOpts);
-            (0,external_node_child_process_namespaceObject.execSync)(`git config --local user.email "${GITHUB_ACTIONS_BOT_EMAIL}"`, gitOpts);
-            (0,external_node_child_process_namespaceObject.execSync)('git add .', gitOpts);
-            (0,external_node_child_process_namespaceObject.execSync)(`git commit -m "${commitMessage.trim()}"`, gitOpts);
-            (0,external_node_child_process_namespaceObject.execSync)(`git tag ${nextTag}`, gitOpts);
-            (0,external_node_child_process_namespaceObject.execSync)(`git push origin ${nextTag}`, gitOpts);
+            (0,external_node_child_process_namespaceObject.execFileSync)('git', ['config', '--local', 'user.name', GITHUB_ACTIONS_BOT_NAME], gitOpts);
+            (0,external_node_child_process_namespaceObject.execFileSync)('git', ['config', '--local', 'user.email', GITHUB_ACTIONS_BOT_EMAIL], gitOpts);
+            (0,external_node_child_process_namespaceObject.execFileSync)('git', ['add', '.'], gitOpts);
+            (0,external_node_child_process_namespaceObject.execFileSync)('git', ['commit', '-m', commitMessage.trim()], gitOpts);
+            (0,external_node_child_process_namespaceObject.execFileSync)('git', ['tag', nextTag], gitOpts);
+            (0,external_node_child_process_namespaceObject.execFileSync)('git', ['push', 'origin', nextTag], gitOpts);
             // Create a GitHub release using the tag
             (0,core.info)(`Creating GitHub release for ${moduleName}@${nextTag}`);
             const body = getModuleChangelog(module);
