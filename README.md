@@ -94,7 +94,7 @@ Add the following YAML to your `.github/workflows` directory:
 name: Terraform Module Releaser
 on:
   pull_request:
-    types: [opened, edited, synchronize, closed] # Closed required
+    types: [opened, reopened, synchronize, closed] # Closed required
     branches:
       - main
 
@@ -152,7 +152,7 @@ resources.
 name: Terraform Module Releaser
 on:
   pull_request:
-    types: [opened, edited, synchronize, closed] # Closed required
+    types: [opened, reopened, synchronize, closed] # Closed required
     branches:
       - main
 

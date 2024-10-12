@@ -6,7 +6,7 @@ on:
     # actually creating releases for terraform modules in this primary github action
     # repository. Thus, we ensure that the "closed" option is not present. Separately,
     # we test the action as designed in a separate terraform-module repository.
-    types: [opened, edited, synchronize]
+    types: [opened, reopened, synchronize]
     branches:
       - main
 
