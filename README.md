@@ -124,8 +124,8 @@ requests and creating releases.
   for `pull-requests` must be set to `"write"`.
 - Additionally, the workflow permission for `contents` must also be set to `"write"` to allow the action to create tags
   and releases.
-- If you are using a Personal Access Token (PAT), ensure that it has the `repo` scope granted. This permission is
-  required for the action to read and write to the repository, including managing pull requests and creating releases.
+- For security considerations and best practices when using the `github_token` or PATs, please refer to the
+  [Security Documentation](./security.md).
 - Ensure the **Restrict editing to users in teams with push access only** setting is enabled for public repositories, as
   the GitHub Actions Bot can write to the wiki by default.
 
@@ -209,3 +209,11 @@ by Piotr Krukowski.
   your workflow, this action will not be triggered. An alternative approach would be to split this action into two
   separate actions and workflows, one for pull requests and one for direct pushes to the main branch. However, this
   would require additional configuration and setup in the calling code.
+
+## License
+
+The scripts and documentation in this project are released under the [MIT License](./LICENSE.md).
+
+## Security
+
+For detailed information about security practices and guidelines, check out the [Security Documentation](./security.md).
