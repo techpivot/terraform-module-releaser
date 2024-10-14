@@ -1,4 +1,4 @@
-import { config } from './config';
+import { context } from './context';
 import type { TerraformChangedModule, TerraformModule } from './terraform-module';
 
 /**
@@ -29,7 +29,7 @@ const createModuleChangelogEntry = (heading: string, commits: string[]): string 
  */
 export const getPullRequestChangelog = (terraformChangedModules: TerraformChangedModule[]): string => {
   const pullRequestChangelog: string[] = [];
-  const { prNumber, prTitle } = config;
+  const { prNumber, prTitle } = context;
 
   for (const { nextTag, commitMessages } of terraformChangedModules) {
     const cleanedCommitMessages = commitMessages.map((commitMessage) => {
@@ -56,7 +56,7 @@ export const getPullRequestChangelog = (terraformChangedModules: TerraformChange
  * @returns {string} The content of the module's changelog.
  */
 export const getModuleChangelog = (terraformChangedModule: TerraformChangedModule): string => {
-  const { prNumber, prTitle, repoUrl } = config;
+  const { prNumber, prTitle, repoUrl } = context;
   const { nextTagVersion, commitMessages } = terraformChangedModule;
 
   const cleanedCommitMessages = commitMessages.map((commitMessage) => {

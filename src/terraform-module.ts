@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { debug, endGroup, info, startGroup } from '@actions/core';
-import type { CommitDetails, GitHubRelease } from './github';
+import type { CommitDetails } from './pull-request';
+import type { GitHubRelease } from './releases';
 import type { ReleaseType } from './semver';
 import { determineReleaseType, getNextTagVersion } from './semver';
 
@@ -226,19 +227,19 @@ const getReleasesForModule = (moduleName: string, allReleases: GitHubRelease[]):
  * @param {CommitDetails[]} commits - An array of commit details to analyze for changes.
  * @param {string[]} allTags - A list of all tags associated with the modules.
  * @param {GitHubRelease[]} allReleases - An array of GitHub releases for the modules.
- * @returns {Promise<(TerraformModule | TerraformChangedModule)[]>} - A promise that resolves to an array of
- *    Terraform modules, each containing their corresponding change details. The modules may either be
- *    of type `TerraformModule` or `TerraformChangedModule`.
+ * @returns {(TerraformModule | TerraformChangedModule)[]} - An array of Terraform modules, each containing their
+ *    corresponding change details. The modules may either be of type `TerraformModule` or `TerraformChangedModule`.
  * @throws {Error} - Throws an error if a module associated with a file is not found in the
  *    terraformModulesMap, indicating a mismatch in expected module structure.
  */
-export const getAllTerraformModulesWithChanges = async (
+export const getAllTerraformModules = (
   workspaceDir: string,
   commits: CommitDetails[],
   allTags: string[],
   allReleases: GitHubRelease[],
-): Promise<(TerraformModule | TerraformChangedModule)[]> => {
+): (TerraformModule | TerraformChangedModule)[] => {
   startGroup('Finding all Terraform modules with corresponding changes');
+  console.time('Elapsed time finding terraform modules'); // Start timing
 
   const terraformModulesMap: Record<string, TerraformModule | TerraformChangedModule> = {};
 
@@ -318,9 +319,12 @@ export const getAllTerraformModulesWithChanges = async (
     });
 
   info('Finished analyzing directory tree, terraform modules, and commits');
+  info(`Found ${sortedTerraformModules.length} terraform module${sortedTerraformModules.length !== 1 ? 's' : ''}.`);
+
   debug('Terraform Modules:');
   debug(JSON.stringify(sortedTerraformModules, null, 2));
 
+  console.timeEnd('Elapsed time finding terraform modules');
   endGroup();
 
   return sortedTerraformModules;

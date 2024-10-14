@@ -1,9 +1,9 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
   "compilerOptions": {
-    "target": "ESNext",
-    "module": "ESNext",
-    "moduleResolution": "bundler",
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "Bundler",
     "noEmit": true,
     "baseUrl": "./",
     "rootDir": "./src",

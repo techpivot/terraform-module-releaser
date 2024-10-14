@@ -1,6 +1,6 @@
 import { execFile as execFileCallback, execFileSync } from 'node:child_process';
 import { promisify } from 'node:util';
-import { endGroup, info, startGroup } from '@actions/core';
+import { endGroup, error, info, startGroup } from '@actions/core';
 import type { TerraformModule } from './terraform-module';
 
 const execFile = promisify(execFileCallback);
@@ -81,7 +81,7 @@ export const generateTerraformDocs = async ({ moduleName, directory }: Terraform
   ]);
 
   if (stderr) {
-    console.error(`Error generating tf-docs for ${moduleName}: ${stderr}`);
+    error(`Error generating tf-docs for ${moduleName}: ${stderr}`);
     throw new Error(`Terraform-docs generation failed for module: ${moduleName}\n${stderr}`);
   }
 
