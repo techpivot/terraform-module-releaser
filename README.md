@@ -124,7 +124,7 @@ requests and creating releases.
   for `pull-requests` must be set to `"write"`.
 - Additionally, the workflow permission for `contents` must also be set to `"write"` to allow the action to create tags
   and releases.
-- For security considerations and best practices when using the `github_token` or PATs, please refer to the
+- For security considerations and best practices when using the `github_token`, please refer to the
   [Security Documentation](./security.md).
 - Ensure the **Restrict editing to users in teams with push access only** setting is enabled for public repositories, as
   the GitHub Actions Bot can write to the wiki by default.
@@ -132,19 +132,21 @@ requests and creating releases.
 If the permissions are insufficient, the action may fail with a 403 error, indicating a lack of access to the necessary
 resources.
 
-## Optional Inputs
+## Input Parameters
 
-| Input                        | Description                                                                                                                    | Default                        |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------ |
-| `major-keywords`             | Keywords in commit messages that indicate a major release                                                                      | `major change,breaking change` |
-| `minor-keywords`             | Keywords in commit messages that indicate a minor release                                                                      | `feat,feature`                 |
-| `patch-keywords`             | Keywords in commit messages that indicate a patch release                                                                      | `fix,chore,docs`               |
-| `default-first-tag`          | Specifies the default tag version                                                                                              | `v1.0.0`                       |
-| `github_token`               | Use this if you wish to use a different GitHub token than the one provided by the workflow                                     | `${{ github.token }}default`   |
-| `terraform-docs-version`     | Specifies the terraform-docs version used to generate documentation for the wiki                                               | `v0.19.0`                      |
-| `delete-legacy-tags`         | Specifies a boolean that determines whether tags from Terraform modules that have been deleted should be automatically removed | `true`                         |
-| `disable-wiki`               | Whether to disable wiki generation for Terraform modules                                                                       | `false`                        |
-| `wiki-sidebar-changelog-max` | An integer that specifies how many changelog entries are displayed in the sidebar per module                                   | `5`                            |
+While the out-of-the-box defaults are suitable for most use cases, you can further customize the action's behavior by
+configuring the following optional input parameters as needed.
+
+| Input                        | Description                                                                                                                                 | Default                        |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| `major-keywords`             | Keywords in commit messages that indicate a major release                                                                                   | `major change,breaking change` |
+| `minor-keywords`             | Keywords in commit messages that indicate a minor release                                                                                   | `feat,feature`                 |
+| `patch-keywords`             | Keywords in commit messages that indicate a patch release                                                                                   | `fix,chore,docs`               |
+| `default-first-tag`          | Specifies the default tag version                                                                                                           | `v1.0.0`                       |
+| `terraform-docs-version`     | Specifies the terraform-docs version used to generate documentation for the wiki                                                            | `v0.19.0`                      |
+| `delete-legacy-tags`         | Specifies a boolean that determines whether tags and releases from Terraform modules that have been deleted should be automatically removed | `true`                         |
+| `disable-wiki`               | Whether to disable wiki generation for Terraform modules                                                                                    | `false`                        |
+| `wiki-sidebar-changelog-max` | An integer that specifies how many changelog entries are displayed in the sidebar per module                                                | `5`                            |
 
 ### Example Usage with Inputs
 
@@ -190,7 +192,8 @@ by Piotr Krukowski.
 ## Notes
 
 - This action uses [Conventional Commits](https://www.conventionalcommits.org/) to automatically determine the release
-  type _(major, minor, or patch)_ based on commit messages.
+  type _(major, minor, or patch)_ based on commit messages. This behavior is configurable via
+  [inputs](#input-parameters).
 - Versioning is done using [Semantic Versioning (SemVer)](https://semver.org/), which provides a clear and consistent
   way to manage module versions.
 - Commit messages are linked to the respective Terraform directories _(handling PRs that may have separate modules and

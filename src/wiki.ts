@@ -5,11 +5,11 @@ import * as fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { endGroup, info, startGroup } from '@actions/core';
-import { context } from '@actions/github';
 import pLimit from 'p-limit';
 import { getModuleReleaseChangelog } from './changelog';
 import { config } from './config';
-import { GITHUB_ACTIONS_BOT_EMAIL, GITHUB_ACTIONS_BOT_NAME } from './github';
+import { GITHUB_ACTIONS_BOT_EMAIL, GITHUB_ACTIONS_BOT_NAME } from './constants';
+import { context } from './context';
 import { generateTerraformDocs } from './terraform-docs';
 import type { TerraformModule } from './terraform-module';
 
@@ -22,7 +22,7 @@ export enum WikiStatus {
 // Special subdirectory inside the primary repository where the wiki is checked out.
 const WIKI_SUBDIRECTORY = '.wiki';
 
-const WIKI_DIRECTORY = path.resolve(config.workspaceDir, WIKI_SUBDIRECTORY);
+const WIKI_DIRECTORY = path.resolve(context.workspaceDir, WIKI_SUBDIRECTORY);
 
 // Directory where the wiki generated Terraform modules will reside. Since GitHub doesn't use
 // folder/namespacing this folder will be transparent but will be helpful to keep generated
@@ -45,14 +45,14 @@ const execWikiOpts: ExecSyncOptions = { cwd: WIKI_DIRECTORY, stdio: 'inherit' };
  * @throws {Error} If the `git clone` command fails due to issues such as the wiki not existing.
  */
 export const checkoutWiki = (): void => {
-  const wikiHtmlUrl = `${config.repoUrl}.wiki`;
+  const wikiHtmlUrl = `${context.repoUrl}.wiki`;
 
   startGroup(`Checking out wiki repository [${wikiHtmlUrl}]`);
 
   info('Adding repository directory to the temporary git global config as a safe directory');
   execFileSync('git', ['config', '--global', '--add', 'safe.directory', WIKI_DIRECTORY], { stdio: 'inherit' });
 
-  info('Initializing the repository3');
+  info('Initializing the repository');
   if (!fs.existsSync(WIKI_SUBDIRECTORY)) {
     fs.mkdirSync(WIKI_SUBDIRECTORY);
   }
@@ -130,7 +130,7 @@ const getWikiFileMarkdown = async ($terraformModule: TerraformModule, $changelog
     'To use this module in your Terraform, refer to the below module example:\n',
     '```hcl',
     `module "${moduleName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()}" {`,
-    `  source = "git::${config.repoUrl}.git?ref=${latestTag}"`,
+    `  source = "git::${context.repoUrl}.git?ref=${latestTag}"`,
     '\n  # See inputs below for additional required parameters',
     '}',
     '```',
@@ -287,7 +287,7 @@ export const updateWiki = async (terraformModules: TerraformModule[]): Promise<s
   startGroup('Committing and pushing changes to wiki');
 
   try {
-    const { prBody, prNumber, prTitle } = config;
+    const { prBody, prNumber, prTitle } = context;
     const commitMessage = `PR #${prNumber} - ${prTitle}\n\n${prBody}`.trim();
 
     // Check if there are any changes (otherwise add/commit/push will error)

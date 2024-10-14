@@ -1,19 +1,11 @@
-import { debug, info, setFailed } from '@actions/core';
+import { info, setFailed } from '@actions/core';
 import { config } from './config';
-import {
-  commentOnPullRequest,
-  createTaggedRelease,
-  deleteLegacyTerraformModuleTagsAndReleases,
-  getAllReleases,
-  getAllTags,
-  getPullRequestCommits,
-} from './github';
+import { context } from './context';
+import { commentOnPullRequest, getPullRequestCommits } from './pull-request';
+import { createTaggedRelease, deleteLegacyReleases, getAllReleases } from './releases';
+import { deleteLegacyTags, getAllTags } from './tags';
 import { installTerraformDocs } from './terraform-docs';
-import {
-  getAllTerraformModulesWithChanges,
-  getTerraformChangedModules,
-  getTerraformModulesToRemove,
-} from './terraform-module';
+import { getAllTerraformModules, getTerraformChangedModules, getTerraformModulesToRemove } from './terraform-module';
 import { checkoutWiki, updateWiki } from './wiki';
 import { WikiStatus } from './wiki';
 
@@ -23,78 +15,36 @@ import { WikiStatus } from './wiki';
  */
 export async function run(): Promise<void> {
   try {
-    const {
-      majorKeywords,
-      minorKeywords,
-      patchKeywords,
-      defaultFirstTag,
-      githubToken,
-      isDefaultGithubActionsToken,
-      terraformDocsVersion,
-      isPrMergeEvent,
-      workspaceDir,
-      repoUrl,
-      disableWiki,
-      wikiSidebarChangelogMax,
-      deleteLegacyTags,
-    } = config;
-
-    // Debug logs for inputs
-    debug(`Major keywords: ${majorKeywords}`);
-    debug(`Minor keywords: ${minorKeywords}`);
-    debug(`Patch keywords: ${patchKeywords}`);
-    debug(`Default first tag: ${defaultFirstTag}`);
-    debug(`Terraform Docs Version: ${terraformDocsVersion}`);
-    debug(`GitHub Token provided: ${githubToken ? 'Yes' : 'No'}`);
-    debug(`Is Pull Request Merge Event: ${isPrMergeEvent ? 'Yes' : 'No'}`);
-    debug(`Is using default GitHub Actions Token: ${isDefaultGithubActionsToken ? 'Yes' : 'No'}`);
-    debug(`Workspace Directory: ${workspaceDir}`);
-    debug(`Repository URL: ${repoUrl}`);
-    debug(`Is Wiki generation disabled?: ${disableWiki ? 'Yes' : 'No'}`);
-    debug(`Wiki sidebar changelog max count: ${wikiSidebarChangelogMax}`);
-    debug(`Delete Legacy Tags: ${deleteLegacyTags ? 'Yes' : 'No'}`);
-
-    info(isPrMergeEvent ? 'Merge event detected.' : 'Non-merge event detected (pull-request).');
+    // @todo early exit check
 
     // Fetch all commits along with associated files in this PR
     const commits = await getPullRequestCommits();
-    info(`Found ${commits.length} commit${commits.length !== 1 ? 's' : ''}.`);
-    debug(JSON.stringify(commits, null, 2));
 
     // Fetch all tags associated with this PR
     const allTags = await getAllTags();
-    info(`Found ${allTags.length} tag${allTags.length !== 1 ? 's' : ''}.`);
-    debug(JSON.stringify(allTags, null, 2));
 
     // Fetch all releases associated with this PR
     const allReleases = await getAllReleases();
-    info(`Found ${allReleases.length} releases${allReleases.length !== 1 ? 's' : ''}.`);
-    debug(JSON.stringify(allReleases, null, 2));
 
-    // Fetch all Terraform modules that are changed with respect to this pull request
-    const terraformModules = await getAllTerraformModulesWithChanges(
-      config.workspaceDir,
-      commits,
-      allTags,
-      allReleases,
-    );
+    // Get all Terraform modules in this repository including changed metadata
+    const terraformModules = getAllTerraformModules(context.workspaceDir, commits, allTags, allReleases);
+
+    // Create a new array of only changed Terraform modules
     const terraformChangedModules = getTerraformChangedModules(terraformModules);
-    info(`Found ${terraformModules.length} Terraform module${terraformModules.length !== 1 ? 's' : ''}.`);
     info(
       `Found ${terraformChangedModules.length} changed Terraform module${terraformChangedModules.length !== 1 ? 's' : ''}.`,
     );
 
+    // Get an array of terraform module names to remove based on existing tags
     const terraformModuleNamesToRemove = getTerraformModulesToRemove(allTags, terraformModules);
-    info(
-      `Found ${terraformModuleNamesToRemove.length} Terraform module${terraformModuleNamesToRemove.length !== 1 ? 's' : ''} to remove.`,
-    );
 
-    if (!isPrMergeEvent) {
+    if (!context.isPrMergeEvent) {
       let wikiStatus = WikiStatus.DISABLED;
       let failure: string | undefined;
       let error: Error | undefined;
+
       try {
-        if (!disableWiki) {
+        if (!config.disableWiki) {
           checkoutWiki();
           wikiStatus = WikiStatus.SUCCESS;
         }
@@ -116,13 +66,17 @@ export async function run(): Promise<void> {
         throw error;
       }
     } else {
+      // Create the tagged release
       await createTaggedRelease(terraformChangedModules);
-      await deleteLegacyTerraformModuleTagsAndReleases(terraformModuleNamesToRemove, allTags, allReleases);
+
+      // Delete legacy releases and tags (Ensure we delete releases first)
+      await deleteLegacyReleases(terraformModuleNamesToRemove, allReleases);
+      await deleteLegacyTags(terraformModuleNamesToRemove, allTags);
 
       if (config.disableWiki) {
         info('Wiki generation is disabled.');
       } else {
-        installTerraformDocs(terraformDocsVersion);
+        installTerraformDocs(config.terraformDocsVersion);
         checkoutWiki();
         updateWiki(terraformModules);
       }

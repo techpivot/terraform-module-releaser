@@ -11,8 +11,8 @@ on:
       - main
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: write # Required to create tags, creaste releases and update wiki
+  pull-requests: write # Required to comment on pull requests
 
 jobs:
   test-action:
