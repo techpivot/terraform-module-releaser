@@ -178,8 +178,8 @@ function getTagsForModule(
   const tags = allTags
     .filter((tag) => tag.startsWith(`${moduleName}/v`))
     .sort((a, b) => {
-      const aParts = a.replace(`${moduleName}/`, '').replace('v', '').split('.').map(Number);
-      const bParts = b.replace(`${moduleName}/`, '').replace('v', '').split('.').map(Number);
+      const aParts = a.replace(`${moduleName}/v`, '').split('.').map(Number);
+      const bParts = b.replace(`${moduleName}/v`, '').split('.').map(Number);
       return bParts[0] - aParts[0] || bParts[1] - aParts[1] || bParts[2] - aParts[2]; // Sort in descending order
     });
 
@@ -320,6 +320,13 @@ export function getAllTerraformModules(
 
   info('Finished analyzing directory tree, terraform modules, and commits');
   info(`Found ${sortedTerraformModules.length} terraform module${sortedTerraformModules.length !== 1 ? 's' : ''}.`);
+
+  let terraformChangedModules: TerraformChangedModule[] | null = getTerraformChangedModules(sortedTerraformModules);
+  info(
+    `Found ${terraformChangedModules.length} changed Terraform module${terraformChangedModules.length !== 1 ? 's' : ''}.`,
+  );
+  // Free up memory by unsetting terraformChangedModules
+  terraformChangedModules = null;
 
   debug('Terraform Modules:');
   debug(JSON.stringify(sortedTerraformModules, null, 2));

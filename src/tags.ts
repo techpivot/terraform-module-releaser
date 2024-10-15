@@ -4,23 +4,6 @@ import { config } from './config';
 import { context } from './context';
 
 /**
- * Extracts the version (e.g., "vX.Y.Z") from the end of a full tag or release name.
- *
- * @param {string} tagName - The full tag or release name.
- * @returns {string | null} - The extracted version (e.g., "vX.Y.Z") or null if no version is found at the end.
- */
-export function getTagVersion(tagName: string): string | null {
-  // Regular expression to match "vX.Y.Z" at the end of the string
-  const versionRegex = /\/(v\d+\.\d+\.\d+)$/;
-
-  // Use regex to find and return the version in the tag name
-  const match = tagName.match(versionRegex);
-
-  // If a match is found, return it, otherwise return null
-  return match ? match[1] : null;
-}
-
-/**
  * Fetches all tags from the specified GitHub repository.
  *
  * This function utilizes pagination to retrieve all tags, returning them as an array of strings.
@@ -80,7 +63,7 @@ export async function getAllTags(): Promise<string[]> {
  * @param {string[]} allTags - Array of all tags in the repository.
  * @returns {Promise<void>}
  */
-export async function deleteLegacyTags(terraformModuleNames: string[], allTags: string[]) {
+export async function deleteLegacyTags(terraformModuleNames: string[], allTags: string[]): Promise<void> {
   if (!config.deleteLegacyTags) {
     info('Deletion of legacy tags/releases is disabled. Skipping.');
     return;

@@ -8,7 +8,7 @@ import { endGroup, info, startGroup } from '@actions/core';
 import pLimit from 'p-limit';
 import { getModuleReleaseChangelog } from './changelog';
 import { config } from './config';
-import { GITHUB_ACTIONS_BOT_EMAIL, GITHUB_ACTIONS_BOT_NAME } from './constants';
+import { BRANDING, GITHUB_ACTIONS_BOT_EMAIL, GITHUB_ACTIONS_BOT_NAME } from './constants';
 import { context } from './context';
 import { generateTerraformDocs } from './terraform-docs';
 import type { TerraformModule } from './terraform-module';
@@ -125,7 +125,7 @@ export function checkoutWiki(): void {
 const getWikiFileMarkdown = async ($terraformModule: TerraformModule, $changelog: string): Promise<string> => {
   const { moduleName, latestTag } = $terraformModule;
 
-  return [
+  const wikiContent = [
     '# Usage\n',
     'To use this module in your Terraform, refer to the below module example:\n',
     '```hcl',
@@ -140,7 +140,14 @@ const getWikiFileMarkdown = async ($terraformModule: TerraformModule, $changelog
     '<!-- END_TF_DOCS -->',
     '\n# Changelog\n',
     $changelog,
-  ].join('\n');
+  ];
+
+  // Branding
+  if (config.disableBranding === false) {
+    wikiContent.push(`\n${BRANDING}`);
+  }
+
+  return wikiContent.join('\n');
 };
 
 /**
@@ -175,6 +182,85 @@ const writeFileToWiki = async (moduleName: string, content: string): Promise<str
   }
 };
 
+/**
+ * Generates a URL to the wiki page for a given Terraform module.
+ *
+ * @param {string} moduleName - The name of the Terraform module. The function extracts the base name and
+ *   removes the file extension (if any) to form the slug.
+ * @param {boolean} [relative=true] - A flag indicating whether to return a relative URL
+ *   (default) or an absolute URL.
+ *   - If `true`, returns a relative URL based on the repository owner and name.
+ *   - If `false`, uses the full repository URL from `context.repoUrl`.
+ * @returns {string} - The full wiki link for the module based on the provided module name and URL
+ *   type (relative or absolute).
+ *
+ * @example
+ * // Returns a relative URL for a module
+ * getWikiLink('terraform-aws-vpc'); // "/owner/repo/wiki/terraform-aws-vpc"
+ *
+ * @example
+ * // Returns an absolute URL for a module
+ * getWikiLink('aws/terraform-aws-vpc', false); // "https://github.com/owner/repo/wiki/terraform-aws-vpc"
+ */
+export function getWikiLink(moduleName: string, relative = true): string {
+  let baseUrl: string;
+  if (relative) {
+    baseUrl = `/${context.repo.owner}/${context.repo.repo}`;
+  } else {
+    baseUrl = context.repoUrl;
+  }
+
+  // The wiki file slug needs to match GitHub syntax. It doesn't take into account folder/namespace. If it
+  // did much of this sidebar behavior would be potentially unnecessary.
+  const gitHubSlug = path.basename(moduleName).replace(/\.[^/.]+$/, '');
+
+  return `${baseUrl}/wiki/${gitHubSlug}`;
+}
+
+/**
+ * Updates the Wiki sidebar with a list of Terraform modules, including changelog entries for each.
+ *
+ * This function generates a dynamic sidebar for the GitHub Wiki by iterating over the provided
+ * Terraform modules, extracting their changelog content, and formatting it into a nested list
+ * with relevant links to sections within each module's Wiki page (e.g., "Usage", "Attributes",
+ * and "Changelog"). The generated content is then written to the `_Sidebar.md` file.
+ *
+ * @param {TerraformModule[]} terraformModules - An array of Terraform modules for which the Wiki
+ *   sidebar will be updated. Each module contains the `moduleName`, and its changelog is fetched
+ *   to generate sidebar entries.
+ * @returns {Promise<void>} - A promise that resolves once the sidebar has been successfully
+ *   updated and written to the file.
+ *
+ * Function Details:
+ * - Uses the `context.repo` object to get the repository owner and name for building links.
+ * - The sidebar file is located in the `WIKI_DIRECTORY` and is named `_Sidebar.md`.
+ * - For each module, it uses `getWikiLink()` to create the base link and `getModuleReleaseChangelog()`
+ *   to extract relevant changelog headings (matching `##` or `###`).
+ * - Headings are converted into valid HTML IDs and displayed as linked list items (`<li>`),
+ *   limiting the number of changelog entries based on the configuration
+ *   (`config.wikiSidebarChangelogMax`).
+ * - Writes the final content, including links to Home and the module Wiki pages, to the sidebar file.
+ *
+ * Example Sidebar Entry:
+ * ```
+ * <li>
+ *   <details>
+ *     <summary><a href="/techpivot/terraform-modules-demo/wiki/random"><b>null/random</b></a></summary>
+ *     <ul>
+ *       <li><a href="/techpivot/terraform-modules-demo/wiki/random#usage">Usage</a></li>
+ *       <li><a href="/techpivot/terraform-modules-demo/wiki/random#attributes">Attributes</a></li>
+ *       <li><a href="/techpivot/terraform-modules-demo/wiki/random#changelog">Changelog</a>
+ *         <ul>
+ *            <li><a href="/techpivot/terraform-modules-demo/wiki/random#v120-2024-10-15">v1.2.0 (2024-10-15)</a></li>
+ *            <li><a href="/techpivot/terraform-modules-demo/wiki/random#v110-2024-10-11">v1.1.0 (2024-10-11)</a></li>
+ *            <li><a href="/techpivot/terraform-modules-demo/wiki/random#v100-2024-10-10">v1.0.0 (2024-10-10)</a></li>
+ *         </ul>
+ *       </li>
+ *     </ul>
+ *   </details>
+ * </li>
+ * ```
+ */
 const updateWikiSidebar = async (terraformModules: TerraformModule[]): Promise<void> => {
   const { owner, repo } = context.repo;
   const sideBarFile = path.join(WIKI_DIRECTORY, '_Sidebar.md');
@@ -183,10 +269,9 @@ const updateWikiSidebar = async (terraformModules: TerraformModule[]): Promise<v
 
   for (const module of terraformModules) {
     const { moduleName } = module;
-    // The wiki file slug needs to match GitHub syntax. It doesn't take into account folder/namespace. If it
-    // did much of this sidebar behavior would be potentially unnecessary.
-    const gitHubSlug = path.basename(moduleName).replace(/\.[^/.]+$/, '');
-    const baselink = `${repoBaseUrl}/wiki/${gitHubSlug}`;
+
+    // Get the baselink which is used throughout the sidebar
+    const baselink = getWikiLink(moduleName, true);
 
     // Generate module changelog string by limiting to wikiSidebarChangelogMax
     const changelogContent = getModuleReleaseChangelog(module);
@@ -206,7 +291,9 @@ const updateWikiSidebar = async (terraformModules: TerraformModule[]): Promise<v
         const idString = heading.replace(/[ ]+/g, '-').replace(/[^a-zA-Z0-9-_]/g, '');
 
         // Append the entry to changelogEntries
-        changelogEntries.push(`<li><a href="${baselink}#${idString}">${heading.replace(/[`]/g, '')}</a></li>`);
+        changelogEntries.push(
+          `            <li><a href="${baselink}#${idString}">${heading.replace(/[`]/g, '')}</a></li>`,
+        );
       }
 
       // Execute the regex again for the next match
@@ -214,30 +301,29 @@ const updateWikiSidebar = async (terraformModules: TerraformModule[]): Promise<v
     } while (headingMatch);
 
     // Limit to the maximum number of changelog entries defined in config
-    let limitedChangelogEntries = changelogEntries.slice(0, config.wikiSidebarChangelogMax).join('');
+    const limitedChangelogEntries = changelogEntries.slice(0, config.wikiSidebarChangelogMax).join('\n');
 
     // Wrap changelog in <ul> if it's not empty
+    let changelog = '</li>';
     if (limitedChangelogEntries.length > 0) {
-      limitedChangelogEntries = `<ul>${limitedChangelogEntries}</ul>`;
+      changelog = `\n          <ul>\n${limitedChangelogEntries}\n          </ul>\n        </li>`;
     }
 
     moduleSidebarContent += [
-      '<li>',
-      '<details>',
-      `<summary><a href="${baselink}"><b>${moduleName}</b></a></summary>`,
-      '<ul>',
-      `<li><a href="${baselink}#usage">Usage</a></li>`,
-      `<li><a href="${baselink}#attributes">Attributes</a></li>`,
-      `<li><a href="${baselink}#changelog">Changelog</a>`,
-      limitedChangelogEntries,
-      '</li>',
-      '</ul>',
-      '</details>',
-      '</li>',
+      '\n  <li>',
+      '    <details>',
+      `      <summary><a href="${baselink}"><b>${moduleName}</b></a></summary>`,
+      '      <ul>',
+      `        <li><a href="${baselink}#usage">Usage</a></li>`,
+      `        <li><a href="${baselink}#attributes">Attributes</a></li>`,
+      `        <li><a href="${baselink}#changelog">Changelog</a>${changelog}`,
+      '      </ul>',
+      '    </details>',
+      '  </li>',
     ].join('\n');
   }
 
-  const content = `[Home](${repoBaseUrl}/wiki/Home)\n\n## Terraform Modules\n\n<ul>${moduleSidebarContent}</ul>`;
+  const content = `[Home](${repoBaseUrl}/wiki/Home)\n\n## Terraform Modules\n\n<ul>${moduleSidebarContent}\n</ul>`;
 
   await fsp.writeFile(sideBarFile, content, 'utf8');
 };
