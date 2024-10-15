@@ -5,4 +5,4 @@ export const PR_SUMMARY_MARKER = '<!-- techpivot/terraform-module-releaser — p
 export const PR_RELEASE_MARKER = '<!-- techpivot/terraform-module-releaser — release-marker -->';
 
 export const BRANDING =
-  '<h4 align="center"><sub align="middle">Powered by <img src="https://raw.githubusercontent.com/techpivot/terraform-module-releaser/refs/main/assets/github-mark.png" height="16" width="12" align="top" /> <a href="https://github/techpivot/terraform-module-releaser">techpivot/terraform-module-releaser</a></sub></h4>';
+  '<h4 align="center"><sub align="middle">Powered by <img src="https://raw.githubusercontent.com/techpivot/terraform-module-releaser/refs/main/assets/github-mark.png" height="16" width="12" align="top" /> <a href="https://github.com/techpivot/terraform-module-releaser">techpivot/terraform-module-releaser</a></sub></h4>';

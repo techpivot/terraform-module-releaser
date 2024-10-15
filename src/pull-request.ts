@@ -66,11 +66,58 @@ export async function hasReleaseComment(): Promise<boolean> {
 }
 
 /**
- * Retrieves the commits associated with a specific pull request.
+ * Retrieves the list of changed files in the pull request and returns them as a Set.
  *
- * This function fetches the list of commits for the pull request specified in the configuration
- * (from the context), and then retrieves detailed information about each commit, including
- * the commit message, SHA, and the relative file paths associated with the commit.
+ * @returns {Promise<Set<string>>} A promise that resolves to a Set of filenames representing the changed files.
+ * @throws {RequestError} Throws an error if the request to fetch files fails or if permissions are insufficient.
+ */
+async function getChangedFilesInPullRequest(): Promise<Set<string>> {
+  try {
+    const {
+      octokit,
+      repo: { owner, repo },
+      prNumber: pull_number,
+    } = context;
+
+    const { data: files } = await octokit.rest.pulls.listFiles({
+      owner,
+      repo,
+      pull_number,
+    });
+
+    // Return a Set of filenames
+    return new Set(files.map((file) => file.filename));
+  } catch (error) {
+    const requestError = error as RequestError;
+    // Handle 403 error specifically for permission issues
+    if (requestError.status === 403) {
+      throw new Error(
+        `Unable to read and write pull requests due to insufficient permissions. Ensure the workflow permissions.pull-requests is set to "write".\n${requestError.message}`,
+        { cause: error },
+      );
+    }
+
+    throw new Error(`Error getting changed files in PR: ${error instanceof Error ? error.message : String(error)}`, {
+      cause: error,
+    });
+  }
+}
+
+/**
+ * Retrieves the commits associated with a specific pull request, ensuring that only true, effective file changes are tracked.
+ *
+ * This function first queries the entire set of changed files within the pull request, which includes files modified across
+ * all commits within the PR. It then filters and processes the changes to ensure that modifications reverted by subsequent
+ * commits are not tracked as effective changes. This approach helps avoid tracking transient changes that cancel each other out.
+ *
+ * When a pull request contains two commits where one modifies a Terraform module and a subsequent commit reverts that modification,
+ * both commits would normally be detected as changes to the module. However, the final result may not reflect any actual changes
+ * to the module if the second commit effectively reverts the first.
+ *
+ * To address this, we ensure that only effective file changes are tracked—ignoring changes that cancel each other out.
+ *
+ * First observed in this Pull Request where earlier commits triggered changes to a test Terraform module and later commits
+ * reverted it: #21
  *
  * @returns {Promise<CommitDetails[]>} A promise that resolves to an array of commit details,
  *                                       each containing the message, SHA, and associated file paths.
@@ -88,6 +135,10 @@ export async function getPullRequestCommits(): Promise<CommitDetails[]> {
       prNumber: pull_number,
     } = context;
 
+    const prChangedFiles = await getChangedFilesInPullRequest();
+    info(`Found ${prChangedFiles.size} file${prChangedFiles.size !== 1 ? 's' : ''} changed in pull request.`);
+    info(JSON.stringify(Array.from(prChangedFiles), null, 2));
+
     const listCommitsResponse = await octokit.rest.pulls.listCommits({ owner, repo, pull_number });
 
     // Iterate over the fetched commits to retrieve details and files
@@ -99,8 +150,11 @@ export async function getPullRequestCommits(): Promise<CommitDetails[]> {
           ref: commit.sha,
         });
 
-        // Retrieve the list of files for the commit
-        const files = commitDetailsResponse.data.files?.map((file) => file.filename) ?? [];
+        // Filter files to only include those that are part of prChangedFiles
+        const files =
+          commitDetailsResponse.data.files
+            ?.map((file) => file.filename)
+            .filter((filename) => prChangedFiles.has(filename)) ?? [];
 
         return {
           message: commit.commit.message,
