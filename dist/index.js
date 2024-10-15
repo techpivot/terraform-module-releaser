@@ -31200,7 +31200,7 @@ const GITHUB_ACTIONS_BOT_NAME = 'GitHub Actions';
 const GITHUB_ACTIONS_BOT_EMAIL = '41898282+github-actions[bot]@users.noreply.github.com';
 const PR_SUMMARY_MARKER = '<!-- techpivot/terraform-module-releaser — pr-summary-marker -->';
 const PR_RELEASE_MARKER = '<!-- techpivot/terraform-module-releaser — release-marker -->';
-const BRANDING = '<h4 align="center"><sub align="middle">Powered by <img src="https://raw.githubusercontent.com/techpivot/terraform-module-releaser/refs/main/assets/github-mark.png" height="16" width="12" align="top" /> <a href="https://github.com/techpivot/terraform-module-releaser">techpivot/terraform-module-releaser</a></sub></h4>';
+const BRANDING = '<h4 align="center"><sub align="middle">Powered by <img src="https://raw.githubusercontent.com/techpivot/terraform-module-releaser/refs/heads/main/assets/github-mark.png" height="16" width="12" align="top" /> <a href="https://github.com/techpivot/terraform-module-releaser">techpivot/terraform-module-releaser</a></sub></h4>';
 
 ;// CONCATENATED MODULE: external "node:child_process"
 const external_node_child_process_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:child_process");
