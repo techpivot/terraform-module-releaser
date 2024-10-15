@@ -8,7 +8,7 @@ import { endGroup, info, startGroup } from '@actions/core';
 import pLimit from 'p-limit';
 import { getModuleReleaseChangelog } from './changelog';
 import { config } from './config';
-import { GITHUB_ACTIONS_BOT_EMAIL, GITHUB_ACTIONS_BOT_NAME } from './constants';
+import { BRANDING, GITHUB_ACTIONS_BOT_EMAIL, GITHUB_ACTIONS_BOT_NAME } from './constants';
 import { context } from './context';
 import { generateTerraformDocs } from './terraform-docs';
 import type { TerraformModule } from './terraform-module';
@@ -125,7 +125,7 @@ export function checkoutWiki(): void {
 const getWikiFileMarkdown = async ($terraformModule: TerraformModule, $changelog: string): Promise<string> => {
   const { moduleName, latestTag } = $terraformModule;
 
-  return [
+  const wikiContent = [
     '# Usage\n',
     'To use this module in your Terraform, refer to the below module example:\n',
     '```hcl',
@@ -140,7 +140,14 @@ const getWikiFileMarkdown = async ($terraformModule: TerraformModule, $changelog
     '<!-- END_TF_DOCS -->',
     '\n# Changelog\n',
     $changelog,
-  ].join('\n');
+  ];
+
+  // Branding
+  if (config.disableBranding === false) {
+    wikiContent.push(`\n${BRANDING}`);
+  }
+
+  return wikiContent.join('\n');
 };
 
 /**

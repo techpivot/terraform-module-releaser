@@ -147,6 +147,7 @@ configuring the following optional input parameters as needed.
 | `delete-legacy-tags`         | Specifies a boolean that determines whether tags and releases from Terraform modules that have been deleted should be automatically removed | `true`                         |
 | `disable-wiki`               | Whether to disable wiki generation for Terraform modules                                                                                    | `false`                        |
 | `wiki-sidebar-changelog-max` | An integer that specifies how many changelog entries are displayed in the sidebar per module                                                | `5`                            |
+| `disable-branding`           | Controls whether a small branding link to the action's repository is added to PR comments. Recommended to leave enabled to support OSS.     | `false`                        |
 
 ### Example Usage with Inputs
 

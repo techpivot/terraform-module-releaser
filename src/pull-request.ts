@@ -2,7 +2,7 @@ import { debug, endGroup, info, startGroup } from '@actions/core';
 import { RequestError } from '@octokit/request-error';
 import { getPullRequestChangelog } from './changelog';
 import { config } from './config';
-import { PR_RELEASE_MARKER, PR_SUMMARY_MARKER } from './constants';
+import { BRANDING, PR_RELEASE_MARKER, PR_SUMMARY_MARKER } from './constants';
 import { context } from './context';
 import type { GitHubRelease } from './releases';
 import type { TerraformChangedModule } from './terraform-module';
@@ -222,6 +222,11 @@ export async function addReleasePlanComment(
       commentBody.push('\n# Changelog\n', getPullRequestChangelog(terraformChangedModules));
     }
 
+    // Branding
+    if (config.disableBranding === false) {
+      commentBody.push(`\n${BRANDING}`);
+    }
+
     // Create new PR comment (Requires permission > pull-requests: write)
     const { data: newComment } = await octokit.rest.issues.createComment({
       issue_number,
@@ -302,6 +307,11 @@ export async function addPostReleaseComment(
       }
 
       commentBody.push(`- **\`${release.title}\`** • ${extra.join(' • ')}`);
+    }
+
+    // Branding
+    if (config.disableBranding === false) {
+      commentBody.push(`\n${BRANDING}`);
     }
 
     // Post the comment on the pull request

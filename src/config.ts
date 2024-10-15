@@ -51,6 +51,15 @@ interface Config {
   wikiSidebarChangelogMax: number;
 
   /**
+   * Flag to control whether the small branding link should be disabled or not in the
+   * pull request (PR) comments. When branding is enabled, a link to the action's
+   * repository is added at the bottom of comments. Setting this flag to `true`
+   * will remove that link. This is useful for cleaner PR comments in enterprise environments
+   * or where third-party branding is undesirable.
+   */
+  disableBranding: boolean;
+
+  /**
    * The GitHub token (`GITHUB_TOKEN`) used for API authentication.
    * This token is required to make secure API requests to GitHub during the action.
    */
@@ -85,6 +94,7 @@ function initializeConfig(): Config {
     deleteLegacyTags: getInput('delete-legacy-tags', { required: true }).toLowerCase() === 'true',
     disableWiki: getInput('disable-wiki', { required: true }).toLowerCase() === 'true',
     wikiSidebarChangelogMax: Number.parseInt(getInput('wiki-sidebar-changelog-max', { required: true }), 10),
+    disableBranding: getInput('disable-branding', { required: true }).toLowerCase() === 'true',
     githubToken: getInput('github_token', { required: true }),
   };
 

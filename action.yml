@@ -51,6 +51,15 @@ inputs:
       Adjust this value to control the visibility of changelog entries in the module sidebar.
     required: true
     default: "5"
+  disable-branding:
+    description: >
+      Flag to control whether the small branding link should be disabled or not in the
+      pull request (PR) comments. When branding is enabled, a link to the action's
+      repository is added at the bottom of comments. Setting this flag to "true"
+      will remove that link. Useful for cleaner PR comments in enterprise environments
+      or where third-party branding is undesirable.
+    required: true
+    default: "false"
   github_token:
     description: |
       Required for retrieving pull request metadata, tags, releases, updating PR comments, wiki, and creating tags/releases.
