@@ -44,7 +44,7 @@ const execWikiOpts: ExecSyncOptions = { cwd: WIKI_DIRECTORY, stdio: 'inherit' };
  *
  * @throws {Error} If the `git clone` command fails due to issues such as the wiki not existing.
  */
-export const checkoutWiki = (): void => {
+export function checkoutWiki(): void {
   const wikiHtmlUrl = `${context.repoUrl}.wiki`;
 
   startGroup(`Checking out wiki repository [${wikiHtmlUrl}]`);
@@ -68,7 +68,7 @@ export const checkoutWiki = (): void => {
   try {
     execFileSync('git', ['config', '--local', '--unset-all', 'http.https://github.com/.extraheader'], execWikiOpts);
   } catch (error) {
-    // This returns exit code 5 if not set. Not a problem. Let's ignore./
+    // This returns exit code 5 if not set. Not a problem. Let's ignore.
   }
   execFileSync(
     'git',
@@ -106,7 +106,7 @@ export const checkoutWiki = (): void => {
   } finally {
     endGroup();
   }
-};
+}
 
 /**
  * Generates the markdown content for a Terraform module's wiki file.
@@ -256,7 +256,7 @@ const updateWikiSidebar = async (terraformModules: TerraformModule[]): Promise<v
  *
  * @returns {Promise<string[]>} A promise that resolves to a list of file paths of the updated wiki files.
  */
-export const updateWiki = async (terraformModules: TerraformModule[]): Promise<string[]> => {
+export async function updateWiki(terraformModules: TerraformModule[]): Promise<string[]> {
   startGroup('Generating wiki documentation');
 
   const parallelism = os.cpus().length + 2;
@@ -311,4 +311,4 @@ export const updateWiki = async (terraformModules: TerraformModule[]): Promise<s
   }
 
   return updatedFiles;
-};
+}

@@ -10,7 +10,7 @@ import type { TerraformChangedModule, TerraformModule } from './terraform-module
  * @param {Array<string>} commits - An array of commit messages to include in the changelog.
  * @returns {string} A formatted changelog entry as a string.
  */
-const createModuleChangelogEntry = (heading: string, commits: string[]): string => {
+function createModuleChangelogEntry(heading: string, commits: string[]): string {
   const currentDate = new Date().toISOString().split('T')[0]; // Format: YYYY-MM-DD
   const changelogContent: string[] = [`## \`${heading}\` (${currentDate})\n`];
 
@@ -19,7 +19,7 @@ const createModuleChangelogEntry = (heading: string, commits: string[]): string 
   }
 
   return changelogContent.join('\n');
-};
+}
 
 /**
  * Retrieves the global pull request changelog.
@@ -27,7 +27,7 @@ const createModuleChangelogEntry = (heading: string, commits: string[]): string 
  * @param {TerraformChangedModule[]} terraformChangedModules - An array of changed Terraform modules.
  * @returns {string} The content of the global pull request changelog.
  */
-export const getPullRequestChangelog = (terraformChangedModules: TerraformChangedModule[]): string => {
+export function getPullRequestChangelog(terraformChangedModules: TerraformChangedModule[]): string {
   const pullRequestChangelog: string[] = [];
   const { prNumber, prTitle } = context;
 
@@ -47,7 +47,7 @@ export const getPullRequestChangelog = (terraformChangedModules: TerraformChange
   }
 
   return pullRequestChangelog.join('\n\n');
-};
+}
 
 /**
  * Retrieves the changelog for a specific Terraform module.
@@ -55,7 +55,7 @@ export const getPullRequestChangelog = (terraformChangedModules: TerraformChange
  * @param {ChangedTerraformModule} changedTerraformModule - The Terraform module whose changelog is to be retrieved.
  * @returns {string} The content of the module's changelog.
  */
-export const getModuleChangelog = (terraformChangedModule: TerraformChangedModule): string => {
+export function getModuleChangelog(terraformChangedModule: TerraformChangedModule): string {
   const { prNumber, prTitle, repoUrl } = context;
   const { nextTagVersion, commitMessages } = terraformChangedModule;
 
@@ -75,7 +75,7 @@ export const getModuleChangelog = (terraformChangedModule: TerraformChangedModul
   ];
 
   return createModuleChangelogEntry(nextTagVersion, commitMessagesWithPR);
-};
+}
 
 /**
  * Generates a changelog for a given Terraform module by concatenating the body

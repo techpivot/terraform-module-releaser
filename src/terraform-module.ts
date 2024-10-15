@@ -79,13 +79,13 @@ export interface TerraformChangedModule extends TerraformModule {
  * @param modules - An array of TerraformModule or TerraformChangedModule objects.
  * @returns An array of TerraformChangedModule objects that have been marked as changed.
  */
-export const getTerraformChangedModules = (
+export function getTerraformChangedModules(
   modules: (TerraformModule | TerraformChangedModule)[],
-): TerraformChangedModule[] => {
+): TerraformChangedModule[] {
   return modules.filter((module): module is TerraformChangedModule => {
     return (module as TerraformChangedModule).isChanged === true;
   });
-};
+}
 
 /**
  * Checks if a directory contains any Terraform (.tf) files.
@@ -93,9 +93,9 @@ export const getTerraformChangedModules = (
  * @param {string} dirPath - The path of the directory to check.
  * @returns {boolean} True if the directory contains at least one .tf file, otherwise false.
  */
-const isTerraformDirectory = (dirPath: string): boolean => {
+function isTerraformDirectory(dirPath: string): boolean {
   return fs.existsSync(dirPath) && fs.readdirSync(dirPath).some((file) => path.extname(file) === '.tf');
-};
+}
 
 /**
  * Generates a valid Terraform module name from the given directory path.
@@ -112,7 +112,7 @@ const isTerraformDirectory = (dirPath: string): boolean => {
  * @param {string} terraformDir - The directory path from which to generate the module name.
  * @returns {string} A valid Terraform module name based on the provided directory path.
  */
-const getTerraformModuleNameFromDirectory = (terraformDirectory: string): string => {
+function getTerraformModuleNameFromDirectory(terraformDirectory: string): string {
   return terraformDirectory
     .trim() // Remove leading/trailing whitespace
     .replace(/[^a-zA-Z0-9/_-]+/g, '-') // Remove invalid characters, allowing a-z, A-Z, 0-9, /, _, -
@@ -124,7 +124,7 @@ const getTerraformModuleNameFromDirectory = (terraformDirectory: string): string
     .replace(/\-\-+/g, '-') // Replace consecutive hyphens with a single hyphen
     .replace(/\s+/g, '') // Remove any remaining whitespace
     .toLowerCase(); // All of our module names will be lowercase
-};
+}
 
 /**
  * Retrieves the Terraform module name associated with a specified file path.
@@ -137,7 +137,7 @@ const getTerraformModuleNameFromDirectory = (terraformDirectory: string): string
  * @returns {string | null} The name of the associated Terraform module, or null
  *                          if no Terraform directory is found before reaching the root.
  */
-const getTerraformModuleNameAssociatedWithFile = (filePath: string): string | null => {
+function getTerraformModuleNameAssociatedWithFile(filePath: string): string | null {
   let directory = path.resolve(path.dirname(filePath)); // Convert to absolute path
   const cwd = process.cwd();
   const rootDir = path.resolve(cwd); // Get absolute path to current working directory
@@ -153,7 +153,7 @@ const getTerraformModuleNameAssociatedWithFile = (filePath: string): string | nu
 
   // Root folder is not allowed as we need a name
   return null;
-};
+}
 
 /**
  * Retrieves the current tags and versions for a specified module directory.
@@ -166,14 +166,14 @@ const getTerraformModuleNameAssociatedWithFile = (filePath: string): string | nu
  * @param {string[]} allTags - An array of all available tags.
  * @returns {{latestTag: string | null, latestTagVersion: string | null, tags: string[]}} An object containing the latest tag, latest tag version, and an array of matching tags.
  */
-const getTagsForModule = (
+function getTagsForModule(
   moduleName: string,
   allTags: string[],
 ): {
   latestTag: string | null;
   latestTagVersion: string | null;
   tags: string[];
-} => {
+} {
   // Filter tags that match the module directory pattern
   const tags = allTags
     .filter((tag) => tag.startsWith(`${moduleName}/v`))
@@ -189,7 +189,7 @@ const getTagsForModule = (
     latestTagVersion: tags.length > 0 ? tags[0].replace(`${moduleName}/`, '') : null, // Extract version only
     tags,
   };
-};
+}
 
 /**
  * Retrieves the relevant GitHub releases for a specified module directory.
@@ -202,7 +202,7 @@ const getTagsForModule = (
  * @param {GitHubRelease[]} allReleases - An array of all GitHub releases.
  * @returns {GitHubRelease[]} An array of releases relevant to the module, sorted with the latest first.
  */
-const getReleasesForModule = (moduleName: string, allReleases: GitHubRelease[]): GitHubRelease[] => {
+function getReleasesForModule(moduleName: string, allReleases: GitHubRelease[]): GitHubRelease[] {
   // Filter releases that are relevant to the module directory
   const relevantReleases = allReleases
     .filter((release) => release.title.startsWith(`${moduleName}/`))
@@ -215,7 +215,7 @@ const getReleasesForModule = (moduleName: string, allReleases: GitHubRelease[]):
     });
 
   return relevantReleases;
-};
+}
 
 /**
  * Retrieves all Terraform modules within the specified workspace directory,
@@ -232,12 +232,12 @@ const getReleasesForModule = (moduleName: string, allReleases: GitHubRelease[]):
  * @throws {Error} - Throws an error if a module associated with a file is not found in the
  *    terraformModulesMap, indicating a mismatch in expected module structure.
  */
-export const getAllTerraformModules = (
+export function getAllTerraformModules(
   workspaceDir: string,
   commits: CommitDetails[],
   allTags: string[],
   allReleases: GitHubRelease[],
-): (TerraformModule | TerraformChangedModule)[] => {
+): (TerraformModule | TerraformChangedModule)[] {
   startGroup('Finding all Terraform modules with corresponding changes');
   console.time('Elapsed time finding terraform modules'); // Start timing
 
@@ -328,7 +328,7 @@ export const getAllTerraformModules = (
   endGroup();
 
   return sortedTerraformModules;
-};
+}
 
 /**
  * Determines an array of Terraform module names that need to be removed.
@@ -337,7 +337,7 @@ export const getAllTerraformModules = (
  * @param {TerraformModule[]} terraformModules - An array of Terraform modules.
  * @returns {string[]} An array of Terraform module names that need to be removed.
  */
-export const getTerraformModulesToRemove = (allTags: string[], terraformModules: TerraformModule[]): string[] => {
+export function getTerraformModulesToRemove(allTags: string[], terraformModules: TerraformModule[]): string[] {
   startGroup('Finding all Terraform modules that should be removed');
 
   // Get an array of all module names from the tags
@@ -367,4 +367,4 @@ export const getTerraformModulesToRemove = (allTags: string[], terraformModules:
   endGroup();
 
   return moduleNamesToRemove;
-};
+}

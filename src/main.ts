@@ -1,7 +1,7 @@
 import { info, setFailed } from '@actions/core';
 import { config } from './config';
 import { context } from './context';
-import { commentOnPullRequest, getPullRequestCommits } from './pull-request';
+import { addPostReleaseComment, addReleasePlanComment, getPullRequestCommits, hasReleaseComment } from './pull-request';
 import { createTaggedRelease, deleteLegacyReleases, getAllReleases } from './releases';
 import { deleteLegacyTags, getAllTags } from './tags';
 import { installTerraformDocs } from './terraform-docs';
@@ -15,7 +15,10 @@ import { WikiStatus } from './wiki';
  */
 export async function run(): Promise<void> {
   try {
-    // @todo early exit check
+    if (await hasReleaseComment()) {
+      info('Release comment found. Exiting.');
+      return;
+    }
 
     // Fetch all commits along with associated files in this PR
     const commits = await getPullRequestCommits();
@@ -55,7 +58,7 @@ export async function run(): Promise<void> {
         failure = errorMessage;
         error = err as Error;
       } finally {
-        await commentOnPullRequest(terraformChangedModules, terraformModuleNamesToRemove, {
+        await addReleasePlanComment(terraformChangedModules, terraformModuleNamesToRemove, {
           status: wikiStatus,
           errorMessage: failure,
         });
@@ -66,8 +69,9 @@ export async function run(): Promise<void> {
         throw error;
       }
     } else {
-      // Create the tagged release
-      await createTaggedRelease(terraformChangedModules);
+      // Create the tagged release and post a comment to the PR
+      const updatedModules = await createTaggedRelease(terraformChangedModules);
+      await addPostReleaseComment(updatedModules);
 
       // Delete legacy releases and tags (Ensure we delete releases first)
       await deleteLegacyReleases(terraformModuleNamesToRemove, allReleases);

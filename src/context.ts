@@ -89,7 +89,7 @@ let contextInstance: Context | null = null;
  * @returns {string} The value of the environment variable.
  * @throws {Error} If the environment variable is missing or invalid.
  */
-const getRequiredEnvironmentVar = (name: string): string => {
+function getRequiredEnvironmentVar(name: string): string {
   const value = process.env[name];
   if (!value || typeof value !== 'string') {
     const errorMessage = `The ${name} environment variable is missing or invalid. This variable should be automatically set by GitHub for each workflow run. If this variable is missing or not correctly set, it indicates a serious issue with the GitHub Actions environment, potentially affecting the execution of subsequent steps in the workflow. Please review the workflow setup or consult the documentation for proper configuration.`;
@@ -98,14 +98,14 @@ const getRequiredEnvironmentVar = (name: string): string => {
   }
 
   return value;
-};
+}
 
 /**
  * Additional type guard to check if an object is a valid PullRequestEvent. By definition, we know that
  * because the GITHUB_EVENT_NAME is "pull_request" the payload will be a PullRequestEvent. However,
  * this validates runtime data additionally.
  */
-const isPullRequestEvent = (payload: unknown): payload is PullRequestEvent => {
+function isPullRequestEvent(payload: unknown): payload is PullRequestEvent {
   return (
     typeof payload === 'object' &&
     payload !== null &&
@@ -119,7 +119,7 @@ const isPullRequestEvent = (payload: unknown): payload is PullRequestEvent => {
     typeof (payload as PullRequestEvent).repository === 'object' &&
     typeof (payload as PullRequestEvent).repository.full_name === 'string'
   );
-};
+}
 
 /**
  * Lazily initializes the context object that contains details about the pull request and repository.
@@ -131,7 +131,7 @@ const isPullRequestEvent = (payload: unknown): payload is PullRequestEvent => {
  * @returns {Context} The context object containing GitHub client and pull request information.
  * @throws {Error} If this workflow is not running in the context of a pull request.
  */
-const initializeContext = (): Context => {
+function initializeContext(): Context {
   if (contextInstance) {
     return contextInstance;
   }
@@ -195,7 +195,7 @@ const initializeContext = (): Context => {
   } finally {
     endGroup();
   }
-};
+}
 
 /**
  * The exported `context` object, lazily initialized on first access, provides information about the repository,
