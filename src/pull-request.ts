@@ -46,7 +46,7 @@ export async function hasReleaseComment(): Promise<boolean> {
       issue_number,
     });
 
-    // Check if any comment contains the release marker
+    // Check if any comment includes the release marker
     return comments.some((comment) => comment.body?.includes(PR_RELEASE_MARKER));
   } catch (error) {
     const requestError = error as RequestError;
@@ -85,7 +85,7 @@ async function getChangedFilesInPullRequest(): Promise<Set<string>> {
       pull_number,
     });
 
-    // Return a Set of filenames
+    // Return a Set of file names
     return new Set(files.map((file) => file.filename));
   } catch (error) {
     const requestError = error as RequestError;
@@ -110,9 +110,9 @@ async function getChangedFilesInPullRequest(): Promise<Set<string>> {
  * all commits within the PR. It then filters and processes the changes to ensure that modifications reverted by subsequent
  * commits are not tracked as effective changes. This approach helps avoid tracking transient changes that cancel each other out.
  *
- * When a pull request contains two commits where one modifies a Terraform module and a subsequent commit reverts that modification,
+ * If a pull request contains two commits, where one modifies a Terraform module and a subsequent commit reverts that modification,
  * both commits would normally be detected as changes to the module. However, the final result may not reflect any actual changes
- * to the module if the second commit effectively reverts the first.
+ * if the second commit effectively reverts the first.
  *
  * To address this, we ensure that only effective file changes are tracked—ignoring changes that cancel each other out.
  *
@@ -125,7 +125,7 @@ async function getChangedFilesInPullRequest(): Promise<Set<string>> {
  *                       are insufficient to read the pull request.
  */
 export async function getPullRequestCommits(): Promise<CommitDetails[]> {
-  console.time('Elapsed time fetching commits'); // Start timing
+  console.time('Elapsed time fetching commits');
   startGroup('Fetching pull request commits');
 
   try {

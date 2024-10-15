@@ -27467,6 +27467,7 @@ function initializeConfig() {
         deleteLegacyTags: (0,core.getInput)('delete-legacy-tags', { required: true }).toLowerCase() === 'true',
         disableWiki: (0,core.getInput)('disable-wiki', { required: true }).toLowerCase() === 'true',
         wikiSidebarChangelogMax: Number.parseInt((0,core.getInput)('wiki-sidebar-changelog-max', { required: true }), 10),
+        disableBranding: (0,core.getInput)('disable-branding', { required: true }).toLowerCase() === 'true',
         githubToken: (0,core.getInput)('github_token', { required: true }),
     };
     (0,core.info)(`Major Keywords: ${configInstance.majorKeywords.join(', ')}`);
@@ -30994,7 +30995,7 @@ legacyRestEndpointMethods.VERSION = dist_src_version_VERSION;
 //# sourceMappingURL=index.js.map
 
 ;// CONCATENATED MODULE: ./package.json
-const package_namespaceObject = /*#__PURE__*/JSON.parse('{"rE":"1.0.0","TB":"https://github.com/techpivot/terraform-module-releaser"}');
+const package_namespaceObject = /*#__PURE__*/JSON.parse('{"rE":"1.1.0","TB":"https://github.com/techpivot/terraform-module-releaser"}');
 ;// CONCATENATED MODULE: ./src/context.ts
 
 
@@ -31199,129 +31200,7 @@ const GITHUB_ACTIONS_BOT_NAME = 'GitHub Actions';
 const GITHUB_ACTIONS_BOT_EMAIL = '41898282+github-actions[bot]@users.noreply.github.com';
 const PR_SUMMARY_MARKER = '<!-- techpivot/terraform-module-releaser — pr-summary-marker -->';
 const PR_RELEASE_MARKER = '<!-- techpivot/terraform-module-releaser — release-marker -->';
-const ERROR_PERMISSIONS = 'Ensure that the GitHub Actions workflow has the correct permissions';
-
-;// CONCATENATED MODULE: ./src/tags.ts
-
-
-
-
-/**
- * Extracts the version (e.g., "vX.Y.Z") from the end of a full tag or release name.
- *
- * @param {string} tagName - The full tag or release name.
- * @returns {string | null} - The extracted version (e.g., "vX.Y.Z") or null if no version is found at the end.
- */
-function getTagVersion(tagName) {
-    // Regular expression to match "vX.Y.Z" at the end of the string
-    const versionRegex = /\/(v\d+\.\d+\.\d+)$/;
-    // Use regex to find and return the version in the tag name
-    const match = tagName.match(versionRegex);
-    // If a match is found, return it, otherwise return null
-    return match ? match[1] : null;
-}
-/**
- * Fetches all tags from the specified GitHub repository.
- *
- * This function utilizes pagination to retrieve all tags, returning them as an array of strings.
- *
- * @returns {Promise<string[]>} A promise that resolves to an array of tag names.
- * @throws {RequestError} Throws an error if the request to fetch tags fails.
- */
-async function getAllTags() {
-    console.time('Elapsed time fetching tags');
-    (0,core.startGroup)('Fetching repository tags');
-    try {
-        const { octokit, repo: { owner, repo }, } = context;
-        const tags = [];
-        for await (const response of octokit.paginate.iterator(octokit.rest.repos.listTags, {
-            owner,
-            repo,
-        })) {
-            for (const tag of response.data) {
-                tags.push(tag.name);
-            }
-        }
-        (0,core.info)(`Found ${tags.length} tag${tags.length !== 1 ? 's' : ''}.`);
-        (0,core.debug)(JSON.stringify(tags, null, 2));
-        return tags;
-    }
-    catch (error) {
-        let errorMessage;
-        if (error instanceof RequestError) {
-            errorMessage = `Failed to fetch tags: ${error.message.trim()} (status: ${error.status})`;
-        }
-        else if (error instanceof Error) {
-            errorMessage = `Failed to fetch tags: ${error.message.trim()}`;
-        }
-        else {
-            errorMessage = String(error).trim();
-        }
-        throw new Error(errorMessage, { cause: error });
-    }
-    finally {
-        console.timeEnd('Elapsed time fetching tags');
-        (0,core.endGroup)();
-    }
-}
-/**
- * Deletes legacy Terraform module tags.
- *
- * This function takes an array of module names and all tags,
- * and deletes the tags that match the format {moduleName}/vX.Y.Z.
- *
- * @param {string[]} terraformModuleNames - Array of Terraform module names to delete.
- * @param {string[]} allTags - Array of all tags in the repository.
- * @returns {Promise<void>}
- */
-async function deleteLegacyTags(terraformModuleNames, allTags) {
-    if (!config.deleteLegacyTags) {
-        (0,core.info)('Deletion of legacy tags/releases is disabled. Skipping.');
-        return;
-    }
-    (0,core.startGroup)('Deleting legacy Terraform module tags');
-    // Filter tags that match the format {moduleName} or {moduleName}/vX.Y.Z
-    const tagsToDelete = allTags.filter((tag) => {
-        return terraformModuleNames.some((name) => new RegExp(`^${name}(?:/v\\d+\\.\\d+\\.\\d+)?$`).test(tag));
-    });
-    if (tagsToDelete.length === 0) {
-        (0,core.info)('No legacy tags found to delete. Skipping.');
-        return;
-    }
-    (0,core.info)(`Found ${tagsToDelete.length} legacy tag${tagsToDelete.length !== 1 ? 's' : ''} to delete.`);
-    (0,core.info)(JSON.stringify(tagsToDelete, null, 2));
-    console.time('Elapsed time deleting legacy tags');
-    const { octokit, repo: { owner, repo }, } = context;
-    let tag = ''; // used for better error handling below.
-    try {
-        for (tag of tagsToDelete) {
-            (0,core.info)(`Deleting tag: ${tag}`);
-            await octokit.rest.git.deleteRef({
-                owner,
-                repo,
-                ref: `tags/${tag}`,
-            });
-        }
-    }
-    catch (error) {
-        const requestError = error;
-        if (requestError.status === 403) {
-            throw new Error([
-                `Failed to delete repository tag: ${tag} ${requestError.message}.\nEnsure that the`,
-                'GitHub Actions workflow has the correct permissions to delete tags by ensuring that',
-                'your workflow YAML file has the following block under "permissions":\n\npermissions:\n',
-                ' contents: write',
-            ].join(' '), { cause: error });
-        }
-        throw new Error(`Failed to delete tag: [Status = ${requestError.status}] ${requestError.message}`, {
-            cause: error,
-        });
-    }
-    finally {
-        console.timeEnd('Elapsed time deleting legacy tags');
-        (0,core.endGroup)();
-    }
-}
+const BRANDING = '<h4 align="center"><sub align="middle">Powered by <img src="https://raw.githubusercontent.com/techpivot/terraform-module-releaser/refs/main/assets/github-mark.png" height="16" width="12" align="top" /> <a href="https://github.com/techpivot/terraform-module-releaser">techpivot/terraform-module-releaser</a></sub></h4>';
 
 ;// CONCATENATED MODULE: external "node:child_process"
 const external_node_child_process_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:child_process");
@@ -31696,7 +31575,7 @@ function checkoutWiki() {
  */
 const getWikiFileMarkdown = async ($terraformModule, $changelog) => {
     const { moduleName, latestTag } = $terraformModule;
-    return [
+    const wikiContent = [
         '# Usage\n',
         'To use this module in your Terraform, refer to the below module example:\n',
         '```hcl',
@@ -31711,7 +31590,12 @@ const getWikiFileMarkdown = async ($terraformModule, $changelog) => {
         '<!-- END_TF_DOCS -->',
         '\n# Changelog\n',
         $changelog,
-    ].join('\n');
+    ];
+    // Branding
+    if (config.disableBranding === false) {
+        wikiContent.push(`\n${BRANDING}`);
+    }
+    return wikiContent.join('\n');
 };
 /**
  * Writes the provided content to the appropriate wiki file for the specified Terraform module.
@@ -31741,6 +31625,83 @@ const writeFileToWiki = async (moduleName, content) => {
         throw error;
     }
 };
+/**
+ * Generates a URL to the wiki page for a given Terraform module.
+ *
+ * @param {string} moduleName - The name of the Terraform module. The function extracts the base name and
+ *   removes the file extension (if any) to form the slug.
+ * @param {boolean} [relative=true] - A flag indicating whether to return a relative URL
+ *   (default) or an absolute URL.
+ *   - If `true`, returns a relative URL based on the repository owner and name.
+ *   - If `false`, uses the full repository URL from `context.repoUrl`.
+ * @returns {string} - The full wiki link for the module based on the provided module name and URL
+ *   type (relative or absolute).
+ *
+ * @example
+ * // Returns a relative URL for a module
+ * getWikiLink('terraform-aws-vpc'); // "/owner/repo/wiki/terraform-aws-vpc"
+ *
+ * @example
+ * // Returns an absolute URL for a module
+ * getWikiLink('aws/terraform-aws-vpc', false); // "https://github.com/owner/repo/wiki/terraform-aws-vpc"
+ */
+function getWikiLink(moduleName, relative = true) {
+    let baseUrl;
+    if (relative) {
+        baseUrl = `/${context.repo.owner}/${context.repo.repo}`;
+    }
+    else {
+        baseUrl = context.repoUrl;
+    }
+    // The wiki file slug needs to match GitHub syntax. It doesn't take into account folder/namespace. If it
+    // did much of this sidebar behavior would be potentially unnecessary.
+    const gitHubSlug = external_node_path_default().basename(moduleName).replace(/\.[^/.]+$/, '');
+    return `${baseUrl}/wiki/${gitHubSlug}`;
+}
+/**
+ * Updates the Wiki sidebar with a list of Terraform modules, including changelog entries for each.
+ *
+ * This function generates a dynamic sidebar for the GitHub Wiki by iterating over the provided
+ * Terraform modules, extracting their changelog content, and formatting it into a nested list
+ * with relevant links to sections within each module's Wiki page (e.g., "Usage", "Attributes",
+ * and "Changelog"). The generated content is then written to the `_Sidebar.md` file.
+ *
+ * @param {TerraformModule[]} terraformModules - An array of Terraform modules for which the Wiki
+ *   sidebar will be updated. Each module contains the `moduleName`, and its changelog is fetched
+ *   to generate sidebar entries.
+ * @returns {Promise<void>} - A promise that resolves once the sidebar has been successfully
+ *   updated and written to the file.
+ *
+ * Function Details:
+ * - Uses the `context.repo` object to get the repository owner and name for building links.
+ * - The sidebar file is located in the `WIKI_DIRECTORY` and is named `_Sidebar.md`.
+ * - For each module, it uses `getWikiLink()` to create the base link and `getModuleReleaseChangelog()`
+ *   to extract relevant changelog headings (matching `##` or `###`).
+ * - Headings are converted into valid HTML IDs and displayed as linked list items (`<li>`),
+ *   limiting the number of changelog entries based on the configuration
+ *   (`config.wikiSidebarChangelogMax`).
+ * - Writes the final content, including links to Home and the module Wiki pages, to the sidebar file.
+ *
+ * Example Sidebar Entry:
+ * ```
+ * <li>
+ *   <details>
+ *     <summary><a href="/techpivot/terraform-modules-demo/wiki/random"><b>null/random</b></a></summary>
+ *     <ul>
+ *       <li><a href="/techpivot/terraform-modules-demo/wiki/random#usage">Usage</a></li>
+ *       <li><a href="/techpivot/terraform-modules-demo/wiki/random#attributes">Attributes</a></li>
+ *       <li><a href="/techpivot/terraform-modules-demo/wiki/random#changelog">Changelog</a>
+ *         <ul>
+ *            <li><a href="/techpivot/terraform-modules-demo/wiki/random#v120-2024-10-15">v1.2.0 (2024-10-15)</a></li>
+ *            <li><a href="/techpivot/terraform-modules-demo/wiki/random#v110-2024-10-11">v1.1.0 (2024-10-11)</a></li>
+ *            <li><a href="/techpivot/terraform-modules-demo/wiki/random#v100-2024-10-10">v1.0.0 (2024-10-10)</a></li>
+ *         </ul>
+ *       </li>
+ *     </ul>
+ *   </details>
+ * </li>
+ * ```
+ */
 const updateWikiSidebar = async (terraformModules) => {
     const { owner, repo } = context.repo;
     const sideBarFile = external_node_path_default().join(WIKI_DIRECTORY, '_Sidebar.md');
@@ -31748,10 +31709,8 @@ const updateWikiSidebar = async (terraformModules) => {
     let moduleSidebarContent = '';
     for (const module of terraformModules) {
         const { moduleName } = module;
-        // The wiki file slug needs to match GitHub syntax. It doesn't take into account folder/namespace. If it
-        // did much of this sidebar behavior would be potentially unnecessary.
-        const gitHubSlug = external_node_path_default().basename(moduleName).replace(/\.[^/.]+$/, '');
-        const baselink = `${repoBaseUrl}/wiki/${gitHubSlug}`;
+        // Get the baselink which is used throughout the sidebar
+        const baselink = getWikiLink(moduleName, true);
         // Generate module changelog string by limiting to wikiSidebarChangelogMax
         const changelogContent = getModuleReleaseChangelog(module);
         // Regex to capture all headings starting with '## ' on a single line
@@ -31766,33 +31725,32 @@ const updateWikiSidebar = async (terraformModules) => {
                 // Convert heading into a valid ID string (keep only [a-zA-Z0-9-_]) But we need spaces to go to a '-'
                 const idString = heading.replace(/[ ]+/g, '-').replace(/[^a-zA-Z0-9-_]/g, '');
                 // Append the entry to changelogEntries
-                changelogEntries.push(`<li><a href="${baselink}#${idString}">${heading.replace(/[`]/g, '')}</a></li>`);
+                changelogEntries.push(`            <li><a href="${baselink}#${idString}">${heading.replace(/[`]/g, '')}</a></li>`);
             }
             // Execute the regex again for the next match
             headingMatch = headingRegex.exec(changelogContent);
         } while (headingMatch);
         // Limit to the maximum number of changelog entries defined in config
-        let limitedChangelogEntries = changelogEntries.slice(0, config.wikiSidebarChangelogMax).join('');
+        const limitedChangelogEntries = changelogEntries.slice(0, config.wikiSidebarChangelogMax).join('\n');
         // Wrap changelog in <ul> if it's not empty
+        let changelog = '</li>';
         if (limitedChangelogEntries.length > 0) {
-            limitedChangelogEntries = `<ul>${limitedChangelogEntries}</ul>`;
+            changelog = `\n          <ul>\n${limitedChangelogEntries}\n          </ul>\n        </li>`;
         }
         moduleSidebarContent += [
-            '<li>',
-            '<details>',
-            `<summary><a href="${baselink}"><b>${moduleName}</b></a></summary>`,
-            '<ul>',
-            `<li><a href="${baselink}#usage">Usage</a></li>`,
-            `<li><a href="${baselink}#attributes">Attributes</a></li>`,
-            `<li><a href="${baselink}#changelog">Changelog</a>`,
-            limitedChangelogEntries,
-            '</li>',
-            '</ul>',
-            '</details>',
-            '</li>',
+            '\n  <li>',
+            '    <details>',
+            `      <summary><a href="${baselink}"><b>${moduleName}</b></a></summary>`,
+            '      <ul>',
+            `        <li><a href="${baselink}#usage">Usage</a></li>`,
+            `        <li><a href="${baselink}#attributes">Attributes</a></li>`,
+            `        <li><a href="${baselink}#changelog">Changelog</a>${changelog}`,
+            '      </ul>',
+            '    </details>',
+            '  </li>',
         ].join('\n');
     }
-    const content = `[Home](${repoBaseUrl}/wiki/Home)\n\n## Terraform Modules\n\n<ul>${moduleSidebarContent}</ul>`;
+    const content = `[Home](${repoBaseUrl}/wiki/Home)\n\n## Terraform Modules\n\n<ul>${moduleSidebarContent}\n</ul>`;
     await promises_namespaceObject.writeFile(sideBarFile, content, 'utf8');
 };
 /**
@@ -31865,7 +31823,6 @@ async function updateWiki(terraformModules) {
 
 
 
-
 /**
  * Checks whether the pull request already has a comment containing the release marker.
  *
@@ -31881,7 +31838,7 @@ async function hasReleaseComment() {
             repo,
             issue_number,
         });
-        // Check if any comment contains the release marker
+        // Check if any comment includes the release marker
         return comments.some((comment) => comment.body?.includes(PR_RELEASE_MARKER));
     }
     catch (error) {
@@ -31897,11 +31854,48 @@ async function hasReleaseComment() {
     }
 }
 /**
- * Retrieves the commits associated with a specific pull request.
+ * Retrieves the list of changed files in the pull request and returns them as a Set.
  *
- * This function fetches the list of commits for the pull request specified in the configuration
- * (from the context), and then retrieves detailed information about each commit, including
- * the commit message, SHA, and the relative file paths associated with the commit.
+ * @returns {Promise<Set<string>>} A promise that resolves to a Set of filenames representing the changed files.
+ * @throws {RequestError} Throws an error if the request to fetch files fails or if permissions are insufficient.
+ */
+async function getChangedFilesInPullRequest() {
+    try {
+        const { octokit, repo: { owner, repo }, prNumber: pull_number, } = context;
+        const { data: files } = await octokit.rest.pulls.listFiles({
+            owner,
+            repo,
+            pull_number,
+        });
+        // Return a Set of file names
+        return new Set(files.map((file) => file.filename));
+    }
+    catch (error) {
+        const requestError = error;
+        // Handle 403 error specifically for permission issues
+        if (requestError.status === 403) {
+            throw new Error(`Unable to read and write pull requests due to insufficient permissions. Ensure the workflow permissions.pull-requests is set to "write".\n${requestError.message}`, { cause: error });
+        }
+        throw new Error(`Error getting changed files in PR: ${error instanceof Error ? error.message : String(error)}`, {
+            cause: error,
+        });
+    }
+}
+/**
+ * Retrieves the commits associated with a specific pull request, ensuring that only true, effective file changes are tracked.
+ *
+ * This function first queries the entire set of changed files within the pull request, which includes files modified across
+ * all commits within the PR. It then filters and processes the changes to ensure that modifications reverted by subsequent
+ * commits are not tracked as effective changes. This approach helps avoid tracking transient changes that cancel each other out.
+ *
+ * If a pull request contains two commits, where one modifies a Terraform module and a subsequent commit reverts that modification,
+ * both commits would normally be detected as changes to the module. However, the final result may not reflect any actual changes
+ * if the second commit effectively reverts the first.
+ *
+ * To address this, we ensure that only effective file changes are tracked—ignoring changes that cancel each other out.
+ *
+ * First observed in this Pull Request where earlier commits triggered changes to a test Terraform module and later commits
+ * reverted it: #21
  *
  * @returns {Promise<CommitDetails[]>} A promise that resolves to an array of commit details,
  *                                       each containing the message, SHA, and associated file paths.
@@ -31909,10 +31903,13 @@ async function hasReleaseComment() {
  *                       are insufficient to read the pull request.
  */
 async function getPullRequestCommits() {
-    console.time('Elapsed time fetching commits'); // Start timing
+    console.time('Elapsed time fetching commits');
     (0,core.startGroup)('Fetching pull request commits');
     try {
         const { octokit, repo: { owner, repo }, prNumber: pull_number, } = context;
+        const prChangedFiles = await getChangedFilesInPullRequest();
+        (0,core.info)(`Found ${prChangedFiles.size} file${prChangedFiles.size !== 1 ? 's' : ''} changed in pull request.`);
+        (0,core.info)(JSON.stringify(Array.from(prChangedFiles), null, 2));
         const listCommitsResponse = await octokit.rest.pulls.listCommits({ owner, repo, pull_number });
         // Iterate over the fetched commits to retrieve details and files
         const commits = await Promise.all(listCommitsResponse.data.map(async (commit) => {
@@ -31921,8 +31918,10 @@ async function getPullRequestCommits() {
                 repo,
                 ref: commit.sha,
             });
-            // Retrieve the list of files for the commit
-            const files = commitDetailsResponse.data.files?.map((file) => file.filename) ?? [];
+            // Filter files to only include those that are part of prChangedFiles
+            const files = commitDetailsResponse.data.files
+                ?.map((file) => file.filename)
+                .filter((filename) => prChangedFiles.has(filename)) ?? [];
             return {
                 message: commit.commit.message,
                 sha: commit.sha,
@@ -31987,8 +31986,10 @@ async function addReleasePlanComment(terraformChangedModules, terraformModuleNam
         else {
             commentBody.push('| Module | Release Type | Latest Version | New Version |', '|--|--|--|--|');
             for (const { moduleName, latestTagVersion, nextTagVersion, releaseType } of terraformChangedModules) {
-                const existingVersion = latestTagVersion == null ? 'initial' : releaseType;
-                commentBody.push(`| \`${moduleName}\` | ${existingVersion} | ${latestTagVersion} | **${nextTagVersion}** |`);
+                const initialRelease = latestTagVersion == null;
+                const existingVersion = initialRelease ? 'initial' : releaseType;
+                const latestTagDisplay = initialRelease ? '' : latestTagVersion;
+                commentBody.push(`| \`${moduleName}\` | ${existingVersion} | ${latestTagDisplay} | **${nextTagVersion}** |`);
             }
         }
         // Wiki Check
@@ -32013,6 +32014,10 @@ async function addReleasePlanComment(terraformChangedModules, terraformModuleNam
         // Changelog
         if (terraformChangedModules.length > 0) {
             commentBody.push('\n# Changelog\n', getPullRequestChangelog(terraformChangedModules));
+        }
+        // Branding
+        if (config.disableBranding === false) {
+            commentBody.push(`\n${BRANDING}`);
         }
         // Create new PR comment (Requires permission > pull-requests: write)
         const { data: newComment } = await octokit.rest.issues.createComment({
@@ -32070,7 +32075,15 @@ async function addPostReleaseComment(updatedModules) {
             'The following Terraform modules have been released:\n',
         ];
         for (const { moduleName, release } of updatedModules) {
-            commentBody.push(`- **\`${moduleName}\`**: [${getTagVersion(release.title)}](${repoUrl}/releases/tag/${release.title})`);
+            const extra = [`[Release Notes](${repoUrl}/releases/tag/${release.title})`];
+            if (config.disableWiki === false) {
+                extra.push(`[Wiki/Usage](${getWikiLink(moduleName, false)})`);
+            }
+            commentBody.push(`- **\`${release.title}\`** • ${extra.join(' • ')}`);
+        }
+        // Branding
+        if (config.disableBranding === false) {
+            commentBody.push(`\n${BRANDING}`);
         }
         // Post the comment on the pull request
         const { data: newComment } = await octokit.rest.issues.createComment({
@@ -32300,6 +32313,114 @@ async function deleteLegacyReleases(terraformModuleNames, allReleases) {
     }
 }
 
+;// CONCATENATED MODULE: ./src/tags.ts
+
+
+
+
+/**
+ * Fetches all tags from the specified GitHub repository.
+ *
+ * This function utilizes pagination to retrieve all tags, returning them as an array of strings.
+ *
+ * @returns {Promise<string[]>} A promise that resolves to an array of tag names.
+ * @throws {RequestError} Throws an error if the request to fetch tags fails.
+ */
+async function getAllTags() {
+    console.time('Elapsed time fetching tags');
+    (0,core.startGroup)('Fetching repository tags');
+    try {
+        const { octokit, repo: { owner, repo }, } = context;
+        const tags = [];
+        for await (const response of octokit.paginate.iterator(octokit.rest.repos.listTags, {
+            owner,
+            repo,
+        })) {
+            for (const tag of response.data) {
+                tags.push(tag.name);
+            }
+        }
+        (0,core.info)(`Found ${tags.length} tag${tags.length !== 1 ? 's' : ''}.`);
+        (0,core.debug)(JSON.stringify(tags, null, 2));
+        return tags;
+    }
+    catch (error) {
+        let errorMessage;
+        if (error instanceof RequestError) {
+            errorMessage = `Failed to fetch tags: ${error.message.trim()} (status: ${error.status})`;
+        }
+        else if (error instanceof Error) {
+            errorMessage = `Failed to fetch tags: ${error.message.trim()}`;
+        }
+        else {
+            errorMessage = String(error).trim();
+        }
+        throw new Error(errorMessage, { cause: error });
+    }
+    finally {
+        console.timeEnd('Elapsed time fetching tags');
+        (0,core.endGroup)();
+    }
+}
+/**
+ * Deletes legacy Terraform module tags.
+ *
+ * This function takes an array of module names and all tags,
+ * and deletes the tags that match the format {moduleName}/vX.Y.Z.
+ *
+ * @param {string[]} terraformModuleNames - Array of Terraform module names to delete.
+ * @param {string[]} allTags - Array of all tags in the repository.
+ * @returns {Promise<void>}
+ */
+async function deleteLegacyTags(terraformModuleNames, allTags) {
+    if (!config.deleteLegacyTags) {
+        (0,core.info)('Deletion of legacy tags/releases is disabled. Skipping.');
+        return;
+    }
+    (0,core.startGroup)('Deleting legacy Terraform module tags');
+    // Filter tags that match the format {moduleName} or {moduleName}/vX.Y.Z
+    const tagsToDelete = allTags.filter((tag) => {
+        return terraformModuleNames.some((name) => new RegExp(`^${name}(?:/v\\d+\\.\\d+\\.\\d+)?$`).test(tag));
+    });
+    if (tagsToDelete.length === 0) {
+        (0,core.info)('No legacy tags found to delete. Skipping.');
+        return;
+    }
+    (0,core.info)(`Found ${tagsToDelete.length} legacy tag${tagsToDelete.length !== 1 ? 's' : ''} to delete.`);
+    (0,core.info)(JSON.stringify(tagsToDelete, null, 2));
+    console.time('Elapsed time deleting legacy tags');
+    const { octokit, repo: { owner, repo }, } = context;
+    let tag = ''; // used for better error handling below.
+    try {
+        for (tag of tagsToDelete) {
+            (0,core.info)(`Deleting tag: ${tag}`);
+            await octokit.rest.git.deleteRef({
+                owner,
+                repo,
+                ref: `tags/${tag}`,
+            });
+        }
+    }
+    catch (error) {
+        const requestError = error;
+        if (requestError.status === 403) {
+            throw new Error([
+                `Failed to delete repository tag: ${tag} ${requestError.message}.\nEnsure that the`,
+                'GitHub Actions workflow has the correct permissions to delete tags by ensuring that',
+                'your workflow YAML file has the following block under "permissions":\n\npermissions:\n',
+                ' contents: write',
+            ].join(' '), { cause: error });
+        }
+        throw new Error(`Failed to delete tag: [Status = ${requestError.status}] ${requestError.message}`, {
+            cause: error,
+        });
+    }
+    finally {
+        console.timeEnd('Elapsed time deleting legacy tags');
+        (0,core.endGroup)();
+    }
+}
+
 ;// CONCATENATED MODULE: ./src/semver.ts
 
 /**
@@ -32460,8 +32581,8 @@ function getTagsForModule(moduleName, allTags) {
     const tags = allTags
         .filter((tag) => tag.startsWith(`${moduleName}/v`))
         .sort((a, b) => {
-        const aParts = a.replace(`${moduleName}/`, '').replace('v', '').split('.').map(Number);
-        const bParts = b.replace(`${moduleName}/`, '').replace('v', '').split('.').map(Number);
+        const aParts = a.replace(`${moduleName}/v`, '').split('.').map(Number);
+        const bParts = b.replace(`${moduleName}/v`, '').split('.').map(Number);
         return bParts[0] - aParts[0] || bParts[1] - aParts[1] || bParts[2] - aParts[2]; // Sort in descending order
     });
     // Return the latest tag, latest tag version, and all matching tags
@@ -32579,6 +32700,10 @@ function getAllTerraformModules(workspaceDir, commits, allTags, allReleases) {
     });
     (0,core.info)('Finished analyzing directory tree, terraform modules, and commits');
     (0,core.info)(`Found ${sortedTerraformModules.length} terraform module${sortedTerraformModules.length !== 1 ? 's' : ''}.`);
+    let terraformChangedModules = getTerraformChangedModules(sortedTerraformModules);
+    (0,core.info)(`Found ${terraformChangedModules.length} changed Terraform module${terraformChangedModules.length !== 1 ? 's' : ''}.`);
+    // Free up memory by unsetting terraformChangedModules
+    terraformChangedModules = null;
     (0,core.debug)('Terraform Modules:');
     (0,core.debug)(JSON.stringify(sortedTerraformModules, null, 2));
     console.timeEnd('Elapsed time finding terraform modules');
@@ -32645,7 +32770,6 @@ async function run() {
         const terraformModules = getAllTerraformModules(context.workspaceDir, commits, allTags, allReleases);
         // Create a new array of only changed Terraform modules
         const terraformChangedModules = getTerraformChangedModules(terraformModules);
-        (0,core.info)(`Found ${terraformChangedModules.length} changed Terraform module${terraformChangedModules.length !== 1 ? 's' : ''}.`);
         // Get an array of terraform module names to remove based on existing tags
         const terraformModuleNamesToRemove = getTerraformModulesToRemove(allTags, terraformModules);
         if (!context.isPrMergeEvent) {

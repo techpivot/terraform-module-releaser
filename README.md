@@ -208,11 +208,9 @@ by Piotr Krukowski.
   and complexity. Unlike earlier variations that stored built module assets in external services like Amazon S3, this
   action keeps everything within GitHub, providing a self-contained and streamlined solution for managing Terraform
   modules.
-- **Pull Request-based workflow**: This action is currently designed to be referenced once and run in the `pull_request`
-  event. This means that it will not trigger on direct pushes to the main branch. If you're not using pull requests in
-  your workflow, this action will not be triggered. An alternative approach would be to split this action into two
-  separate actions and workflows, one for pull requests and one for direct pushes to the main branch. However, this
-  would require additional configuration and setup in the calling code.
+- **Pull Request-based workflow**: This action runs on the pull_request event, using pull request comments to track
+  permanent releases tied to commits. This method ensures persistence, unlike Action Artifacts, which expire. As a
+  result, the module does not support non-PR workflows, such as direct pushes to the default branch.
 
 ## License
 
