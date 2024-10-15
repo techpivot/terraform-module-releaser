@@ -5,9 +5,8 @@ import { config } from './config';
 import { PR_RELEASE_MARKER, PR_SUMMARY_MARKER } from './constants';
 import { context } from './context';
 import type { GitHubRelease } from './releases';
-import { getTagVersion } from './tags';
 import type { TerraformChangedModule } from './terraform-module';
-import { WikiStatus } from './wiki';
+import { WikiStatus, getWikiLink } from './wiki';
 
 export interface CommitDetails {
   /**
@@ -182,8 +181,10 @@ export async function addReleasePlanComment(
     } else {
       commentBody.push('| Module | Release Type | Latest Version | New Version |', '|--|--|--|--|');
       for (const { moduleName, latestTagVersion, nextTagVersion, releaseType } of terraformChangedModules) {
-        const existingVersion = latestTagVersion == null ? 'initial' : releaseType;
-        commentBody.push(`| \`${moduleName}\` | ${existingVersion} | ${latestTagVersion} | **${nextTagVersion}** |`);
+        const initialRelease = latestTagVersion == null;
+        const existingVersion = initialRelease ? 'initial' : releaseType;
+        const latestTagDisplay = initialRelease ? '' : latestTagVersion;
+        commentBody.push(`| \`${moduleName}\` | ${existingVersion} | ${latestTagDisplay} | **${nextTagVersion}** |`);
       }
     }
 
@@ -295,9 +296,12 @@ export async function addPostReleaseComment(
     ];
 
     for (const { moduleName, release } of updatedModules) {
-      commentBody.push(
-        `- **\`${moduleName}\`**: [${getTagVersion(release.title)}](${repoUrl}/releases/tag/${release.title})`,
-      );
+      const extra = [`[Release Notes](${repoUrl}/releases/tag/${release.title})`];
+      if (config.disableWiki === false) {
+        extra.push(`[Wiki/Usage](${getWikiLink(moduleName, false)})`);
+      }
+
+      commentBody.push(`- **\`${release.title}\`** • ${extra.join(' • ')}`);
     }
 
     // Post the comment on the pull request

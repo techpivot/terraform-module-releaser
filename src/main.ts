@@ -34,9 +34,6 @@ export async function run(): Promise<void> {
 
     // Create a new array of only changed Terraform modules
     const terraformChangedModules = getTerraformChangedModules(terraformModules);
-    info(
-      `Found ${terraformChangedModules.length} changed Terraform module${terraformChangedModules.length !== 1 ? 's' : ''}.`,
-    );
 
     // Get an array of terraform module names to remove based on existing tags
     const terraformModuleNamesToRemove = getTerraformModulesToRemove(allTags, terraformModules);
