@@ -10,7 +10,7 @@ export type ReleaseType = 'major' | 'minor' | 'patch';
  * @param previousReleaseType - The previous release type ('major', 'minor', 'patch', or null).
  * @returns The computed release type: 'major', 'minor', or 'patch'.
  */
-export const determineReleaseType = (message: string, previousReleaseType: ReleaseType | null = null): ReleaseType => {
+export function determineReleaseType(message: string, previousReleaseType: ReleaseType | null = null): ReleaseType {
   const messageCleaned = message.toLowerCase().trim();
 
   // Destructure keywords from config
@@ -31,8 +31,9 @@ export const determineReleaseType = (message: string, previousReleaseType: Relea
   if (currentReleaseType === 'minor' || previousReleaseType === 'minor') {
     return 'minor';
   }
+
   return 'patch';
-};
+}
 
 /**
  * Computes the next tag version based on the current tag and the specified release type.
@@ -49,7 +50,7 @@ export const determineReleaseType = (message: string, previousReleaseType: Relea
  * @param {ReleaseType} releaseType - The type of release to be performed ('major', 'minor', or 'patch').
  * @returns {string} The computed next tag version in the format 'vX.Y.Z'.
  */
-export const getNextTagVersion = (latestTagVersion: string | null, releaseType: ReleaseType): string => {
+export function getNextTagVersion(latestTagVersion: string | null, releaseType: ReleaseType): string {
   if (latestTagVersion === null) {
     return config.defaultFirstTag;
   }
@@ -67,4 +68,4 @@ export const getNextTagVersion = (latestTagVersion: string | null, releaseType: 
     semver[2]++;
   }
   return `v${semver.join('.')}`;
-};
+}

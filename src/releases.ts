@@ -36,7 +36,7 @@ export interface GitHubRelease {
  * @returns {Promise<GitHubRelease[]>} A promise that resolves to an array of release details.
  * @throws {RequestError} Throws an error if the request to fetch releases fails.
  */
-export const getAllReleases = async (): Promise<GitHubRelease[]> => {
+export async function getAllReleases(): Promise<GitHubRelease[]> {
   console.time('Elapsed time fetching releases'); // Start timing
   startGroup('Fetching repository releases');
 
@@ -76,26 +76,28 @@ export const getAllReleases = async (): Promise<GitHubRelease[]> => {
       errorMessage = String(error).trim();
     }
 
-    throw new Error(errorMessage);
+    throw new Error(errorMessage, { cause: error });
   } finally {
     console.timeEnd('Elapsed time fetching releases');
     endGroup();
   }
-};
+}
 
 /**
  * Creates a GitHub release and corresponding git tag for the provided Terraform modules.
  *
  * Note: Requires GitHub action permissions > contents: write
  *
- * @param {TerraformChangedModule[]} terraformModules - An array of changed Terraform modules to process and create a release.
- * @returns {Promise<void>}
+ * @param {TerraformChangedModule[]} terraformChangedModules - An array of changed Terraform modules to process and create a release.
+ * @returns {Promise<{ moduleName: string; release: GitHubRelease }[]>}
  */
-export async function createTaggedRelease(terraformModules: TerraformChangedModule[]) {
+export async function createTaggedRelease(
+  terraformChangedModules: TerraformChangedModule[],
+): Promise<{ moduleName: string; release: GitHubRelease }[]> {
   // Check if there are any modules to process
-  if (terraformModules.length === 0) {
+  if (terraformChangedModules.length === 0) {
     info('No changed Terraform modules to process. Skipping tag/release creation.');
-    return;
+    return [];
   }
 
   const {
@@ -106,28 +108,30 @@ export async function createTaggedRelease(terraformModules: TerraformChangedModu
     workspaceDir,
   } = context;
 
-  for (const module of terraformModules) {
-    const { moduleName, directory, releaseType, nextTag, nextTagVersion } = module;
-    const tmpDir = path.join(process.env.RUNNER_TEMP || '', 'tmp', moduleName);
+  console.time('Elapsed time pushing new tags & release');
+  startGroup('Creating releases & tags for modules');
 
-    console.time('Elapsed time pushing new tags & release');
+  const updatedModules: { moduleName: string; release: GitHubRelease }[] = [];
 
-    startGroup(`Creating release & tag for module: ${moduleName}`);
-    info(`Release type: ${releaseType}`);
-    info(`Next tag version: ${nextTag}`);
+  try {
+    for (const module of terraformChangedModules) {
+      const { moduleName, directory, releaseType, nextTag, nextTagVersion } = module;
+      const tmpDir = path.join(process.env.RUNNER_TEMP || '', 'tmp', moduleName);
 
-    // Create a temporary working directory
-    fs.mkdirSync(tmpDir, { recursive: true });
-    info(`Creating temp directory: ${tmpDir}`);
+      info(`Release type: ${releaseType}`);
+      info(`Next tag version: ${nextTag}`);
 
-    // Copy the module's contents to the temporary directory (along with .git)
-    fs.cpSync(directory, tmpDir, { recursive: true });
-    fs.cpSync(path.join(workspaceDir, '.git'), path.join(tmpDir, '.git'), { recursive: true });
+      // Create a temporary working directory
+      fs.mkdirSync(tmpDir, { recursive: true });
+      info(`Creating temp directory: ${tmpDir}`);
 
-    const gitOpts: ExecSyncOptions = { cwd: tmpDir }; // Lots of adds and deletions here so don't inherit
+      // Copy the module's contents to the temporary directory (along with .git)
+      fs.cpSync(directory, tmpDir, { recursive: true });
+      fs.cpSync(path.join(workspaceDir, '.git'), path.join(tmpDir, '.git'), { recursive: true });
 
-    // Git operations: commit the changes and tag the release. Wrap the error message here
-    try {
+      const gitOpts: ExecSyncOptions = { cwd: tmpDir }; // Lots of adds and deletions here so don't inherit
+
+      // Git operations: commit the changes and tag the release
       const commitMessage = `${nextTag}\n\n${prTitle}\n\n${prBody}`.trim();
 
       execFileSync('git', ['config', '--local', 'user.name', GITHUB_ACTIONS_BOT_NAME], gitOpts);
@@ -154,37 +158,38 @@ export async function createTaggedRelease(terraformModules: TerraformChangedModu
       module.latestTag = nextTag;
       module.latestTagVersion = nextTagVersion;
       module.tags.unshift(nextTag); // Prepend the latest tag
-      module.releases.unshift({
+      const release = {
         id: response.data.id,
         title: nextTag,
         body,
-      });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      };
+      module.releases.unshift(release);
 
-      // The tags will fail first via git push with an error similar to:
-      //
-      // Error: Command failed: git push origin tf-modules/vpc-endpoint/v1.0.0
-      // remote: Permission to techpivot/terraform-module-releaser.git denied to github-actions[bot].
-      // fatal: unable to access 'https://github.com/techpivot/terraform-module-releaser.git/': The requested URL returned error: 403
-      if (errorMessage.includes('The requested URL returned error: 403')) {
-        throw new Error(
-          [
-            `Failed to create tags in repository: ${errorMessage} - Ensure that the`,
-            'GitHub Actions workflow has the correct permissions to create tags. To grant the required permissions,',
-            'update your workflow YAML file with the following block under "permissions":\n\npermissions:\n',
-            ' contents: write',
-          ].join(' '),
-        );
-      }
-
-      throw new Error(`Failed to create tags in repository: ${errorMessage}`);
-    } finally {
-      // Let's clean up the temp directory to help with any security concerns
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-      console.timeEnd('Elapsed time pushing new tags & release');
-      endGroup();
+      updatedModules.push({ moduleName, release });
     }
+
+    return updatedModules;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+
+    // Handle GitHub permissions or any error related to pushing tags
+    if (errorMessage.includes('The requested URL returned error: 403')) {
+      throw new Error(
+        [
+          `Failed to create tags in repository: ${errorMessage} - Ensure that the`,
+          'GitHub Actions workflow has the correct permissions to create tags. To grant the required permissions,',
+          'update your workflow YAML file with the following block under "permissions":\n\npermissions:\n',
+          ' contents: write',
+        ].join(' '),
+        { cause: error },
+      );
+    }
+
+    throw new Error(`Failed to create tags in repository: ${errorMessage}`, { cause: error });
+  } finally {
+    // Cleanup: remove the temp directory
+    console.timeEnd('Elapsed time pushing new tags & release');
+    endGroup();
   }
 }
 
@@ -238,14 +243,10 @@ export async function deleteLegacyReleases(
 
   let releaseTitle = '';
   try {
-    for (const release of releasesToDelete) {
-      releaseTitle = release.title;
-      info(`Deleting release: ${release.title}`);
-      await octokit.rest.repos.deleteRelease({
-        owner,
-        repo,
-        release_id: release.id,
-      });
+    for (const { title, id: release_id } of releasesToDelete) {
+      releaseTitle = title;
+      info(`Deleting release: ${title}`);
+      await octokit.rest.repos.deleteRelease({ owner, repo, release_id });
     }
   } catch (error) {
     const requestError = error as RequestError;
@@ -257,9 +258,12 @@ export async function deleteLegacyReleases(
           'your workflow YAML file has the following block under "permissions":\n\npermissions:\n',
           ' contents: write',
         ].join(' '),
+        { cause: error },
       );
     }
-    throw new Error(`Failed to delete release: [Status = ${requestError.status}] ${requestError.message}`);
+    throw new Error(`Failed to delete release: [Status = ${requestError.status}] ${requestError.message}`, {
+      cause: error,
+    });
   } finally {
     console.timeEnd('Elapsed time deleting legacy releases');
     endGroup();

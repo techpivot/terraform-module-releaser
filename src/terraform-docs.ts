@@ -20,7 +20,7 @@ const nodeToGoArchMap: { [key in SupportedArchitectures]: string } = {
  * @returns The Go architecture name (e.g. 'amd64', 'arm', 'arm64')
  * @throws {Error} If the Node.js architecture is not supported
  */
-const getGoArch = (nodeArch: string): string => {
+function getGoArch(nodeArch: string): string {
   switch (nodeArch) {
     case 'x64':
     case 'arm':
@@ -29,7 +29,7 @@ const getGoArch = (nodeArch: string): string => {
     default:
       throw new Error(`Unsupported architecture: ${nodeArch}`);
   }
-};
+}
 
 /**
  * Installs the specified version of terraform-docs.
@@ -38,7 +38,7 @@ const getGoArch = (nodeArch: string): string => {
  *
  * @param {string} terraformDocsVersion - The version of terraform-docs to install.
  */
-export const installTerraformDocs = (terraformDocsVersion: string): void => {
+export function installTerraformDocs(terraformDocsVersion: string): void {
   startGroup(`Installing terraform-docs ${terraformDocsVersion}`);
 
   const platform = process.platform;
@@ -55,7 +55,7 @@ export const installTerraformDocs = (terraformDocsVersion: string): void => {
   execFileSync('sudo', ['mv', 'terraform-docs', '/usr/local/bin/terraform-docs']); // Alternatively, use custom non elevated path
   execFileSync('terraform-docs', ['--version'], { stdio: 'inherit' });
   endGroup();
-};
+}
 
 /**
  * Generates Terraform documentation for a given module.
@@ -69,7 +69,7 @@ export const installTerraformDocs = (terraformDocsVersion: string): void => {
  * @returns {Promise<string>} A promise that resolves with the generated Terraform documentation in Markdown format.
  * @throws {Error} Throws an error if the `terraform-docs` command fails or produces an error in the `stderr` output.
  */
-export const generateTerraformDocs = async ({ moduleName, directory }: TerraformModule) => {
+export async function generateTerraformDocs({ moduleName, directory }: TerraformModule) {
   info(`Generating tf-docs for: ${moduleName}`);
 
   const { stdout, stderr } = await execFile('terraform-docs', [
@@ -88,4 +88,4 @@ export const generateTerraformDocs = async ({ moduleName, directory }: Terraform
   info(`Finished tf-docs for: ${moduleName}`);
 
   return stdout;
-};
+}

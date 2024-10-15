@@ -68,7 +68,7 @@ const getKeywords = (inputName: string): string[] => {
 /**
  * Lazy-initialized configuration object.
  */
-const initializeConfig = (): Config => {
+function initializeConfig(): Config {
   if (configInstance) {
     return configInstance;
   }
@@ -100,6 +100,6 @@ const initializeConfig = (): Config => {
   endGroup();
 
   return configInstance;
-};
+}
 
 export const config: Config = initializeConfig();

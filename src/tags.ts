@@ -4,6 +4,23 @@ import { config } from './config';
 import { context } from './context';
 
 /**
+ * Extracts the version (e.g., "vX.Y.Z") from the end of a full tag or release name.
+ *
+ * @param {string} tagName - The full tag or release name.
+ * @returns {string | null} - The extracted version (e.g., "vX.Y.Z") or null if no version is found at the end.
+ */
+export function getTagVersion(tagName: string): string | null {
+  // Regular expression to match "vX.Y.Z" at the end of the string
+  const versionRegex = /\/(v\d+\.\d+\.\d+)$/;
+
+  // Use regex to find and return the version in the tag name
+  const match = tagName.match(versionRegex);
+
+  // If a match is found, return it, otherwise return null
+  return match ? match[1] : null;
+}
+
+/**
  * Fetches all tags from the specified GitHub repository.
  *
  * This function utilizes pagination to retrieve all tags, returning them as an array of strings.
@@ -11,7 +28,7 @@ import { context } from './context';
  * @returns {Promise<string[]>} A promise that resolves to an array of tag names.
  * @throws {RequestError} Throws an error if the request to fetch tags fails.
  */
-export const getAllTags = async (): Promise<string[]> => {
+export async function getAllTags(): Promise<string[]> {
   console.time('Elapsed time fetching tags');
   startGroup('Fetching repository tags');
 
@@ -46,12 +63,12 @@ export const getAllTags = async (): Promise<string[]> => {
       errorMessage = String(error).trim();
     }
 
-    throw new Error(errorMessage);
+    throw new Error(errorMessage, { cause: error });
   } finally {
     console.timeEnd('Elapsed time fetching tags');
     endGroup();
   }
-};
+}
 
 /**
  * Deletes legacy Terraform module tags.
@@ -65,7 +82,7 @@ export const getAllTags = async (): Promise<string[]> => {
  */
 export async function deleteLegacyTags(terraformModuleNames: string[], allTags: string[]) {
   if (!config.deleteLegacyTags) {
-    info('Deletion of legacy tags/released is disabled. Skipping.');
+    info('Deletion of legacy tags/releases is disabled. Skipping.');
     return;
   }
 
@@ -91,7 +108,7 @@ export async function deleteLegacyTags(terraformModuleNames: string[], allTags: 
     repo: { owner, repo },
   } = context;
 
-  let tag = '';
+  let tag = ''; // used for better error handling below.
   try {
     for (tag of tagsToDelete) {
       info(`Deleting tag: ${tag}`);
@@ -111,9 +128,12 @@ export async function deleteLegacyTags(terraformModuleNames: string[], allTags: 
           'your workflow YAML file has the following block under "permissions":\n\npermissions:\n',
           ' contents: write',
         ].join(' '),
+        { cause: error },
       );
     }
-    throw new Error(`Failed to delete tag: [Status = ${requestError.status}] ${requestError.message}`);
+    throw new Error(`Failed to delete tag: [Status = ${requestError.status}] ${requestError.message}`, {
+      cause: error,
+    });
   } finally {
     console.timeEnd('Elapsed time deleting legacy tags');
     endGroup();
