@@ -2,7 +2,7 @@ import { debug, endGroup, info, startGroup } from '@actions/core';
 import { RequestError } from '@octokit/request-error';
 import { getPullRequestChangelog } from './changelog';
 import { config } from './config';
-import { BRANDING, PR_RELEASE_MARKER, PR_SUMMARY_MARKER } from './constants';
+import { BRANDING_COMMENT, PR_RELEASE_MARKER, PR_SUMMARY_MARKER } from './constants';
 import { context } from './context';
 import type { GitHubRelease } from './releases';
 import type { TerraformChangedModule } from './terraform-module';
@@ -278,7 +278,7 @@ export async function addReleasePlanComment(
 
     // Branding
     if (config.disableBranding === false) {
-      commentBody.push(`\n${BRANDING}`);
+      commentBody.push(`\n${BRANDING_COMMENT}`);
     }
 
     // Create new PR comment (Requires permission > pull-requests: write)
@@ -365,7 +365,7 @@ export async function addPostReleaseComment(
 
     // Branding
     if (config.disableBranding === false) {
-      commentBody.push(`\n${BRANDING}`);
+      commentBody.push(`\n${BRANDING_COMMENT}`);
     }
 
     // Post the comment on the pull request

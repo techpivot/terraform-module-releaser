@@ -134,12 +134,12 @@ export async function createTaggedRelease(
       // Git operations: commit the changes and tag the release
       const commitMessage = `${nextTag}\n\n${prTitle}\n\n${prBody}`.trim();
 
-      execFileSync('git', ['config', '--local', 'user.name', GITHUB_ACTIONS_BOT_NAME], gitOpts);
-      execFileSync('git', ['config', '--local', 'user.email', GITHUB_ACTIONS_BOT_EMAIL], gitOpts);
-      execFileSync('git', ['add', '.'], gitOpts);
-      execFileSync('git', ['commit', '-m', commitMessage.trim()], gitOpts);
-      execFileSync('git', ['tag', nextTag], gitOpts);
-      execFileSync('git', ['push', 'origin', nextTag], gitOpts);
+      execFileSync('/usr/bin/git', ['config', '--local', 'user.name', GITHUB_ACTIONS_BOT_NAME], gitOpts);
+      execFileSync('/usr/bin/git', ['config', '--local', 'user.email', GITHUB_ACTIONS_BOT_EMAIL], gitOpts);
+      execFileSync('/usr/bin/git', ['add', '.'], gitOpts);
+      execFileSync('/usr/bin/git', ['commit', '-m', commitMessage.trim()], gitOpts);
+      execFileSync('/usr/bin/git', ['tag', nextTag], gitOpts);
+      execFileSync('/usr/bin/git', ['push', 'origin', nextTag], gitOpts);
 
       // Create a GitHub release using the tag
       info(`Creating GitHub release for ${moduleName}@${nextTag}`);
