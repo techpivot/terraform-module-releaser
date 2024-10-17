@@ -31200,7 +31200,8 @@ const GITHUB_ACTIONS_BOT_NAME = 'GitHub Actions';
 const GITHUB_ACTIONS_BOT_EMAIL = '41898282+github-actions[bot]@users.noreply.github.com';
 const PR_SUMMARY_MARKER = '<!-- techpivot/terraform-module-releaser — pr-summary-marker -->';
 const PR_RELEASE_MARKER = '<!-- techpivot/terraform-module-releaser — release-marker -->';
-const BRANDING = '<h4 align="center"><sub align="middle">Powered by <img src="https://raw.githubusercontent.com/techpivot/terraform-module-releaser/refs/heads/main/assets/github-mark.png" height="16" width="12" align="top" /> <a href="https://github.com/techpivot/terraform-module-releaser">techpivot/terraform-module-releaser</a></sub></h4>';
+const BRANDING_COMMENT = '<h4 align="center"><sub align="middle">Powered by <img src="https://raw.githubusercontent.com/techpivot/terraform-module-releaser/refs/heads/main/assets/github-mark-top-padding.png" height="16" width="12" align="top" /> <a href="https://github.com/techpivot/terraform-module-releaser">techpivot/terraform-module-releaser</a></sub></h4>';
+const BRANDING_WIKI = '<h4 align="center">Powered by <img src="https://raw.githubusercontent.com/techpivot/terraform-module-releaser/refs/heads/main/assets/github-mark-12x14.png" height="14" width="12" align="top" /> <a href="https://github.com/techpivot/terraform-module-releaser">techpivot/terraform-module-releaser</a></h4>';
 
 ;// CONCATENATED MODULE: external "node:child_process"
 const external_node_child_process_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:child_process");
@@ -31439,7 +31440,7 @@ function installTerraformDocs(terraformDocsVersion) {
     (0,external_node_child_process_namespaceObject.execFileSync)('tar', ['-xzf', 'terraform-docs.tar.gz']);
     (0,external_node_child_process_namespaceObject.execFileSync)('chmod', ['+x', 'terraform-docs']);
     (0,external_node_child_process_namespaceObject.execFileSync)('sudo', ['mv', 'terraform-docs', '/usr/local/bin/terraform-docs']); // Alternatively, use custom non elevated path
-    (0,external_node_child_process_namespaceObject.execFileSync)('terraform-docs', ['--version'], { stdio: 'inherit' });
+    (0,external_node_child_process_namespaceObject.execFileSync)('/usr/local/bin/terraform-docs', ['--version'], { stdio: 'inherit' });
     (0,core.endGroup)();
 }
 /**
@@ -31456,7 +31457,7 @@ function installTerraformDocs(terraformDocsVersion) {
  */
 async function generateTerraformDocs({ moduleName, directory }) {
     (0,core.info)(`Generating tf-docs for: ${moduleName}`);
-    const { stdout, stderr } = await execFile('terraform-docs', [
+    const { stdout, stderr } = await execFile('/usr/local/bin/terraform-docs', [
         'markdown',
         'table',
         '--sort-by',
@@ -31515,28 +31516,28 @@ function checkoutWiki() {
     const wikiHtmlUrl = `${context.repoUrl}.wiki`;
     (0,core.startGroup)(`Checking out wiki repository [${wikiHtmlUrl}]`);
     (0,core.info)('Adding repository directory to the temporary git global config as a safe directory');
-    (0,external_node_child_process_namespaceObject.execFileSync)('git', ['config', '--global', '--add', 'safe.directory', WIKI_DIRECTORY], { stdio: 'inherit' });
+    (0,external_node_child_process_namespaceObject.execFileSync)('/usr/bin/git', ['config', '--global', '--add', 'safe.directory', WIKI_DIRECTORY], { stdio: 'inherit' });
     (0,core.info)('Initializing the repository');
     if (!external_node_fs_default().existsSync(WIKI_SUBDIRECTORY)) {
         external_node_fs_default().mkdirSync(WIKI_SUBDIRECTORY);
     }
-    (0,external_node_child_process_namespaceObject.execFileSync)('git', ['init', '--initial-branch=master', WIKI_DIRECTORY], execWikiOpts);
+    (0,external_node_child_process_namespaceObject.execFileSync)('/usr/bin/git', ['init', '--initial-branch=master', WIKI_DIRECTORY], execWikiOpts);
     (0,core.info)('Setting up origin');
-    (0,external_node_child_process_namespaceObject.execFileSync)('git', ['remote', 'add', 'origin', wikiHtmlUrl], execWikiOpts);
+    (0,external_node_child_process_namespaceObject.execFileSync)('/usr/bin/git', ['remote', 'add', 'origin', wikiHtmlUrl], execWikiOpts);
     (0,core.info)('Configuring authentication');
     // Configure Git to use the PAT for the wiki repository (emulating the behavior of GitHub Actions
     // from the checkout@v4 action.
     const basicCredential = Buffer.from(`x-access-token:${config.githubToken}`, 'utf8').toString('base64');
     try {
-        (0,external_node_child_process_namespaceObject.execFileSync)('git', ['config', '--local', '--unset-all', 'http.https://github.com/.extraheader'], execWikiOpts);
+        (0,external_node_child_process_namespaceObject.execFileSync)('/usr/bin/git', ['config', '--local', '--unset-all', 'http.https://github.com/.extraheader'], execWikiOpts);
     }
     catch (error) {
         // This returns exit code 5 if not set. Not a problem. Let's ignore.
     }
-    (0,external_node_child_process_namespaceObject.execFileSync)('git', ['config', '--local', 'http.https://github.com/.extraheader', `Authorization: Basic ${basicCredential}`], execWikiOpts);
+    (0,external_node_child_process_namespaceObject.execFileSync)('/usr/bin/git', ['config', '--local', 'http.https://github.com/.extraheader', `Authorization: Basic ${basicCredential}`], execWikiOpts);
     try {
         (0,core.info)('Fetching the repository');
-        (0,external_node_child_process_namespaceObject.execFileSync)('git', [
+        (0,external_node_child_process_namespaceObject.execFileSync)('/usr/bin/git', [
             'fetch',
             '--no-tags',
             '--prune',
@@ -31546,7 +31547,7 @@ function checkoutWiki() {
             '+refs/heads/master*:refs/remotes/origin/master*',
             '+refs/tags/master*:refs/tags/master*',
         ], execWikiOpts);
-        (0,external_node_child_process_namespaceObject.execFileSync)('git', ['checkout', 'master'], execWikiOpts);
+        (0,external_node_child_process_namespaceObject.execFileSync)('/usr/bin/git', ['checkout', 'master'], execWikiOpts);
         (0,core.info)('Successfully checked out wiki repository');
         // Since we 100% regenerate 100% of the modules, we can simply remove the generated folder if it exists
         // as this helps us 100% ensure we don't have any stale content.
@@ -31559,72 +31560,6 @@ function checkoutWiki() {
         (0,core.endGroup)();
     }
 }
-/**
- * Generates the markdown content for a Terraform module's wiki file.
- *
- * This function creates a markdown file that includes usage instructions, generated Terraform documentation,
- * and the changelog for the module. The generated usage section provides a sample HCL configuration for referencing
- * the module. The Terraform documentation is auto-generated and included between special tags.
- *
- * @param {TerraformModule} terraformModule - An object containing details of the Terraform module, including:
- *   - `moduleName`: The name of the Terraform module.
- *   - `currentTag`: The current version tag of the module.
- * @param {string} changelog - The changelog content for the module, detailing recent changes.
- * @returns {Promise<string>} A promise that resolves with the generated markdown content for the wiki file.
- * @throws {Error} Throws an error if the Terraform documentation generation fails.
- */
-const getWikiFileMarkdown = async ($terraformModule, $changelog) => {
-    const { moduleName, latestTag } = $terraformModule;
-    const wikiContent = [
-        '# Usage\n',
-        'To use this module in your Terraform, refer to the below module example:\n',
-        '```hcl',
-        `module "${moduleName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()}" {`,
-        `  source = "git::${context.repoUrl}.git?ref=${latestTag}"`,
-        '\n  # See inputs below for additional required parameters',
-        '}',
-        '```',
-        '\n# Attributes\n',
-        '<!-- BEGIN_TF_DOCS -->',
-        await generateTerraformDocs($terraformModule),
-        '<!-- END_TF_DOCS -->',
-        '\n# Changelog\n',
-        $changelog,
-    ];
-    // Branding
-    if (config.disableBranding === false) {
-        wikiContent.push(`\n${BRANDING}`);
-    }
-    return wikiContent.join('\n');
-};
-/**
- * Writes the provided content to the appropriate wiki file for the specified Terraform module.
- * Ensures that the directory structure is created if it doesn't exist and handles overwriting
- * the existing wiki file.
- *
- * @param {string} moduleName - The name of the Terraform module.
- * @param {string} content - The markdown content to write to the wiki file.
- * @returns {Promise<string>} The path to the wiki file that was written.
- * @throws Will throw an error if the file cannot be written.
- */
-const writeFileToWiki = async (moduleName, content) => {
-    try {
-        // Define the path for the module's wiki file
-        const wikiFile = external_node_path_default().join(WIKI_GENERATED_DIRECTORY, `${moduleName}.md`);
-        const wikiFilePath = external_node_path_default().dirname(wikiFile);
-        // Ensure the wiki subdirectory exists, create if it doesn't
-        // Note that the wiki file can be nested in directories and therefore we need to account for this.
-        await promises_namespaceObject.mkdir(wikiFilePath, { recursive: true });
-        // Write the markdown content to the wiki file, overwriting if it exists
-        await promises_namespaceObject.writeFile(wikiFile, content, 'utf8');
-        (0,core.info)(`Successfully wrote wiki file for module: ${moduleName}`);
-        return wikiFile;
-    }
-    catch (error) {
-        console.error(`Error writing wiki file for module: ${moduleName}`, error);
-        throw error;
-    }
-};
 /**
  * Generates a URL to the wiki page for a given Terraform module.
  *
@@ -31657,6 +31592,53 @@ function getWikiLink(moduleName, relative = true) {
     // did much of this sidebar behavior would be potentially unnecessary.
     const gitHubSlug = external_node_path_default().basename(moduleName).replace(/\.[^/.]+$/, '');
     return `${baseUrl}/wiki/${gitHubSlug}`;
+}
+/**
+ * Writes the provided content to the appropriate wiki file for the specified Terraform module.
+ * Ensures that the directory structure is created if it doesn't exist and handles overwriting
+ * the existing wiki file.
+ *
+ * @param {string} moduleName - The name of the Terraform module.
+ * @param {string} content - The markdown content to write to the wiki file.
+ * @returns {Promise<string>} The path to the wiki file that was written.
+ * @throws Will throw an error if the file cannot be written.
+ */
+async function updateWikiModule(terraformModule) {
+    const { moduleName, latestTag } = terraformModule;
+    try {
+        // Define the path for the module's wiki file
+        const wikiFile = external_node_path_default().join(WIKI_GENERATED_DIRECTORY, `${moduleName}.md`);
+        const wikiFilePath = external_node_path_default().dirname(wikiFile);
+        const changelog = getModuleReleaseChangelog(terraformModule);
+        const tfDocs = await generateTerraformDocs(terraformModule);
+        const wikiContent = [
+            '# Usage\n',
+            'To use this module in your Terraform, refer to the below module example:\n',
+            '```hcl',
+            `module "${moduleName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()}" {`,
+            `  source = "git::${context.repoUrl}.git?ref=${latestTag}"`,
+            '\n  # See inputs below for additional required parameters',
+            '}',
+            '```',
+            '\n# Attributes\n',
+            '<!-- BEGIN_TF_DOCS -->',
+            tfDocs,
+            '<!-- END_TF_DOCS -->',
+            '\n# Changelog\n',
+            changelog,
+        ].join('\n');
+        // Ensure the wiki subdirectory exists, create if it doesn't
+        // Note that the wiki file can be nested in directories and therefore we need to account for this.
+        await promises_namespaceObject.mkdir(wikiFilePath, { recursive: true });
+        // Write the markdown content to the wiki file, overwriting if it exists
+        await promises_namespaceObject.writeFile(wikiFile, wikiContent, 'utf8');
+        (0,core.info)(`Successfully wrote wiki file for module: ${moduleName}`);
+        return wikiFile;
+    }
+    catch (error) {
+        console.error(`Error writing wiki file for module: ${moduleName}`, error);
+        throw error;
+    }
 }
 /**
  * Updates the Wiki sidebar with a list of Terraform modules, including changelog entries for each.
@@ -31702,7 +31684,7 @@ function getWikiLink(moduleName, relative = true) {
  * </li>
  * ```
  */
-const updateWikiSidebar = async (terraformModules) => {
+async function updateWikiSidebar(terraformModules) {
     const { owner, repo } = context.repo;
     const sideBarFile = external_node_path_default().join(WIKI_DIRECTORY, '_Sidebar.md');
     const repoBaseUrl = `/${owner}/${repo}`;
@@ -31752,7 +31734,34 @@ const updateWikiSidebar = async (terraformModules) => {
     }
     const content = `[Home](${repoBaseUrl}/wiki/Home)\n\n## Terraform Modules\n\n<ul>${moduleSidebarContent}\n</ul>`;
     await promises_namespaceObject.writeFile(sideBarFile, content, 'utf8');
-};
+}
+/**
+ * Updates the `_Footer.md` file in the wiki directory to manage the branding/footer content.
+ *
+ * This function checks whether the branding should be disabled based on the configuration:
+ * - If branding is disabled and the `_Footer.md` file exists, it deletes the file.
+ * - If branding is enabled (or not disabled), it creates or updates the `_Footer.md` file with the branding content.
+ *
+ * @returns {Promise<void>} A promise that resolves when the update process is complete.
+ * @throws {Error} Logs an error if the file update or deletion fails.
+ */
+async function updateWikiFooter() {
+    const footerFile = external_node_path_default().join(WIKI_DIRECTORY, '_Footer.md');
+    try {
+        // Check if the _Footer.md file exists
+        if (config.disableBranding && external_node_fs_default().existsSync(footerFile)) {
+            await promises_namespaceObject.unlink(footerFile);
+            (0,core.info)('_Footer.md has been deleted.');
+            return;
+        }
+        // If the file doesn't exist, create and write content to it
+        await promises_namespaceObject.writeFile(footerFile, BRANDING_WIKI, 'utf8');
+        (0,core.info)('_Footer.md has been created and updated.');
+    }
+    catch (error) {
+        console.error(`Error updating _Footer.md: ${error instanceof Error ? error.message : String(error)}`);
+    }
+}
 /**
  * Updates the wiki documentation for a list of Terraform modules.
  *
@@ -31775,34 +31784,30 @@ async function updateWiki(terraformModules) {
     const updatedFiles = [];
     const tasks = terraformModules.map((module) => {
         return limit(async () => {
-            const { moduleName } = module;
-            const changelog = getModuleReleaseChangelog(module);
-            const wikiFileContent = await getWikiFileMarkdown(module, changelog);
-            await writeFileToWiki(moduleName, wikiFileContent);
-            updatedFiles.push(external_node_path_default().join(WIKI_GENERATED_DIRECTORY, `${moduleName}.md`));
+            updatedFiles.push(await updateWikiModule(module));
         });
     });
     await Promise.all(tasks);
     (0,core.info)('Wiki files generated:');
     console.log(updatedFiles);
-    (0,core.endGroup)();
-    // Generate sidebar
     await updateWikiSidebar(terraformModules);
+    await updateWikiFooter();
+    (0,core.endGroup)();
     (0,core.startGroup)('Committing and pushing changes to wiki');
     try {
         const { prBody, prNumber, prTitle } = context;
         const commitMessage = `PR #${prNumber} - ${prTitle}\n\n${prBody}`.trim();
         // Check if there are any changes (otherwise add/commit/push will error)
         (0,core.info)('Checking for changes in wiki repository');
-        const status = (0,external_node_child_process_namespaceObject.execFileSync)('git', ['status', '--porcelain'], { cwd: WIKI_DIRECTORY });
+        const status = (0,external_node_child_process_namespaceObject.execFileSync)('/usr/bin/git', ['status', '--porcelain'], { cwd: WIKI_DIRECTORY });
         (0,core.info)(`git status output: ${status.toString().trim()}`);
         if (status !== null && status.toString().trim() !== '') {
             // There are changes, commit and push
-            (0,external_node_child_process_namespaceObject.execFileSync)('git', ['config', '--local', 'user.name', GITHUB_ACTIONS_BOT_NAME], execWikiOpts);
-            (0,external_node_child_process_namespaceObject.execFileSync)('git', ['config', '--local', 'user.email', GITHUB_ACTIONS_BOT_EMAIL], execWikiOpts);
-            (0,external_node_child_process_namespaceObject.execFileSync)('git', ['add', '.'], execWikiOpts);
-            (0,external_node_child_process_namespaceObject.execFileSync)('git', ['commit', '-m', commitMessage.trim()], execWikiOpts);
-            (0,external_node_child_process_namespaceObject.execFileSync)('git', ['push', 'origin'], execWikiOpts);
+            (0,external_node_child_process_namespaceObject.execFileSync)('/usr/bin/git', ['config', '--local', 'user.name', GITHUB_ACTIONS_BOT_NAME], execWikiOpts);
+            (0,external_node_child_process_namespaceObject.execFileSync)('/usr/bin/git', ['config', '--local', 'user.email', GITHUB_ACTIONS_BOT_EMAIL], execWikiOpts);
+            (0,external_node_child_process_namespaceObject.execFileSync)('/usr/bin/git', ['add', '.'], execWikiOpts);
+            (0,external_node_child_process_namespaceObject.execFileSync)('/usr/bin/git', ['commit', '-m', commitMessage.trim()], execWikiOpts);
+            (0,external_node_child_process_namespaceObject.execFileSync)('/usr/bin/git', ['push', 'origin'], execWikiOpts);
             (0,core.info)('Changes committed and pushed to wiki repository');
         }
         else {
@@ -32017,7 +32022,7 @@ async function addReleasePlanComment(terraformChangedModules, terraformModuleNam
         }
         // Branding
         if (config.disableBranding === false) {
-            commentBody.push(`\n${BRANDING}`);
+            commentBody.push(`\n${BRANDING_COMMENT}`);
         }
         // Create new PR comment (Requires permission > pull-requests: write)
         const { data: newComment } = await octokit.rest.issues.createComment({
@@ -32083,7 +32088,7 @@ async function addPostReleaseComment(updatedModules) {
         }
         // Branding
         if (config.disableBranding === false) {
-            commentBody.push(`\n${BRANDING}`);
+            commentBody.push(`\n${BRANDING_COMMENT}`);
         }
         // Post the comment on the pull request
         const { data: newComment } = await octokit.rest.issues.createComment({
@@ -32205,12 +32210,12 @@ async function createTaggedRelease(terraformChangedModules) {
             const gitOpts = { cwd: tmpDir }; // Lots of adds and deletions here so don't inherit
             // Git operations: commit the changes and tag the release
             const commitMessage = `${nextTag}\n\n${prTitle}\n\n${prBody}`.trim();
-            (0,external_node_child_process_namespaceObject.execFileSync)('git', ['config', '--local', 'user.name', GITHUB_ACTIONS_BOT_NAME], gitOpts);
-            (0,external_node_child_process_namespaceObject.execFileSync)('git', ['config', '--local', 'user.email', GITHUB_ACTIONS_BOT_EMAIL], gitOpts);
-            (0,external_node_child_process_namespaceObject.execFileSync)('git', ['add', '.'], gitOpts);
-            (0,external_node_child_process_namespaceObject.execFileSync)('git', ['commit', '-m', commitMessage.trim()], gitOpts);
-            (0,external_node_child_process_namespaceObject.execFileSync)('git', ['tag', nextTag], gitOpts);
-            (0,external_node_child_process_namespaceObject.execFileSync)('git', ['push', 'origin', nextTag], gitOpts);
+            (0,external_node_child_process_namespaceObject.execFileSync)('/usr/bin/git', ['config', '--local', 'user.name', GITHUB_ACTIONS_BOT_NAME], gitOpts);
+            (0,external_node_child_process_namespaceObject.execFileSync)('/usr/bin/git', ['config', '--local', 'user.email', GITHUB_ACTIONS_BOT_EMAIL], gitOpts);
+            (0,external_node_child_process_namespaceObject.execFileSync)('/usr/bin/git', ['add', '.'], gitOpts);
+            (0,external_node_child_process_namespaceObject.execFileSync)('/usr/bin/git', ['commit', '-m', commitMessage.trim()], gitOpts);
+            (0,external_node_child_process_namespaceObject.execFileSync)('/usr/bin/git', ['tag', nextTag], gitOpts);
+            (0,external_node_child_process_namespaceObject.execFileSync)('/usr/bin/git', ['push', 'origin', nextTag], gitOpts);
             // Create a GitHub release using the tag
             (0,core.info)(`Creating GitHub release for ${moduleName}@${nextTag}`);
             const body = getModuleChangelog(module);

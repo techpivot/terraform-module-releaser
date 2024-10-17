@@ -8,7 +8,7 @@ import { endGroup, info, startGroup } from '@actions/core';
 import pLimit from 'p-limit';
 import { getModuleReleaseChangelog } from './changelog';
 import { config } from './config';
-import { BRANDING, GITHUB_ACTIONS_BOT_EMAIL, GITHUB_ACTIONS_BOT_NAME } from './constants';
+import { BRANDING_WIKI, GITHUB_ACTIONS_BOT_EMAIL, GITHUB_ACTIONS_BOT_NAME } from './constants';
 import { context } from './context';
 import { generateTerraformDocs } from './terraform-docs';
 import type { TerraformModule } from './terraform-module';
@@ -50,28 +50,32 @@ export function checkoutWiki(): void {
   startGroup(`Checking out wiki repository [${wikiHtmlUrl}]`);
 
   info('Adding repository directory to the temporary git global config as a safe directory');
-  execFileSync('git', ['config', '--global', '--add', 'safe.directory', WIKI_DIRECTORY], { stdio: 'inherit' });
+  execFileSync('/usr/bin/git', ['config', '--global', '--add', 'safe.directory', WIKI_DIRECTORY], { stdio: 'inherit' });
 
   info('Initializing the repository');
   if (!fs.existsSync(WIKI_SUBDIRECTORY)) {
     fs.mkdirSync(WIKI_SUBDIRECTORY);
   }
-  execFileSync('git', ['init', '--initial-branch=master', WIKI_DIRECTORY], execWikiOpts);
+  execFileSync('/usr/bin/git', ['init', '--initial-branch=master', WIKI_DIRECTORY], execWikiOpts);
 
   info('Setting up origin');
-  execFileSync('git', ['remote', 'add', 'origin', wikiHtmlUrl], execWikiOpts);
+  execFileSync('/usr/bin/git', ['remote', 'add', 'origin', wikiHtmlUrl], execWikiOpts);
 
   info('Configuring authentication');
   // Configure Git to use the PAT for the wiki repository (emulating the behavior of GitHub Actions
   // from the checkout@v4 action.
   const basicCredential = Buffer.from(`x-access-token:${config.githubToken}`, 'utf8').toString('base64');
   try {
-    execFileSync('git', ['config', '--local', '--unset-all', 'http.https://github.com/.extraheader'], execWikiOpts);
+    execFileSync(
+      '/usr/bin/git',
+      ['config', '--local', '--unset-all', 'http.https://github.com/.extraheader'],
+      execWikiOpts,
+    );
   } catch (error) {
     // This returns exit code 5 if not set. Not a problem. Let's ignore.
   }
   execFileSync(
-    'git',
+    '/usr/bin/git',
     ['config', '--local', 'http.https://github.com/.extraheader', `Authorization: Basic ${basicCredential}`],
     execWikiOpts,
   );
@@ -79,7 +83,7 @@ export function checkoutWiki(): void {
   try {
     info('Fetching the repository');
     execFileSync(
-      'git',
+      '/usr/bin/git',
       [
         'fetch',
         '--no-tags',
@@ -93,7 +97,7 @@ export function checkoutWiki(): void {
       execWikiOpts,
     );
 
-    execFileSync('git', ['checkout', 'master'], execWikiOpts);
+    execFileSync('/usr/bin/git', ['checkout', 'master'], execWikiOpts);
 
     info('Successfully checked out wiki repository');
 
@@ -107,80 +111,6 @@ export function checkoutWiki(): void {
     endGroup();
   }
 }
-
-/**
- * Generates the markdown content for a Terraform module's wiki file.
- *
- * This function creates a markdown file that includes usage instructions, generated Terraform documentation,
- * and the changelog for the module. The generated usage section provides a sample HCL configuration for referencing
- * the module. The Terraform documentation is auto-generated and included between special tags.
- *
- * @param {TerraformModule} terraformModule - An object containing details of the Terraform module, including:
- *   - `moduleName`: The name of the Terraform module.
- *   - `currentTag`: The current version tag of the module.
- * @param {string} changelog - The changelog content for the module, detailing recent changes.
- * @returns {Promise<string>} A promise that resolves with the generated markdown content for the wiki file.
- * @throws {Error} Throws an error if the Terraform documentation generation fails.
- */
-const getWikiFileMarkdown = async ($terraformModule: TerraformModule, $changelog: string): Promise<string> => {
-  const { moduleName, latestTag } = $terraformModule;
-
-  const wikiContent = [
-    '# Usage\n',
-    'To use this module in your Terraform, refer to the below module example:\n',
-    '```hcl',
-    `module "${moduleName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()}" {`,
-    `  source = "git::${context.repoUrl}.git?ref=${latestTag}"`,
-    '\n  # See inputs below for additional required parameters',
-    '}',
-    '```',
-    '\n# Attributes\n',
-    '<!-- BEGIN_TF_DOCS -->',
-    await generateTerraformDocs($terraformModule),
-    '<!-- END_TF_DOCS -->',
-    '\n# Changelog\n',
-    $changelog,
-  ];
-
-  // Branding
-  if (config.disableBranding === false) {
-    wikiContent.push(`\n${BRANDING}`);
-  }
-
-  return wikiContent.join('\n');
-};
-
-/**
- * Writes the provided content to the appropriate wiki file for the specified Terraform module.
- * Ensures that the directory structure is created if it doesn't exist and handles overwriting
- * the existing wiki file.
- *
- * @param {string} moduleName - The name of the Terraform module.
- * @param {string} content - The markdown content to write to the wiki file.
- * @returns {Promise<string>} The path to the wiki file that was written.
- * @throws Will throw an error if the file cannot be written.
- */
-const writeFileToWiki = async (moduleName: string, content: string): Promise<string> => {
-  try {
-    // Define the path for the module's wiki file
-    const wikiFile = path.join(WIKI_GENERATED_DIRECTORY, `${moduleName}.md`);
-    const wikiFilePath = path.dirname(wikiFile);
-
-    // Ensure the wiki subdirectory exists, create if it doesn't
-    // Note that the wiki file can be nested in directories and therefore we need to account for this.
-    await fsp.mkdir(wikiFilePath, { recursive: true });
-
-    // Write the markdown content to the wiki file, overwriting if it exists
-    await fsp.writeFile(wikiFile, content, 'utf8');
-
-    info(`Successfully wrote wiki file for module: ${moduleName}`);
-
-    return wikiFile;
-  } catch (error) {
-    console.error(`Error writing wiki file for module: ${moduleName}`, error);
-    throw error;
-  }
-};
 
 /**
  * Generates a URL to the wiki page for a given Terraform module.
@@ -215,6 +145,59 @@ export function getWikiLink(moduleName: string, relative = true): string {
   const gitHubSlug = path.basename(moduleName).replace(/\.[^/.]+$/, '');
 
   return `${baseUrl}/wiki/${gitHubSlug}`;
+}
+
+/**
+ * Writes the provided content to the appropriate wiki file for the specified Terraform module.
+ * Ensures that the directory structure is created if it doesn't exist and handles overwriting
+ * the existing wiki file.
+ *
+ * @param {string} moduleName - The name of the Terraform module.
+ * @param {string} content - The markdown content to write to the wiki file.
+ * @returns {Promise<string>} The path to the wiki file that was written.
+ * @throws Will throw an error if the file cannot be written.
+ */
+async function updateWikiModule(terraformModule: TerraformModule): Promise<string> {
+  const { moduleName, latestTag } = terraformModule;
+
+  try {
+    // Define the path for the module's wiki file
+    const wikiFile = path.join(WIKI_GENERATED_DIRECTORY, `${moduleName}.md`);
+    const wikiFilePath = path.dirname(wikiFile);
+
+    const changelog = getModuleReleaseChangelog(terraformModule);
+    const tfDocs = await generateTerraformDocs(terraformModule);
+    const wikiContent = [
+      '# Usage\n',
+      'To use this module in your Terraform, refer to the below module example:\n',
+      '```hcl',
+      `module "${moduleName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()}" {`,
+      `  source = "git::${context.repoUrl}.git?ref=${latestTag}"`,
+      '\n  # See inputs below for additional required parameters',
+      '}',
+      '```',
+      '\n# Attributes\n',
+      '<!-- BEGIN_TF_DOCS -->',
+      tfDocs,
+      '<!-- END_TF_DOCS -->',
+      '\n# Changelog\n',
+      changelog,
+    ].join('\n');
+
+    // Ensure the wiki subdirectory exists, create if it doesn't
+    // Note that the wiki file can be nested in directories and therefore we need to account for this.
+    await fsp.mkdir(wikiFilePath, { recursive: true });
+
+    // Write the markdown content to the wiki file, overwriting if it exists
+    await fsp.writeFile(wikiFile, wikiContent, 'utf8');
+
+    info(`Successfully wrote wiki file for module: ${moduleName}`);
+
+    return wikiFile;
+  } catch (error) {
+    console.error(`Error writing wiki file for module: ${moduleName}`, error);
+    throw error;
+  }
 }
 
 /**
@@ -261,7 +244,7 @@ export function getWikiLink(moduleName: string, relative = true): string {
  * </li>
  * ```
  */
-const updateWikiSidebar = async (terraformModules: TerraformModule[]): Promise<void> => {
+async function updateWikiSidebar(terraformModules: TerraformModule[]): Promise<void> {
   const { owner, repo } = context.repo;
   const sideBarFile = path.join(WIKI_DIRECTORY, '_Sidebar.md');
   const repoBaseUrl = `/${owner}/${repo}`;
@@ -326,7 +309,36 @@ const updateWikiSidebar = async (terraformModules: TerraformModule[]): Promise<v
   const content = `[Home](${repoBaseUrl}/wiki/Home)\n\n## Terraform Modules\n\n<ul>${moduleSidebarContent}\n</ul>`;
 
   await fsp.writeFile(sideBarFile, content, 'utf8');
-};
+}
+
+/**
+ * Updates the `_Footer.md` file in the wiki directory to manage the branding/footer content.
+ *
+ * This function checks whether the branding should be disabled based on the configuration:
+ * - If branding is disabled and the `_Footer.md` file exists, it deletes the file.
+ * - If branding is enabled (or not disabled), it creates or updates the `_Footer.md` file with the branding content.
+ *
+ * @returns {Promise<void>} A promise that resolves when the update process is complete.
+ * @throws {Error} Logs an error if the file update or deletion fails.
+ */
+async function updateWikiFooter(): Promise<void> {
+  const footerFile = path.join(WIKI_DIRECTORY, '_Footer.md');
+
+  try {
+    // Check if the _Footer.md file exists
+    if (config.disableBranding && fs.existsSync(footerFile)) {
+      await fsp.unlink(footerFile);
+      info('_Footer.md has been deleted.');
+      return;
+    }
+
+    // If the file doesn't exist, create and write content to it
+    await fsp.writeFile(footerFile, BRANDING_WIKI, 'utf8');
+    info('_Footer.md has been created and updated.');
+  } catch (error) {
+    console.error(`Error updating _Footer.md: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
 
 /**
  * Updates the wiki documentation for a list of Terraform modules.
@@ -353,22 +365,16 @@ export async function updateWiki(terraformModules: TerraformModule[]): Promise<s
   const updatedFiles: string[] = [];
   const tasks = terraformModules.map((module) => {
     return limit(async () => {
-      const { moduleName } = module;
-      const changelog = getModuleReleaseChangelog(module);
-      const wikiFileContent = await getWikiFileMarkdown(module, changelog);
-
-      await writeFileToWiki(moduleName, wikiFileContent);
-      updatedFiles.push(path.join(WIKI_GENERATED_DIRECTORY, `${moduleName}.md`));
+      updatedFiles.push(await updateWikiModule(module));
     });
   });
   await Promise.all(tasks);
 
   info('Wiki files generated:');
   console.log(updatedFiles);
-  endGroup();
-
-  // Generate sidebar
   await updateWikiSidebar(terraformModules);
+  await updateWikiFooter();
+  endGroup();
 
   startGroup('Committing and pushing changes to wiki');
 
@@ -378,16 +384,16 @@ export async function updateWiki(terraformModules: TerraformModule[]): Promise<s
 
     // Check if there are any changes (otherwise add/commit/push will error)
     info('Checking for changes in wiki repository');
-    const status = execFileSync('git', ['status', '--porcelain'], { cwd: WIKI_DIRECTORY });
+    const status = execFileSync('/usr/bin/git', ['status', '--porcelain'], { cwd: WIKI_DIRECTORY });
     info(`git status output: ${status.toString().trim()}`);
 
     if (status !== null && status.toString().trim() !== '') {
       // There are changes, commit and push
-      execFileSync('git', ['config', '--local', 'user.name', GITHUB_ACTIONS_BOT_NAME], execWikiOpts);
-      execFileSync('git', ['config', '--local', 'user.email', GITHUB_ACTIONS_BOT_EMAIL], execWikiOpts);
-      execFileSync('git', ['add', '.'], execWikiOpts);
-      execFileSync('git', ['commit', '-m', commitMessage.trim()], execWikiOpts);
-      execFileSync('git', ['push', 'origin'], execWikiOpts);
+      execFileSync('/usr/bin/git', ['config', '--local', 'user.name', GITHUB_ACTIONS_BOT_NAME], execWikiOpts);
+      execFileSync('/usr/bin/git', ['config', '--local', 'user.email', GITHUB_ACTIONS_BOT_EMAIL], execWikiOpts);
+      execFileSync('/usr/bin/git', ['add', '.'], execWikiOpts);
+      execFileSync('/usr/bin/git', ['commit', '-m', commitMessage.trim()], execWikiOpts);
+      execFileSync('/usr/bin/git', ['push', 'origin'], execWikiOpts);
       info('Changes committed and pushed to wiki repository');
     } else {
       info('No changes detected, skipping commit and push');

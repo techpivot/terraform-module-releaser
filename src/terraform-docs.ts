@@ -53,7 +53,7 @@ export function installTerraformDocs(terraformDocsVersion: string): void {
   execFileSync('tar', ['-xzf', 'terraform-docs.tar.gz']);
   execFileSync('chmod', ['+x', 'terraform-docs']);
   execFileSync('sudo', ['mv', 'terraform-docs', '/usr/local/bin/terraform-docs']); // Alternatively, use custom non elevated path
-  execFileSync('terraform-docs', ['--version'], { stdio: 'inherit' });
+  execFileSync('/usr/local/bin/terraform-docs', ['--version'], { stdio: 'inherit' });
   endGroup();
 }
 
@@ -72,7 +72,7 @@ export function installTerraformDocs(terraformDocsVersion: string): void {
 export async function generateTerraformDocs({ moduleName, directory }: TerraformModule) {
   info(`Generating tf-docs for: ${moduleName}`);
 
-  const { stdout, stderr } = await execFile('terraform-docs', [
+  const { stdout, stderr } = await execFile('/usr/local/bin/terraform-docs', [
     'markdown',
     'table',
     '--sort-by',
