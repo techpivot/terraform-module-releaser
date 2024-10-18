@@ -1,7 +1,7 @@
 {
   "name": "terraform-module-releaser",
   "description": "GitHub Actions TypeScript template",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "author": "virgofx",
   "type": "module",
   "main": "lib/index.js",
