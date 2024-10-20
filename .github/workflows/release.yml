@@ -1,0 +1,170 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: Specifies the new release version (X.Y.Z)
+        required: true
+        type: string
+  pull_request:
+    branches:
+      - main
+
+env:
+  VERSION: 2.0.1 # ${{ github.event.inputs.release_version }}
+
+jobs:
+  release:
+    permissions:
+      contents: write # to be able to publish a GitHub release
+      pull-requests: write # to be able to comment on released pull requests
+    name: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Get all history
+
+      - name: Setup Node.js
+        id: setup-node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install Dependencies
+        id: npm-ci
+        run: npm ci --no-fund
+
+      - name: Create new release branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Check if the branch exists on the remote
+          if git ls-remote --exit-code --heads origin release-v${{ env.VERSION }}; then
+            echo "Branch release-v${{ env.VERSION }} exists on remote. Deleting it."
+            git push origin --delete release-v${{ env.VERSION }}
+          else
+            echo "Branch release-v${{ env.VERSION }} does not exist on remote. No deletion necessary."
+          fi
+
+          # Create a new branch and checkout
+          git checkout -b release-v${{ env.VERSION }}
+
+          # Rebase the branch onto main (or whatever the base branch is)
+          git rebase origin/main  # Adjust 'main' to your default branch
+
+      - name: Update package.json version
+        run: npm version ${{ env.VERSION }} --no-git-tag-version
+
+      - name: Build the package
+        run: npm run package
+
+      - name: Commit changes with branch
+        run: |
+          git add package.json
+          git add .
+          git commit -m "chore(release): bump version to ${{ env.VERSION }}"
+
+          # Check if the branch exists on the remote and delete it if it does
+          if git ls-remote --exit-code --heads origin release-v${{ env.VERSION }}; then
+            echo "Branch release-v${{ env.VERSION }} exists on remote. Deleting it."
+            git push origin --delete release-v${{ env.VERSION }}
+          else
+            echo "Branch release-v${{ env.VERSION }} does not exist on remote. No deletion necessary."
+          fi
+
+          git push --set-upstream origin release-v${{ env.VERSION }}
+
+      - name: Generate Changelog
+        uses: actions/github-script@v7
+        id: changelog
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        with:
+          script: |
+            const { generateChangelog } = await import('${{ github.workspace }}/.github/scripts/changelog.js');
+
+            try {
+              const changelog = await generateChangelog("${{ env.VERSION }}");
+              console.log('Generated changelog:', changelog);
+
+              return changelog;
+            } catch (error) {
+              console.error('Error generating changelog:', error);
+              core.setFailed(error.message);
+            }
+
+      - name: Find or create PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const version = '${{ env.VERSION }}';
+            const prTitle = `chore(release): v${version}`;
+            const branchName = `release-v${version}`;
+            const changelog = ${{ steps.changelog.outputs.result }};
+            const prTitleRegex = /^chore\(release\): v\d+\.\d+\.\d+$/;
+
+            // Note: We can't change the head branch once a PR is opened. Thus we need to delete any branches
+            // that exist from any existing open pull requests.
+
+            console.log('Searching for existing open PRs ...');
+            const { data: existingPRs } = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              per_page: 100,
+              state: 'open',
+              creator: 'github-actions[bot]'
+            });
+
+            for (const pr of existingPRs) {
+              console.log('Analyzing PR', pr.number, pr.title, pr.user.login);
+
+              // Check if the title matches the format and it's created by the correct user
+              if (prTitleRegex.test(pr.title) && pr.user.login === 'github-actions[bot]') {
+                console.log(`PR #${pr.number} has a valid title: ${pr.title}`);
+
+                // Close the existing pull request
+                await github.rest.pulls.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: pr.number,
+                  state: 'closed'
+                });
+                console.log(`Closed PR #${pr.number}`);
+
+                // Now delete the branch
+                const branchName = pr.head.ref;
+                await github.rest.git.deleteRef({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  ref: `heads/${branchName}`
+                });
+                console.log(`Deleted branch '${branchName}' associated with PR #${pr.number}`);
+              }
+            }
+
+            console.log('Creating new PR.');
+            const { data: pr } = await github.rest.pulls.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: prTitle,
+              head: branchName,
+              base: 'main',
+              body: changelog,
+              labels: ['release']
+            });
+            console.log(`Created new PR #${pr.number}`);
+
+
+            // Add labels if they don't exist
+            console.log('Updating PR labels')
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number,
+              labels: ['release']
+            });
