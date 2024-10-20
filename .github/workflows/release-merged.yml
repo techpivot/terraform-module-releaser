@@ -1,0 +1,54 @@
+name: Release PR Merge
+
+on:
+  pull_request:
+    types: [opened, reopened, edited, synchronize]
+    branches:
+      - main
+
+jobs:
+  merge-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # To publish tags and GitHub release
+    if: |
+      startsWith(github.event.pull_request.title, 'chore(release):') &&
+      contains(github.event.pull_request.body, '<!-- RELEASE-NOTES-MARKER-START -->') &&
+      github.event.pull_request.user.login == 'github-actions[bot]'
+    #&&
+    #github.event.pull_request.merged == true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version from PR body
+        id: extract-version
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = context.payload.pull_request.body;
+            const versionMatch = body.match(/<!-- RELEASE-NOTES-VERSION: ([0-9]+\.[0-9]+\.[0-9]+) -->/);
+            if (versionMatch) {
+              return versionMatch[1];
+            }
+            throw new Error('Version not found in PR body');
+
+      - name: Extract release notes from PR body
+        id: extract-release-notes
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = context.payload.pull_request.body;
+            const releaseNotesMarker = body.indexOf('<!-- RELEASE-NOTES-MARKER-START -->');
+            if (releaseNotesMarker !== -1) {
+              return body.substring(releaseNotesMarker);
+            }
+            throw new Error('Release notes marker not found in PR body');
+
+      - name: Create Git Tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a v${{ steps.extract-version.outputs.result }} -m "Release version ${{ steps.extract-version.outputs.result }}"
+          git push origin v${{ steps.extract-version.outputs.result }}
+
