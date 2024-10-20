@@ -1,0 +1,24 @@
+name: Handle Special PR Merge
+
+on:
+  pull_request:
+    types:
+      - edited
+    branches:
+      - main
+
+jobs:
+  handle-special-pr:
+    runs-on: ubuntu-latest
+    if: |
+      github.event.pull_request.author.login == 'github-actions[bot]' &&
+      github.event.pull_request.merged == true &&
+      startsWith(github.event.pull_request.title, 'chore(release):') &&
+      contains(github.event.pull_request.body, '<!-- RELEASE-NOTES-MARKER-START -->')
+
+    steps:
+      - name: Process Release
+        run: |
+          echo "Processing release for PR: #${{ github.event.pull_request.number }}"
+          echo "Release notes: ${{ github.event.pull_request.body }}"
+          # Add your custom logic here, e.g., triggering another action, updating deployment, etc.
