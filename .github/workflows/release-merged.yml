@@ -1,0 +1,26 @@
+name: Release PR Merge
+
+on:
+  pull_request:
+    types: [opened, reopened, edited, synchronize]
+    branches:
+      - main
+
+jobs:
+  merge-release:
+    runs-on: ubuntu-latest
+    if: |
+      startsWith(github.event.pull_request.title, 'chore(release):') &&
+      contains(github.event.pull_request.body, '<!-- RELEASE-NOTES-MARKER-START -->') &&
+      github.event.pull_request.user.login == 'github-actions[bot]'
+
+    #&&
+    #github.event.pull_request.merged == true
+
+    steps:
+      - name: Process Release
+        run: |
+          echo "Processing release for PR: ${{ github.event.pull_request.number }}"
+          echo "${{ github.event.pull_request.merged }}"
+          echo "${{ github.event.pull_request.title }}"
+          echo "${{ github.event.pull_request.user.login }}"
