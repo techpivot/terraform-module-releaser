@@ -56,11 +56,11 @@
     "p-limit": "^6.1.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "^1.9.2",
+    "@biomejs/biome": "^1.9.4",
     "@jest/globals": "^29.7.0",
     "@octokit/webhooks-types": "^7.6.1",
     "@types/jest": "^29.5.13",
-    "@types/node": "^22.7.5",
+    "@types/node": "^22.7.7",
     "@vercel/ncc": "^0.38.1",
     "textlint": "^14.2.1",
     "textlint-filter-rule-comments": "^1.2.2",
