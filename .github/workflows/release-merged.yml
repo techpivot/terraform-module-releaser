@@ -43,6 +43,9 @@ jobs:
             const body = context.payload.pull_request.body;
             const releaseNotesMarker = body.indexOf('<!-- RELEASE-NOTES-MARKER-START -->');
             if (releaseNotesMarker !== -1) {
+
+              console.log('>> ');
+              console.log(body.substring(releaseNotesMarker));
               return { releaseNotes: body.substring(releaseNotesMarker); }
             }
             throw new Error('Release notes marker not found in PR body');
