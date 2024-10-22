@@ -38,6 +38,20 @@
       }
     ]
   },
+  "release": {
+    "branches": [
+      "main",
+      {
+        "name": "refs/pull/**",
+        "prerelease": false
+      }
+    ],
+    "pull-request": true,
+    "plugins": [
+      "@semantic-release/release-notes-generator"
+    ],
+    "tagFormat": "v${version}"
+  },
   "scripts": {
     "bundle": "npm run check:fix && npm run package",
     "check": "biome check ./src",
