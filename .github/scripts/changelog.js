@@ -329,9 +329,9 @@ async function generateChangelog(version) {
     return [
       `# Release Notes v${versionNumber} Preview`,
       `\n**Important:** Upon merging this pull request, the following release notes will be automatically created for version v${versionNumber}.`,
-      `\n## ${versionNumber} (${getDateString()})\n`,
-      `<!-- RELEASE-NOTES-VERSION: ${versionNumber} -->`,
+      `\n<!-- RELEASE-NOTES-VERSION: ${versionNumber} -->`,
       "<!-- RELEASE-NOTES-MARKER-START -->",
+      `## ${versionNumber} (${getDateString()})\n`,
       content,
       //data.choices[0].message.content,
       `\n###### Full Changelog: https://github.com/techpivot/terraform-module-releaser/compare/${latestVersionTag}...v${versionNumber}`,
