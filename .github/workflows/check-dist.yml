@@ -1,19 +1,9 @@
-# In TypeScript actions, `dist/` is a special directory. When you reference
-# an action with the `uses:` property, `dist/index.js` is the code that will be
-# run. For this project, the `dist/index.js` file is transpiled from other
-# source files. This workflow ensures the `dist/` directory contains the
-# expected transpiled code.
-#
-# If this workflow is run from a feature branch, it will act as an additional CI
-# check and fail if the checked-in `dist/` directory does not match what is
-# expected from the build.
+# Check that the transpiled JavaScript matches what's expected in the dist/
+# directory, but only for release preview PRs
 name: Check Transpiled JavaScript
 
 on:
   pull_request:
-    branches:
-      - main
-  push:
     branches:
       - main
 
@@ -24,6 +14,10 @@ jobs:
   check-dist:
     name: Check dist
     runs-on: ubuntu-latest
+    if: |
+      startsWith(github.event.pull_request.title, 'chore(release):') &&
+      contains(github.event.pull_request.body, '<!-- RELEASE-NOTES-MARKER-START -->') &&
+      github.event.pull_request.user.login == 'github-actions[bot]'
 
     steps:
       - name: Checkout

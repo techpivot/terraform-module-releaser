@@ -1,0 +1,7 @@
+---
+# Don't report passed checks in output
+quiet: true
+
+skip-check:
+  - CKV2_GHA_1 # False positives in release-start
+  - CKV_GHA_7 # Allow workflow dispatch params
