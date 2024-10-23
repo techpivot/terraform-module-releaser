@@ -177,16 +177,20 @@ async function getGitHubUsername(email) {
 }
 
 /**
- * Gets all commits between HEAD and origin/main, including commit hash,
- * author email, GitHub username (if found), and commit message.
+ * Retrieves all commits between the specified latest release tag and HEAD,
+ * including the commit hash, author email, GitHub username (if found), and
+ * commit message. Filters out merge commits following a specific pattern.
  *
- * @returns {Promise<Array>} Array of processed commit objects with hash, username, and message
- * @throws {Error} If git command execution fails
+ * @param {string} latestVersionTag - The latest release tag to compare against HEAD.
+ * @returns {Promise<Array>} A promise that resolves to an array of processed
+ * commit objects, each containing the commit hash, GitHub username, and message.
+ * @throws {Error} If git command execution fails.
  */
-async function getCommitsBetweenHeadAndMain() {
+async function getCommitsBetweenLatestReleaseAndMain(latestVersionTag) {
   try {
-    const baseBranch = process.env.GITHUB_BASE_REF || 'main';
-    const args = ['log', `origin/${baseBranch}..HEAD`, '--pretty=format:%H|%aE|%B\x1E'];
+    const args = ['log', `${latestVersionTag}..HEAD`, '--pretty=format:%H|%aE|%B\x1E'];
+
+    console.debug('Executing git command:', 'git', args.join(' '));
 
     const stdout = execFileSync('/usr/bin/git', args, {
       encoding: 'utf-8',
@@ -270,7 +274,7 @@ async function generateChangelog(version) {
 
   validateEnvironment();
 
-  const commits = await getCommitsBetweenHeadAndMain();
+  const commits = await getCommitsBetweenLatestReleaseAndMain(latestVersionTag);
   console.log('Commits:');
   console.debug(commits);
 
