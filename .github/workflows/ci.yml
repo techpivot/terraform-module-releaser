@@ -9,9 +9,6 @@ on:
     types: [opened, reopened, synchronize]
     branches:
       - main
-  repository_dispatch:
-    types: [release-preview]
-  workflow_dispatch:
 
 permissions:
   contents: write # Required to create tags, creaste releases and update wiki

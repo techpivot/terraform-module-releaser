@@ -42,11 +42,21 @@ Important formatting rules:
 - Only include sub-bullets if they are necessary to clarify the change.
 - Avoid level 4 headings.
 - Use level 3 (###) for sections.
-- Omit sections with no content.
+- Omit sections with no content silently - do not add any notes or explanations about omitted sections.
 `;
 
 // In-memory cache for username lookups
 const usernameCache = new Map();
+
+/**
+ * Pauses execution for a specified amount of time.
+ *
+ * @param {number} ms - The number of milliseconds to sleep.
+ * @returns {Promise<void>} A promise that resolves after the specified time has passed.
+ */
+function sleep(ms) {
+  new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 /**
  * Validates required environment variables
@@ -121,6 +131,25 @@ function githubApiRequest(path) {
 }
 
 /**
+ * Makes a request to the GitHub API with retries
+ * @param {string} path - The API endpoint path including query parameters
+ * @param {number} retries - Number of retries remaining
+ * @returns {Promise<object|null>} - Parsed JSON response or null for 404s
+ */
+async function githubApiRequestWithRetry(path, retries = 2) {
+  try {
+    return await githubApiRequest(path);
+  } catch (error) {
+    if (retries > 0 && error.message.includes('403')) {
+      console.log(`Rate limited, retrying after 2 seconds... (${retries} retries left)`);
+      await sleep(2000);
+      return githubApiRequestWithRetry(path, retries - 1);
+    }
+    throw error;
+  }
+}
+
+/**
  * Attempts to resolve a GitHub username from a commit email address
  * using multiple GitHub API endpoints.
  *
@@ -129,10 +158,44 @@ function githubApiRequest(path) {
  */
 async function resolveGitHubUsername(commitEmail) {
   console.log('Attempting to resolve username:', commitEmail);
+
+  // Local resolution - Handle various GitHub email patterns
+  const emailMatches = email.match(/^(?:(?:[^@]+)?@)?([^@]+)$/);
+  if (emailMatches) {
+    const [, domain] = emailMatches;
+
+    // Handle github.com email variations
+    if (domain === 'users.noreply.github.com') {
+      // Extract username from 1234567+username@users.noreply.github.com
+      // or username@users.noreply.github.com
+      const matches = email.match(/^(?:(\d+)\+)?([^@]+)@users\.noreply\.github\.com$/);
+      return matches ? matches[2] : null;
+    }
+
+    // Handle organization emails like username@organization.github.com
+    if (domain.endsWith('.github.com')) {
+      const matches = email.match(/^([^@]+)@[^@]+\.github\.com$/);
+      return matches ? matches[1] : null;
+    }
+
+    // Handle GitHub Enterprise emails
+    // Pattern: username@github.{enterprise}.com
+    const enterpriseMatches = email.match(/^([^@]+)@github\.[^@]+\.com$/);
+    if (enterpriseMatches) {
+      return enterpriseMatches[1];
+    }
+
+    // Handle GitHub staff emails
+    if (email.endsWith('@github.com')) {
+      const matches = email.match(/^([^@]+)@github\.com$/);
+      return matches ? matches[1] : null;
+    }
+  }
+
   try {
     // First attempt: Direct API search for user by email
     console.log(`[${commitEmail}] Querying user API`);
-    const searchResponse = await githubApiRequest(
+    const searchResponse = await githubApiRequestWithRetry(
       `https://api.github.com/search/users?q=${encodeURIComponent(commitEmail)}+in:email`,
     );
     if (searchResponse?.items && searchResponse.items.length > 0) {
@@ -148,7 +211,7 @@ async function resolveGitHubUsername(commitEmail) {
   try {
     console.log(`[${commitEmail}] Querying commit API`);
     // Second attempt: Check commit API for associated username
-    const commitSearchResponse = await githubApiRequest(
+    const commitSearchResponse = await githubApiRequestWithRetry(
       `https://api.github.com/search/commits?q=author-email:${encodeURIComponent(commitEmail)}&per_page=25`,
     );
     if (commitSearchResponse?.items?.length > 0) {
