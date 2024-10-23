@@ -1,0 +1,30 @@
+# Unordered list style
+MD004:
+  style: dash
+
+# MD013/line-length - Line length
+MD013:
+  line_length: 120
+  tables: false # Allow long tables
+
+# Ordered list item prefix
+MD029:
+  style: one
+
+# Spaces after list markers
+MD030:
+  ul_single: 1
+  ol_single: 1
+  ul_multi: 1
+  ol_multi: 1
+
+MD033:
+  allowed_elements:
+    - sup
+    - b
+    - p
+    - img
+
+# Code block style
+MD046:
+  style: fenced

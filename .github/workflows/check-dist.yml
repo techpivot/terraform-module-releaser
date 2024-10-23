@@ -1,0 +1,70 @@
+# Check that the transpiled JavaScript matches what's expected in the dist/
+# directory, but only for release preview PRs
+name: Check Transpiled JavaScript
+
+on:
+  pull_request:
+    branches:
+      - main
+  repository_dispatch:
+    types: [release-preview]
+
+permissions:
+  contents: read
+
+jobs:
+  check-dist:
+    name: Check dist
+    runs-on: ubuntu-latest
+    if: |
+      startsWith(github.event.pull_request.title, 'chore(release):') &&
+      contains(github.event.pull_request.body, '<!-- RELEASE-NOTES-MARKER-START -->') &&
+      github.event.pull_request.user.login == 'github-actions[bot]'
+
+    steps:
+      - name: Checkout
+        id: checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        id: setup-node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install Dependencies
+        id: npm-ci
+        run: npm ci --no-fund
+
+      - name: Build dist/ Directory
+        id: build
+        run: npm run package
+
+      # This will fail the workflow if the `dist/` directory is different than
+      # expected.
+      - name: Compare Directories
+        id: diff
+        run: |
+          if [ ! -d dist/ ]; then
+            echo "Expected dist/ directory does not exist.  See status below:"
+            ls -la ./
+            exit 1
+          fi
+          if [ "$(git diff --ignore-space-at-eol --text dist/ | wc -l)" -gt "0" ]; then
+            echo "Detected uncommitted changes after build. See status below:"
+            git diff --ignore-space-at-eol --text dist/
+            exit 1
+          fi
+
+      # If `dist/` was different than expected, upload the expected version as a
+      # workflow artifact.
+      - if: ${{ failure() && steps.diff.outcome == 'failure' }}
+        name: Upload Artifact
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/

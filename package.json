@@ -1,0 +1,84 @@
+{
+  "name": "terraform-module-releaser",
+  "description": "GitHub Actions TypeScript template",
+  "version": "2.0.0",
+  "author": "virgofx",
+  "type": "module",
+  "main": "lib/index.js",
+  "homepage": "https://github.com/techpivot/terraform-module-releaser",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/techpivot/terraform-module-releaser.git"
+  },
+  "bugs": {
+    "url": "https://github.com/techpivot/terraform-module-releaser/issues"
+  },
+  "keywords": [
+    "terraform",
+    "module",
+    "releaser",
+    "github-action",
+    "monorepo"
+  ],
+  "license": "MIT",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "prettier": {
+    "overrides": [
+      {
+        "files": "*.md",
+        "options": {
+          "printWidth": 120,
+          "proseWrap": "always"
+        }
+      }
+    ]
+  },
+  "release": {
+    "branches": [
+      "main",
+      {
+        "name": "refs/pull/**",
+        "prerelease": false
+      }
+    ],
+    "pull-request": true,
+    "plugins": [
+      "@semantic-release/release-notes-generator"
+    ],
+    "tagFormat": "v${version}"
+  },
+  "scripts": {
+    "bundle": "npm run check:fix && npm run package",
+    "check": "biome check ./src",
+    "check:fix": "biome check --write --unsafe .",
+    "textlint": "npx textlint -c .github/linters/.textlintrc **/*.md",
+    "textlint:fix": "npx textlint -c .github/linters/.textlintrc --fix **/*.md",
+    "typecheck": "tsc --noEmit",
+    "package": "ncc build src/index.ts --source-map -o dist"
+  },
+  "dependencies": {
+    "@actions/core": "^1.10.1",
+    "@octokit/core": "^6.1.2",
+    "@octokit/plugin-paginate-rest": "^11.3.5",
+    "@octokit/plugin-rest-endpoint-methods": "^13.2.6",
+    "@octokit/request-error": "^6.1.5",
+    "p-limit": "^6.1.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.2",
+    "@jest/globals": "^29.7.0",
+    "@octokit/webhooks-types": "^7.6.1",
+    "@types/jest": "^29.5.13",
+    "@types/node": "^22.7.5",
+    "@vercel/ncc": "^0.38.1",
+    "textlint": "^14.2.1",
+    "textlint-filter-rule-comments": "^1.2.2",
+    "textlint-rule-terminology": "^5.2.12",
+    "typescript": "^5.6.3"
+  }
+}

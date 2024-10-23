@@ -1,0 +1,175 @@
+name: Start Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: Specifies the new release version (X.Y.Z)
+        required: true
+        type: string
+  # Note: If necessary, add a push/branch to test workflow appropriately.
+
+concurrency:
+  group: release
+  cancel-in-progress: true # Cancel any in-progress runs for this group
+
+env:
+  VERSION: ${{ github.event.inputs.release_version }}
+  BRANCH_NAME: release/v${{ github.event.inputs.release_version }}
+
+jobs:
+  preview-release:
+    name: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Required to create a new pull request
+      pull-requests: write # Required to comment on pull requests
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Get all history
+
+      - name: Setup Node.js
+        id: setup-node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install Dependencies
+        id: npm-ci
+        run: npm ci --no-fund
+
+      # In order to create signed commits, we need to ensure that we commit without an author name and email.
+      # However, this can't be done via git as this is required. We need to leverage the GitHub REST/GraphQL
+      # API endpoints.
+      #
+      # https://github.com/orgs/community/discussions/24664#discussioncomment-5084236
+      - name: Setup ghup [GitHub API Client]
+        uses: nexthink-oss/ghup/actions/setup@main
+        with:
+          version: v0.11.2
+
+      - name: Create new release branch
+        run: |
+          # Delete the branch if it exists on remote
+          if git ls-remote --exit-code --heads origin ${{ env.BRANCH_NAME }}; then
+            echo "Deleting existing branch ${{ env.BRANCH_NAME }}."
+            git push origin --delete ${{ env.BRANCH_NAME }}
+          fi
+
+          # Create a new branch and checkout
+          git checkout -b ${{ env.BRANCH_NAME }}
+
+          # Rebase the branch onto main (or whatever the base branch is)
+          git rebase origin/main
+
+      - name: Update package.json version
+        run: npm version ${{ env.VERSION }} --no-git-tag-version
+
+      - name: Build the package
+        run: npm run package
+
+      - name: Commit Changes (via API) using ghup
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHUP_MESSAGE: "chore(release): bump version to ${{ env.VERSION }}"
+        run: |
+          ghup content dist/* package.json package-lock.json \
+            --trailer "Release-Initiated-By=${{ github.actor }} <${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com>" \
+            --trailer "Build-Logs=https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --trailer "Co-Authored-By=github-actions[bot] <github-actions[bot]@users.noreply.github.com>" \
+            --trailer "Release=v${{ env.VERSION }}"
+
+      - name: Generate Changelog
+        uses: actions/github-script@v7
+        id: changelog
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        with:
+          script: |
+            const { generateChangelog } = await import('${{ github.workspace }}/.github/scripts/changelog.js');
+
+            try {
+              const changelog = await generateChangelog("${{ env.VERSION }}");
+              console.log('Generated changelog:', changelog);
+
+              return changelog;
+            } catch (error) {
+              console.error('Error generating changelog:', error);
+              core.setFailed(error.message);
+            }
+
+      - name: Create new PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const version = '${{ env.VERSION }}';
+            const prTitle = `chore(release): v${version}`;
+            const branchName = `release-v${version}`;
+            const changelog = ${{ steps.changelog.outputs.result }};
+            const prTitleRegex = /^chore\(release\): v\d+\.\d+\.\d+$/;
+
+            // Note: We can't change the head branch once a PR is opened. Thus we need to delete any branches
+            // that exist from any existing open pull requests.
+
+            console.log('Searching for existing open PRs ...');
+            const { data: existingPRs } = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              per_page: 100,
+              state: 'open',
+              creator: 'github-actions[bot]'
+            });
+
+            for (const pr of existingPRs) {
+              console.log('Analyzing PR', pr.number, pr.title, pr.user.login);
+
+              // Check if the title matches the format and it's created by the correct user
+              if (prTitleRegex.test(pr.title) && pr.user.login === 'github-actions[bot]') {
+                console.log(`PR #${pr.number} has a valid title: ${pr.title}`);
+
+                // Close the existing pull request
+                await github.rest.pulls.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: pr.number,
+                  state: 'closed'
+                });
+                console.log(`Closed PR #${pr.number}`);
+
+                // Now delete the branch
+                const branchName = pr.head.ref;
+                await github.rest.git.deleteRef({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  ref: `heads/${branchName}`
+                });
+                console.log(`Deleted branch '${branchName}' associated with PR #${pr.number}`);
+              }
+            }
+
+            const prCreateData = {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: prTitle,
+              head: '${{ env.BRANCH_NAME }}',
+              base: 'main',
+              body: changelog,
+              labels: ['release']
+            };
+            console.log('Creating new PR. Context:');
+            console.dir(prCreateData);
+
+            const { data: pr } = await github.rest.pulls.create(prCreateData);
+            console.log(`Created new PR #${pr.number}`);
+
+            // Add labels if they don't exist
+            console.log('Updating PR labels')
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number,
+              labels: ['release']
+            });

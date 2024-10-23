@@ -1,0 +1,61 @@
+name: Lint Codebase
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  repository_dispatch:
+    types: [release-preview]
+
+permissions:
+  contents: read
+  packages: read
+  statuses: write
+
+jobs:
+  lint:
+    name: Lint Codebase
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        id: checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        id: setup-node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install Dependencies
+        id: npm-ci
+        run: npm ci --no-fund
+
+      - name: Lint Typescript
+        id: biome
+        run: npm run check
+
+      - name: Lint Codebase
+        id: super-linter
+        uses: super-linter/super-linter/slim@v7
+        env:
+          DEFAULT_BRANCH: main
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FILTER_REGEX_EXCLUDE: dist/**/*
+          FIX_TYPESCRIPT_PRETTIER: false # Using biome
+          FIX_JAVASCRIPT_PRETTIER: false # Using biome
+          VALIDATE_ALL_CODEBASE: true
+          VALIDATE_JAVASCRIPT_STANDARD: false # Using biome
+          VALIDATE_JAVASCRIPT_PRETTIER: false # Using biome
+          VALIDATE_JSCPD: false # Using biome
+          VALIDATE_TYPESCRIPT_STANDARD: false # Using biome
+          VALIDATE_TYPESCRIPT_ES: false # Using biome
+          VALIDATE_TYPESCRIPT_PRETTIER: false # Using biome
+
