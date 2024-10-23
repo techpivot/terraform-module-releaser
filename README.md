@@ -3,14 +3,16 @@
 <sup><b>A GitHub Action for managing Terraform modules in GitHub monorepos, automating versioning, releases, and
 documentation.</b></sup>
 
+[![Latest GitHub Release](https://img.shields.io/github/release/techpivot/terraform-module-releaser.svg?style=flat-square)][1]
+[![GitHub Marketplace](https://img.shields.io/badge/marketplace-terraform--module--releaser-blue?logo=github&style=flat-square)][2]
 ![CI](https://github.com/techpivot/terraform-module-releaser/actions/workflows/ci.yml/badge.svg?event=pull_request)
-[![Lint](https://github.com/techpivot/terraform-module-releaser/actions/workflows/lint.yml/badge.svg)][1]
-[![Check dist](https://github.com/techpivot/terraform-module-releaser/actions/workflows/check-dist.yml/badge.svg)][2]
-[![CodeQL](https://github.com/techpivot/terraform-module-releaser/actions/workflows/codeql-analysis.yml/badge.svg)][3]
+[![Lint](https://github.com/techpivot/terraform-module-releaser/actions/workflows/lint.yml/badge.svg)][3]
+[![CodeQL](https://github.com/techpivot/terraform-module-releaser/actions/workflows/codeql-analysis.yml/badge.svg)][4]
 
-[1]: https://github.com/techpivot/terraform-module-releaser/actions/workflows/lint.yml
-[2]: https://github.com/techpivot/terraform-module-releaser/actions/workflows/check-dist.yml
-[3]: https://github.com/techpivot/terraform-module-releaser/actions/workflows/codeql-analysis.yml
+[1]: https://github.com/techpivot/terraform-module-releaser/releases/latest
+[2]: https://github.com/marketplace/actions/terraform-module-releaser
+[3]: https://github.com/techpivot/terraform-module-releaser/actions/workflows/lint.yml
+[4]: https://github.com/techpivot/terraform-module-releaser/actions/workflows/codeql-analysis.yml
 
 Simplify the management of Terraform modules in your monorepo with this **GitHub Action**, designed to automate
 module-specific versioning and releases. By streamlining the Terraform module release process, this action allows you to
