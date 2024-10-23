@@ -7,6 +7,7 @@ on:
         description: Specifies the new release version (X.Y.Z)
         required: true
         type: string
+  # Note: If necessary, add a push/branch to test workflow appropriately.
 
 concurrency:
   group: release
@@ -14,6 +15,7 @@ concurrency:
 
 env:
   VERSION: ${{ github.event.inputs.release_version }}
+  BRANCH_NAME: release/v${{ github.event.inputs.release_version }}
 
 jobs:
   preview-release:
@@ -38,21 +40,26 @@ jobs:
         id: npm-ci
         run: npm ci --no-fund
 
+      # In order to create signed commits, we need to ensure that we commit without an author name and email.
+      # However, this can't be done via git as this is required. We need to leverage the GitHub REST/GraphQL
+      # API endpoints.
+      #
+      # https://github.com/orgs/community/discussions/24664#discussioncomment-5084236
+      - name: Setup ghup [GitHub API Client]
+        uses: nexthink-oss/ghup/actions/setup@main
+        with:
+          version: v0.11.2
+
       - name: Create new release branch
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          branch_name="release-v${{ env.VERSION }}"
-
           # Delete the branch if it exists on remote
-          if git ls-remote --exit-code --heads origin $branch_name; then
-            echo "Deleting existing branch $branch_name."
-            git push origin --delete $branch_name
+          if git ls-remote --exit-code --heads origin ${{ env.BRANCH_NAME }}; then
+            echo "Deleting existing branch ${{ env.BRANCH_NAME }}."
+            git push origin --delete ${{ env.BRANCH_NAME }}
           fi
 
           # Create a new branch and checkout
-          git checkout -b $branch_name
+          git checkout -b ${{ env.BRANCH_NAME }}
 
           # Rebase the branch onto main (or whatever the base branch is)
           git rebase origin/main
@@ -63,12 +70,16 @@ jobs:
       - name: Build the package
         run: npm run package
 
-      - name: Commit changes with branch
+      - name: Commit Changes (via API) using ghup
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHUP_MESSAGE: "chore(release): bump version to ${{ env.VERSION }}"
         run: |
-          git add package.json
-          git add .
-          git commit -m "chore(release): bump version to ${{ env.VERSION }}"
-          git push --set-upstream origin release-v${{ env.VERSION }}
+          ghup content dist/* package.json package-lock.json \
+            --trailer "Release-Initiated-By=${{ github.actor }} <${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com>" \
+            --trailer "Build-Logs=https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --trailer "Co-Authored-By=github-actions[bot] <github-actions[bot]@users.noreply.github.com>" \
+            --trailer "Release=v${{ env.VERSION }}"
 
       - name: Generate Changelog
         uses: actions/github-script@v7
@@ -90,7 +101,7 @@ jobs:
               core.setFailed(error.message);
             }
 
-      - name: Find or create PR
+      - name: Create new PR
         uses: actions/github-script@v7
         with:
           script: |
@@ -139,16 +150,19 @@ jobs:
               }
             }
 
-            console.log('Creating new PR.');
-            const { data: pr } = await github.rest.pulls.create({
+            const prCreateData = {
               owner: context.repo.owner,
               repo: context.repo.repo,
               title: prTitle,
-              head: branchName,
+              head: '${{ env.BRANCH_NAME }}',
               base: 'main',
               body: changelog,
               labels: ['release']
-            });
+            };
+            console.log('Creating new PR. Context:');
+            console.dir(prCreateData);
+
+            const { data: pr } = await github.rest.pulls.create(prCreateData);
             console.log(`Created new PR #${pr.number}`);
 
             // Add labels if they don't exist

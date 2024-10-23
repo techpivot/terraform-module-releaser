@@ -30,15 +30,19 @@ Ignore merge commits and minor changes. For each commit, use only the first line
 Translate Conventional Commit messages into professional, human-readable language, avoiding technical jargon.
 
 For each commit, use this format:
-- **Bold 3-5 word Summary** (with related GitHub emoji): Continuation with 1-3 sentence description. [Include (#XX) only if a PR/issue number matching #\\d+ is found in the commit message] @author
+- **Bold 3-5 word Summary** (with related GitHub emoji): Continuation with 1-3 sentence description. @author (optional #PR)
   - Sub-bullets for key details (include only if necessary)
 
 Important formatting rules:
-- Only include PR/issue numbers that match the exact pattern #\\d+ (e.g., #123)
+- Place PR/issue numbers matching the exact pattern #\d+ (e.g., #123) at the end of the section in parentheses.
 - Do not use commit hashes as PR numbers
 - If no PR/issue number is found matching #\\d+, omit the parenthetical reference entirely
-
-Avoid level 4 headings. Use level 3 (###) for sections. Omit sections with no content.
+- If the author is specified, include their GitHub username at the end of the section, just before the PR/issue number with a "@" symbol - e.g. @author.
+- If the author is not specified, omit the GitHub username.
+- Only include sub-bullets if they are necessary to clarify the change.
+- Avoid level 4 headings.
+- Use level 3 (###) for sections.
+- Omit sections with no content.
 `;
 
 // In-memory cache for username lookups
@@ -90,8 +94,9 @@ function githubApiRequest(path) {
       hostname: 'api.github.com',
       path,
       headers: {
-        'User-Agent': 'GitHub-Username-Lookup',
+        'User-Agent': 'techpivot/terraform-module-releaser GitHub-Username-Lookup',
         Authorization: `token ${process.env.GITHUB_TOKEN}`,
+        Accept: 'application/vnd.github+json',
       },
     };
 
@@ -123,33 +128,44 @@ function githubApiRequest(path) {
  * @returns {Promise<string|null>} - GitHub username if found, null otherwise
  */
 async function resolveGitHubUsername(commitEmail) {
+  console.log('Attempting to resolve username:', commitEmail);
   try {
     // First attempt: Direct API search for user by email
+    console.log(`[${commitEmail}] Querying user API`);
     const searchResponse = await githubApiRequest(
       `https://api.github.com/search/users?q=${encodeURIComponent(commitEmail)}+in:email`,
     );
     if (searchResponse?.items && searchResponse.items.length > 0) {
+      console.log(`[${commitEmail}] Found username`);
       // Get the first matching user
       return searchResponse.items[0].login;
     }
+    console.log(`[${commitEmail}] No username found via user API`);
+  } catch (error) {
+    console.error(`[${commitEmail}] Error resolving GitHub username via user API:`, error);
+  }
 
+  try {
+    console.log(`[${commitEmail}] Querying commit API`);
     // Second attempt: Check commit API for associated username
     const commitSearchResponse = await githubApiRequest(
-      `https://api.github.com/search/commits?q=author-email:${encodeURIComponent(commitEmail)}&per_page=20`,
+      `https://api.github.com/search/commits?q=author-email:${encodeURIComponent(commitEmail)}&per_page=25`,
     );
-    if (commitSearchResponse?.items && commitSearchResponse.items.length > 0) {
-      const commit = commitSearchResponse.items[0];
-      if (commit.author) {
-        return commit.author.login;
+    if (commitSearchResponse?.items?.length > 0) {
+      // Loop through all items looking for first commit with an author
+      for (const commit of commitSearchResponse.items) {
+        if (commit.author) {
+          console.log(`[${commitEmail}] Found username from commit ${commit.sha}`);
+          return commit.author.login;
+        }
       }
+      console.log(`[${commitEmail}] No commits with author found in ${commitSearchResponse.items.length} results`);
     }
-
-    // If all attempts fail, return null or the email
-    return null;
   } catch (error) {
-    console.error('Error resolving GitHub username:', error);
-    return null;
+    console.error(`[${commitEmail}] Error resolving GitHub username via commit API:`, error);
   }
+
+  return null;
 }
 
 /**
@@ -212,19 +228,18 @@ async function getCommitsBetweenLatestReleaseAndMain(latestVersionTag) {
     console.log(commitEntries);
 
     // Process the filtered commits
-    const commits = commitEntries.map(async (entry) => {
+    const commits = [];
+    for (const entry of commitEntries) {
       const [commitHash, commitEmail, commitMessage] = entry.split('|');
-
       const username = await getGitHubUsername(commitEmail);
-
-      return {
+      commits.push({
         hash: commitHash,
         author: username,
         message: commitMessage.trim(),
-      };
-    });
+      });
+    }
 
-    return await Promise.all(commits);
+    return commits;
   } catch (error) {
     throw new Error(`Failed to get commits: ${error.message}`);
   }
@@ -306,9 +321,10 @@ async function generateChangelog(version) {
     console.dir(data);
 
     return [
-      `# Release Notes v${versionNumber} Preview`,
-      `\n**Important:** Upon merging this pull request, the following release notes will be automatically created for version v${versionNumber}.`,
-      `\n<!-- RELEASE-NOTES-VERSION: ${versionNumber} -->`,
+      '# ✨ Release Notes Preview',
+      `\n> **Important:** Upon merging this pull request, the following release notes will be automatically created for version v${versionNumber}.`,
+      '\n---\n',
+      `<!-- RELEASE-NOTES-VERSION: ${versionNumber} -->`,
       '<!-- RELEASE-NOTES-MARKER-START -->',
       `## ${versionNumber} (${getDateString()})\n`,
       data.choices[0].message.content,
