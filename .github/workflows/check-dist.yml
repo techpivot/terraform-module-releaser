@@ -6,8 +6,6 @@ on:
   pull_request:
     branches:
       - main
-  repository_dispatch:
-    types: [release-preview]
 
 permissions:
   contents: read

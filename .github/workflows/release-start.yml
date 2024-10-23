@@ -24,6 +24,7 @@ jobs:
     permissions:
       contents: write # Required to create a new pull request
       pull-requests: write # Required to comment on pull requests
+      actions: write # Required to trigger workflows
     steps:
       - uses: actions/checkout@v4
         with:
@@ -43,7 +44,6 @@ jobs:
       # In order to create signed commits, we need to ensure that we commit without an author name and email.
       # However, this can't be done via git as this is required. We need to leverage the GitHub REST/GraphQL
       # API endpoints.
-      #
       # https://github.com/orgs/community/discussions/24664#discussioncomment-5084236
       - name: Setup ghup [GitHub API Client]
         uses: nexthink-oss/ghup/actions/setup@main
@@ -101,18 +101,13 @@ jobs:
               core.setFailed(error.message);
             }
 
-      - name: Create new PR
+      # Note: We can't change the head branch once a PR is opened. Thus we need to delete any branches
+      # that exist from any existing open pull requests.
+      - name: Close existing release pull requests
         uses: actions/github-script@v7
         with:
           script: |
-            const version = '${{ env.VERSION }}';
-            const prTitle = `chore(release): v${version}`;
-            const branchName = `release-v${version}`;
-            const changelog = ${{ steps.changelog.outputs.result }};
             const prTitleRegex = /^chore\(release\): v\d+\.\d+\.\d+$/;
-
-            // Note: We can't change the head branch once a PR is opened. Thus we need to delete any branches
-            // that exist from any existing open pull requests.
 
             console.log('Searching for existing open PRs ...');
             const { data: existingPRs } = await github.rest.pulls.list({
@@ -150,6 +145,26 @@ jobs:
               }
             }
 
+      # Additional caveat:
+      #   When you use the repository's GITHUB_TOKEN to perform tasks, events triggered by the GITHUB_TOKEN,
+      #   with the exception of workflow_dispatch and repository_dispatch, will not create a new workflow run.
+      #   This prevents you from accidentally creating recursive workflow runs.
+      #
+      # There is no way to even trigger this with a repository_dispatch. Therefore, currently the only way
+      # is to use a separate PAT. In the future we could release a bot to help automate a lot of this.
+      #
+      # https://github.com/orgs/community/discussions/65321
+      - name: Create new pull request
+        uses: actions/github-script@v7
+        id: pull-request
+        with:
+          github-token: ${{ secrets.GH_TOKEN_RELEASE_AUTOMATION }}
+          script: |
+            const version = '${{ env.VERSION }}';
+            const prTitle = `chore(release): v${version}`;
+            const branchName = `release-v${version}`;
+            const changelog = ${{ steps.changelog.outputs.result }};
+
             const prCreateData = {
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -157,7 +172,6 @@ jobs:
               head: '${{ env.BRANCH_NAME }}',
               base: 'main',
               body: changelog,
-              labels: ['release']
             };
             console.log('Creating new PR. Context:');
             console.dir(prCreateData);
@@ -166,10 +180,12 @@ jobs:
             console.log(`Created new PR #${pr.number}`);
 
             // Add labels if they don't exist
-            console.log('Updating PR labels')
+            console.log('Creating PR labels')
             await github.rest.issues.addLabels({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: pr.number,
               labels: ['release']
             });
+
+            return pr.number;
