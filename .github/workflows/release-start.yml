@@ -148,4 +148,4 @@ jobs:
           sign-commits: true # Note: When setting sign-commits: true the action will ignore the committer and author inputs.
           delete-branch: true
           labels: release
-          signoff: true
+          signoff: false # For now, this specifically adds the github-actions[bot] sign-off. Add back when we can customize the trailer
