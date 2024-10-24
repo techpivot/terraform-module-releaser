@@ -14,7 +14,7 @@ jobs:
     if: |
       startsWith(github.event.pull_request.title, 'chore(release):') &&
       contains(github.event.pull_request.body, '<!-- RELEASE-NOTES-MARKER-START -->') &&
-      github.event.pull_request.user.login == 'github-actions[bot]' &&
+      github.event.pull_request.user.login == 'release-preview[bot]' &&
       github.event.pull_request.merged == true
 
     steps:

@@ -30,19 +30,32 @@ Ignore merge commits and minor changes. For each commit, use only the first line
 Translate Conventional Commit messages into professional, human-readable language, avoiding technical jargon.
 
 For each commit, use this format:
-- **Bold 3-5 word Summary** (with related GitHub emoji): Continuation with 1-3 sentence description. @author (optional #PR)
+- **Bold 3-5 word Summary** {optional related GitHub emoji}: Continuation with 1-3 sentence description. @author (optional #PR)
   - Sub-bullets for key details (include only if necessary)
 
-Important formatting rules:
-- Place PR/issue numbers matching the exact pattern #\d+ (e.g., #123) at the end of the section in parentheses.
-- Do not use commit hashes as PR numbers
-- If no PR/issue number is found matching #\\d+, omit the parenthetical reference entirely
-- If the author is specified, include their GitHub username at the end of the section, just before the PR/issue number with a "@" symbol - e.g. @author.
-- If the author is not specified, omit the GitHub username.
-- Only include sub-bullets if they are necessary to clarify the change.
-- Avoid level 4 headings.
-- Use level 3 (###) for sections.
-- Omit sections with no content silently - do not add any notes or explanations about omitted sections.
+Place PR/issue numbers matching the exact pattern #\d+ (e.g., #123) at the end of the section in parentheses.
+
+Do not use commit hashes as PR numbers.
+
+If no PR/issue number is found matching #\\d+, omit the parenthetical reference entirely.
+
+If the author is specified, include their GitHub username at the end of the section, just before the PR/issue number with a "@" symbol - e.g. @author.
+
+If the author is not specified, omit the GitHub username.
+
+Only include sub-bullets if they are necessary to clarify the change.
+
+Do not include any sections with no content.
+
+Do not include sections where there are no grouped changes.
+
+Do not include sections where content is similar to "No breaking changes in this release".
+
+Avoid level 4 headings; use level 3 (###) for sections.
+
+Attempt to add an emoji into the {optional related GitHub emoji} section of the summary that relates to the bold-3-5 word summary and 1-3 sentence description.
+
+Omit sections with no content silently - do not add any notes or explanations about omitted sections.
 `;
 
 // In-memory cache for username lookups
@@ -153,11 +166,11 @@ async function githubApiRequestWithRetry(path, retries = 2) {
  * Attempts to resolve a GitHub username from a commit email address
  * using multiple GitHub API endpoints.
  *
- * @param {string} commitEmail - The email address from the git commit
+ * @param {string} email - The email address from the git commit
  * @returns {Promise<string|null>} - GitHub username if found, null otherwise
  */
-async function resolveGitHubUsername(commitEmail) {
-  console.log('Attempting to resolve username:', commitEmail);
+async function resolveGitHubUsername(email) {
+  console.log('Attempting to resolve username:', email);
 
   // Local resolution - Handle various GitHub email patterns
   const emailMatches = email.match(/^(?:(?:[^@]+)?@)?([^@]+)$/);
@@ -194,38 +207,38 @@ async function resolveGitHubUsername(commitEmail) {
 
   try {
     // First attempt: Direct API search for user by email
-    console.log(`[${commitEmail}] Querying user API`);
+    console.log(`[${email}] Querying user API`);
     const searchResponse = await githubApiRequestWithRetry(
-      `https://api.github.com/search/users?q=${encodeURIComponent(commitEmail)}+in:email`,
+      `https://api.github.com/search/users?q=${encodeURIComponent(email)}+in:email`,
     );
     if (searchResponse?.items && searchResponse.items.length > 0) {
-      console.log(`[${commitEmail}] Found username`);
+      console.log(`[${email}] Found username`);
       // Get the first matching user
       return searchResponse.items[0].login;
     }
-    console.log(`[${commitEmail}] No username found via user API`);
+    console.log(`[${email}] No username found via user API`);
   } catch (error) {
-    console.error(`[${commitEmail}] Error resolving GitHub username via user API:`, error);
+    console.error(`[${email}] Error resolving GitHub username via user API:`, error);
   }
 
   try {
-    console.log(`[${commitEmail}] Querying commit API`);
+    console.log(`[${email}] Querying commit API`);
     // Second attempt: Check commit API for associated username
     const commitSearchResponse = await githubApiRequestWithRetry(
-      `https://api.github.com/search/commits?q=author-email:${encodeURIComponent(commitEmail)}&per_page=25`,
+      `https://api.github.com/search/commits?q=author-email:${encodeURIComponent(email)}&per_page=25`,
     );
     if (commitSearchResponse?.items?.length > 0) {
       // Loop through all items looking for first commit with an author
       for (const commit of commitSearchResponse.items) {
         if (commit.author) {
-          console.log(`[${commitEmail}] Found username from commit ${commit.sha}`);
+          console.log(`[${email}] Found username from commit ${commit.sha}`);
           return commit.author.login;
         }
       }
-      console.log(`[${commitEmail}] No commits with author found in ${commitSearchResponse.items.length} results`);
+      console.log(`[${email}] No commits with author found in ${commitSearchResponse.items.length} results`);
     }
   } catch (error) {
-    console.error(`[${commitEmail}] Error resolving GitHub username via commit API:`, error);
+    console.error(`[${email}] Error resolving GitHub username via commit API:`, error);
   }
 
   return null;

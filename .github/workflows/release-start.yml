@@ -22,13 +22,11 @@ jobs:
     name: release
     runs-on: ubuntu-latest
     permissions:
-      contents: write # Required to create a new pull request
-      pull-requests: write # Required to comment on pull requests
-      actions: write # Required to trigger workflows
+      contents: read # Required to read repo contents. Note: We leverage release-preview app for PR + commit generation
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Get all history
+          fetch-depth: 0 # Get all history which is required for parsing commits
 
       - name: Setup Node.js
         id: setup-node
@@ -41,45 +39,11 @@ jobs:
         id: npm-ci
         run: npm ci --no-fund
 
-      # In order to create signed commits, we need to ensure that we commit without an author name and email.
-      # However, this can't be done via git as this is required. We need to leverage the GitHub REST/GraphQL
-      # API endpoints.
-      # https://github.com/orgs/community/discussions/24664#discussioncomment-5084236
-      - name: Setup ghup [GitHub API Client]
-        uses: nexthink-oss/ghup/actions/setup@main
-        with:
-          version: v0.11.2
-
-      - name: Create new release branch
-        run: |
-          # Delete the branch if it exists on remote
-          if git ls-remote --exit-code --heads origin ${{ env.BRANCH_NAME }}; then
-            echo "Deleting existing branch ${{ env.BRANCH_NAME }}."
-            git push origin --delete ${{ env.BRANCH_NAME }}
-          fi
-
-          # Create a new branch and checkout
-          git checkout -b ${{ env.BRANCH_NAME }}
-
-          # Rebase the branch onto main (or whatever the base branch is)
-          git rebase origin/main
-
       - name: Update package.json version
         run: npm version ${{ env.VERSION }} --no-git-tag-version
 
       - name: Build the package
         run: npm run package
-
-      - name: Commit Changes (via API) using ghup
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GHUP_MESSAGE: "chore(release): bump version to ${{ env.VERSION }}"
-        run: |
-          ghup content dist/* package.json package-lock.json \
-            --trailer "Release-Initiated-By=${{ github.actor }} <${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com>" \
-            --trailer "Build-Logs=https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-            --trailer "Co-Authored-By=github-actions[bot] <github-actions[bot]@users.noreply.github.com>" \
-            --trailer "Release=v${{ env.VERSION }}"
 
       - name: Generate Changelog
         uses: actions/github-script@v7
@@ -88,24 +52,51 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         with:
+          result-encoding: json
           script: |
             const { generateChangelog } = await import('${{ github.workspace }}/.github/scripts/changelog.js');
 
             try {
               const changelog = await generateChangelog("${{ env.VERSION }}");
               console.log('Generated changelog:', changelog);
-
               return changelog;
             } catch (error) {
               console.error('Error generating changelog:', error);
               core.setFailed(error.message);
             }
 
+      # Pull requests created by the action using the default GITHUB_TOKEN cannot trigger other workflows.
+      # If you have on: pull_request or on: push workflows acting as checks on pull requests, they will not run.
+      #
+      # See below for additional documentation on workarounds:
+      #
+      # https://github.com/peter-evans/create-pull-request/blob/main/docs/concepts-guidelines.md#triggering-further-workflow-runs
+
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ secrets.RELEASE_PREVIEW_APP_ID }}
+          private-key: ${{ secrets.RELEASE_PREVIEW_APP_PRIVATE_KEY }}
+
+      - name: Get GitHub App User Details
+        id: app-user
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          user_name="${{ steps.app-token.outputs.app-slug }}[bot]"
+          user_id=$(gh api "/users/${{ steps.app-token.outputs.app-slug }}[bot]" --jq .id)
+          {
+            echo "user-name=${user_name}"
+            echo "user-id=${user_id}"
+            echo "email=${user_id}+${user_name}@users.noreply.github.com"
+          } >> "$GITHUB_OUTPUT"
+
       # Note: We can't change the head branch once a PR is opened. Thus we need to delete any branches
-      # that exist from any existing open pull requests.
+      # that exist from any existing open pull requests. (App Perm = Pull Request: Read + Write)
       - name: Close existing release pull requests
         uses: actions/github-script@v7
         with:
+          github-token: ${{ steps.app-token.outputs.token }}
           script: |
             const prTitleRegex = /^chore\(release\): v\d+\.\d+\.\d+$/;
 
@@ -122,7 +113,7 @@ jobs:
               console.log('Analyzing PR', pr.number, pr.title, pr.user.login);
 
               // Check if the title matches the format and it's created by the correct user
-              if (prTitleRegex.test(pr.title) && pr.user.login === 'github-actions[bot]') {
+              if (prTitleRegex.test(pr.title) && pr.user.login === '${{ steps.app-user.outputs.user-name }}') {
                 console.log(`PR #${pr.number} has a valid title: ${pr.title}`);
 
                 // Close the existing pull request
@@ -145,47 +136,16 @@ jobs:
               }
             }
 
-      # Additional caveat:
-      #   When you use the repository's GITHUB_TOKEN to perform tasks, events triggered by the GITHUB_TOKEN,
-      #   with the exception of workflow_dispatch and repository_dispatch, will not create a new workflow run.
-      #   This prevents you from accidentally creating recursive workflow runs.
-      #
-      # There is no way to even trigger this with a repository_dispatch. Therefore, currently the only way
-      # is to use a separate PAT. In the future we could release a bot to help automate a lot of this.
-      #
-      # https://github.com/orgs/community/discussions/65321
-      - name: Create new pull request
-        uses: actions/github-script@v7
-        id: pull-request
+      - name: Create Branch and Pull Request
+        uses: peter-evans/create-pull-request@v7
         with:
-          github-token: ${{ secrets.GH_TOKEN_RELEASE_AUTOMATION }}
-          script: |
-            const version = '${{ env.VERSION }}';
-            const prTitle = `chore(release): v${version}`;
-            const branchName = `release-v${version}`;
-            const changelog = ${{ steps.changelog.outputs.result }};
-
-            const prCreateData = {
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: prTitle,
-              head: '${{ env.BRANCH_NAME }}',
-              base: 'main',
-              body: changelog,
-            };
-            console.log('Creating new PR. Context:');
-            console.dir(prCreateData);
-
-            const { data: pr } = await github.rest.pulls.create(prCreateData);
-            console.log(`Created new PR #${pr.number}`);
-
-            // Add labels if they don't exist
-            console.log('Creating PR labels')
-            await github.rest.issues.addLabels({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: pr.number,
-              labels: ['release']
-            });
-
-            return pr.number;
+          token: ${{ steps.app-token.outputs.token }}
+          base: main
+          branch: ${{ env.BRANCH_NAME }}
+          title: "chore(release): v${{ env.VERSION }}"
+          body: ${{ fromJSON(steps.changelog.outputs.result) }}
+          commit-message: "chore(release): v${{ env.VERSION }}"
+          sign-commits: true # Note: When setting sign-commits: true the action will ignore the committer and author inputs.
+          delete-branch: true
+          labels: release
+          signoff: true
