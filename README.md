@@ -101,8 +101,8 @@ on:
       - main
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: write # Required for to push tags, create release, and push changes to the wiki
+  pull-requests: write # Required to comment on pull request
 
 jobs:
   release:
@@ -134,22 +134,46 @@ requests and creating releases.
 If the permissions are insufficient, the action may fail with a 403 error, indicating a lack of access to the necessary
 resources.
 
+## Directory Structure Best Practices
+
+- Avoid placing nested Terraform modules within a sub-directory of another module, as this practice can lead to issues
+  with dependency management and module separation. Instead, structure your repository with multiple levels of
+  folders/directories to organize modules while keeping each Terraform module isolated within its dedicated directory.
+  This approach promotes maintainability and helps ensure clarity across modules.
+
+- We recommend structuring modules with a top-level namespace that is related to a major provider (e.g., `aws`, `azure`,
+  or `null`). Within this namespace, use a nested directory to house the actual module with a name that corresponds
+  closely to its intended purpose or resource. For example:
+
+  ```shell
+  ├── aws
+  │   ├── vpc
+  │   └── ec2
+  ├── azure
+  │   ├── resource-group
+  │   └── storage-account
+  └── null
+      └── label
+  ```
+
 ## Input Parameters
 
 While the out-of-the-box defaults are suitable for most use cases, you can further customize the action's behavior by
 configuring the following optional input parameters as needed.
 
-| Input                        | Description                                                                                                                                 | Default                        |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
-| `major-keywords`             | Keywords in commit messages that indicate a major release                                                                                   | `major change,breaking change` |
-| `minor-keywords`             | Keywords in commit messages that indicate a minor release                                                                                   | `feat,feature`                 |
-| `patch-keywords`             | Keywords in commit messages that indicate a patch release                                                                                   | `fix,chore,docs`               |
-| `default-first-tag`          | Specifies the default tag version                                                                                                           | `v1.0.0`                       |
-| `terraform-docs-version`     | Specifies the terraform-docs version used to generate documentation for the wiki                                                            | `v0.19.0`                      |
-| `delete-legacy-tags`         | Specifies a boolean that determines whether tags and releases from Terraform modules that have been deleted should be automatically removed | `true`                         |
-| `disable-wiki`               | Whether to disable wiki generation for Terraform modules                                                                                    | `false`                        |
-| `wiki-sidebar-changelog-max` | An integer that specifies how many changelog entries are displayed in the sidebar per module                                                | `5`                            |
-| `disable-branding`           | Controls whether a small branding link to the action's repository is added to PR comments. Recommended to leave enabled to support OSS.     | `false`                        |
+| Input                            | Description                                                                                                                                                                                                                                                                                                                                                                                        | Default                                   |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| `major-keywords`                 | Keywords in commit messages that indicate a major release                                                                                                                                                                                                                                                                                                                                          | `major change,breaking change`            |
+| `minor-keywords`                 | Keywords in commit messages that indicate a minor release                                                                                                                                                                                                                                                                                                                                          | `feat,feature`                            |
+| `patch-keywords`                 | Keywords in commit messages that indicate a patch release                                                                                                                                                                                                                                                                                                                                          | `fix,chore,docs`                          |
+| `default-first-tag`              | Specifies the default tag version                                                                                                                                                                                                                                                                                                                                                                  | `v1.0.0`                                  |
+| `terraform-docs-version`         | Specifies the terraform-docs version used to generate documentation for the wiki                                                                                                                                                                                                                                                                                                                   | `v0.19.0`                                 |
+| `delete-legacy-tags`             | Specifies a boolean that determines whether tags and releases from Terraform modules that have been deleted should be automatically removed                                                                                                                                                                                                                                                        | `true`                                    |
+| `disable-wiki`                   | Whether to disable wiki generation for Terraform modules                                                                                                                                                                                                                                                                                                                                           | `false`                                   |
+| `wiki-sidebar-changelog-max`     | An integer that specifies how many changelog entries are displayed in the sidebar per module                                                                                                                                                                                                                                                                                                       | `5`                                       |
+| `disable-branding`               | Controls whether a small branding link to the action's repository is added to PR comments. Recommended to leave enabled to support OSS.                                                                                                                                                                                                                                                            | `false`                                   |
+| `module-change-exclude-patterns` | A comma-separated list of file patterns to exclude from triggering version changes in Terraform modules. Patterns follow glob syntax (e.g., ".gitignore,_.md") and are relative to each Terraform module directory. Files matching these patterns will not affect version changes. **WARNING**: Avoid excluding '_.tf' files, as they are essential for module detection and versioning processes. | `".gitignore,*.md,*.tftest.hcl,tests/**"` |
+| `module-asset-exclude-patterns`  | A comma-separated list of file patterns to exclude when bundling a Terraform module for tag/release. Patterns follow glob syntax (e.g., "tests/\*\*") and are relative to each Terraform module directory. Files matching these patterns will be excluded from the bundled output.                                                                                                                 | `".gitignore,*.md,*.tftest.hcl,tests/**"` |
 
 ### Example Usage with Inputs
 
@@ -162,8 +186,8 @@ on:
       - main
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: write # Required for to push tags, create release, and push changes to the wiki
+  pull-requests: write # Required to comment on pull request
 
 jobs:
   release:
@@ -178,12 +202,13 @@ jobs:
           major-keywords: major update,breaking change
           minor-keywords: feat,feature
           patch-keywords: fix,chore,docs
-          default-first-tag: v2.0.0
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          terraform-docs-version: v0.20.0
+          default-first-tag: v1.0.0
+          terraform-docs-version: v0.19.0
           delete-legacy-tags: true
           disable-wiki: false
           wiki-sidebar-changelog-max: 10
+          module-change-exclude-patterns: .gitignore,*.md,*.tftest.hcl,tests/**
+          module-asset-exclude-patterns: .gitignore,*.md,*.tftest.hcl,tests/**
 ```
 
 ## Inspiration

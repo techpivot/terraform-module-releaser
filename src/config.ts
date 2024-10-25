@@ -64,14 +64,33 @@ interface Config {
    * This token is required to make secure API requests to GitHub during the action.
    */
   githubToken: string;
+
+  /**
+   * A comma-separated list of file patterns to exclude from triggering version changes in Terraform modules.
+   * These patterns follow glob syntax (e.g., ".gitignore,*.md") and are relative to each Terraform module directory within
+   * the repository, rather than the workspace root. Patterns are used for filtering files within module directories, allowing
+   * for specific exclusions like documentation or non-Terraform code changes that do not require a version increment.
+   */
+  moduleChangeExcludePatterns: string[];
+  /**
+   * A comma-separated list of file patterns to exclude when bundling a Terraform module for tag/release.
+   * These patterns follow glob syntax (e.g., "tests/**") and are relative to each Terraform module directory within
+   * the repository. By default, all non-functional Terraform files and directories are excluded to reduce the size of the
+   * bundled assets. This helps ensure that any imported file is correctly mapped, while allowing for further exclusions of
+   * tests and other non-functional files as needed.
+   */
+  moduleAssetExcludePatterns: string[];
 }
 
 // The config object will be initialized lazily
 let configInstance: Config | null = null;
 
-// Function to split keywords
-const getKeywords = (inputName: string): string[] => {
-  return getInput(inputName, { required: true }).split(',');
+// Function to split keywords or patterns
+const getArrayInput = (inputName: string): string[] => {
+  return getInput(inputName, { required: true })
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
 };
 
 /**
@@ -86,9 +105,9 @@ function initializeConfig(): Config {
 
   // Initialize the config instance
   configInstance = {
-    majorKeywords: getKeywords('major-keywords'),
-    minorKeywords: getKeywords('minor-keywords'),
-    patchKeywords: getKeywords('patch-keywords'),
+    majorKeywords: getArrayInput('major-keywords'),
+    minorKeywords: getArrayInput('minor-keywords'),
+    patchKeywords: getArrayInput('patch-keywords'),
     defaultFirstTag: getInput('default-first-tag', { required: true }),
     terraformDocsVersion: getInput('terraform-docs-version', { required: true }),
     deleteLegacyTags: getInput('delete-legacy-tags', { required: true }).toLowerCase() === 'true',
@@ -96,6 +115,8 @@ function initializeConfig(): Config {
     wikiSidebarChangelogMax: Number.parseInt(getInput('wiki-sidebar-changelog-max', { required: true }), 10),
     disableBranding: getInput('disable-branding', { required: true }).toLowerCase() === 'true',
     githubToken: getInput('github_token', { required: true }),
+    moduleChangeExcludePatterns: getArrayInput('module-change-exclude-patterns'),
+    moduleAssetExcludePatterns: getArrayInput('module-asset-exclude-patterns'),
   };
 
   info(`Major Keywords: ${configInstance.majorKeywords.join(', ')}`);
@@ -106,6 +127,16 @@ function initializeConfig(): Config {
   info(`Delete Legacy Tags: ${configInstance.deleteLegacyTags}`);
   info(`Disable Wiki: ${configInstance.disableWiki}`);
   info(`Wiki Sidebar Changelog Max: ${configInstance.wikiSidebarChangelogMax}`);
+  info(`Module Change Exclude Patterns: ${configInstance.moduleChangeExcludePatterns.join(', ')}`);
+  info(`Module Asset Exclude Patterns: ${configInstance.moduleAssetExcludePatterns.join(', ')}`);
+
+  // Validate that *.tf is not in excludePatterns
+  if (configInstance.moduleChangeExcludePatterns.some((pattern) => pattern === '*.tf')) {
+    throw new Error('Exclude patterns cannot contain "*.tf" as it is required for module detection');
+  }
+  if (configInstance.moduleAssetExcludePatterns.some((pattern) => pattern === '*.tf')) {
+    throw new Error('Asset exclude patterns cannot contain "*.tf" as these files are required');
+  }
 
   endGroup();
 

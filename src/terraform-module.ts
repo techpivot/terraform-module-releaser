@@ -1,6 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { debug, endGroup, info, startGroup } from '@actions/core';
+import { config } from './config';
+import { shouldExcludeFile } from './file-util';
 import type { CommitDetails } from './pull-request';
 import type { GitHubRelease } from './releases';
 import type { ReleaseType } from './semver';
@@ -109,10 +111,10 @@ function isTerraformDirectory(dirPath: string): boolean {
  * - Removing any remaining whitespace
  * - Lowercase (for consistency)
  *
- * @param {string} terraformDir - The directory path from which to generate the module name.
+ * @param {string} terraformDirectory - The directory path from which to generate the module name.
  * @returns {string} A valid Terraform module name based on the provided directory path.
  */
-function getTerraformModuleNameFromDirectory(terraformDirectory: string): string {
+function getTerraformModuleNameFromRelativePath(terraformDirectory: string): string {
   return terraformDirectory
     .trim() // Remove leading/trailing whitespace
     .replace(/[^a-zA-Z0-9/_-]+/g, '-') // Remove invalid characters, allowing a-z, A-Z, 0-9, /, _, -
@@ -127,44 +129,40 @@ function getTerraformModuleNameFromDirectory(terraformDirectory: string): string
 }
 
 /**
- * Retrieves the Terraform module name associated with a specified file path.
+ * Gets the relative path of the Terraform module directory associated with a specified file.
  *
- * This function navigates upwards from the file's directory to find the nearest
- * Terraform directory. If a Terraform directory is found, it returns the
- * module name relative to the current working directory.
+ * Traverses upward from the file’s directory to locate the nearest Terraform module directory.
+ * Returns the module's path relative to the current working directory.
  *
  * @param {string} filePath - The absolute or relative path of the file to analyze.
- * @returns {string | null} The name of the associated Terraform module, or null
- *                          if no Terraform directory is found before reaching the root.
+ * @returns {string | null} Relative path to the associated Terraform module directory, or null
+ *                          if no directory is found.
  */
-function getTerraformModuleNameAssociatedWithFile(filePath: string): string | null {
+function getTerraformModuleDirectoryRelativePath(filePath: string): string | null {
   let directory = path.resolve(path.dirname(filePath)); // Convert to absolute path
   const cwd = process.cwd();
   const rootDir = path.resolve(cwd); // Get absolute path to current working directory
 
-  // Loop upwards until the current working directory (rootDir) is reached
+  // Traverse upward until the current working directory (rootDir) is reached
   while (directory !== rootDir && directory !== path.resolve(directory, '..')) {
     if (isTerraformDirectory(directory)) {
-      return getTerraformModuleNameFromDirectory(path.relative(cwd, directory));
+      return path.relative(cwd, directory);
     }
 
     directory = path.resolve(directory, '..'); // Move up a directory
   }
 
-  // Root folder is not allowed as we need a name
+  // Return null if no Terraform module directory is found
   return null;
 }
 
 /**
- * Retrieves the current tags and versions for a specified module directory.
+ * Retrieves the tags for a specified module directory, filtering tags that match the module pattern
+ * and sorting by versioning in descending order.
  *
- * This helper function filters tags that match the module directory pattern,
- * sorts them based on versioning in descending order, and returns the latest tag,
- * the latest version, and an array of all matching tags.
- *
- * @param {string} moduleName - The terraform module name for which to find the current tags.
+ * @param {string} moduleName - The Terraform module name to find current tags.
  * @param {string[]} allTags - An array of all available tags.
- * @returns {{latestTag: string | null, latestTagVersion: string | null, tags: string[]}} An object containing the latest tag, latest tag version, and an array of matching tags.
+ * @returns {Object} An object with the latest tag, latest tag version, and an array of all matching tags.
  */
 function getTagsForModule(
   moduleName: string,
@@ -194,12 +192,10 @@ function getTagsForModule(
 /**
  * Retrieves the relevant GitHub releases for a specified module directory.
  *
- * This function filters releases that are relevant to the module directory,
- * sorts them by the latest release (assuming the latest release is at the top),
- * and returns all relevant releases.
+ * Filters releases for the module and sorts by version in descending order.
  *
- * @param {string} moduleName - The terraform module name for which to find the relevant releases tags.
- * @param {GitHubRelease[]} allReleases - An array of all GitHub releases.
+ * @param {string} moduleName - The Terraform module name for which to find relevant release tags.
+ * @param {GitHubRelease[]} allReleases - An array of GitHub releases.
  * @returns {GitHubRelease[]} An array of releases relevant to the module, sorted with the latest first.
  */
 function getReleasesForModule(moduleName: string, allReleases: GitHubRelease[]): GitHubRelease[] {
@@ -218,20 +214,18 @@ function getReleasesForModule(moduleName: string, allReleases: GitHubRelease[]):
 }
 
 /**
- * Retrieves all Terraform modules within the specified workspace directory,
- * along with any changes associated with commits provided. It analyzes
- * the directory structure to identify modules and checks commit history
- * to determine if any modules have changed, updating their details accordingly.
+ * Retrieves all Terraform modules within the specified workspace directory and any changes based on commits.
+ * Analyzes the directory structure to identify modules and checks commit history for changes.
  *
  * @param {string} workspaceDir - The root directory of the workspace containing Terraform modules.
- * @param {CommitDetails[]} commits - An array of commit details to analyze for changes.
- * @param {string[]} allTags - A list of all tags associated with the modules.
- * @param {GitHubRelease[]} allReleases - An array of GitHub releases for the modules.
- * @returns {(TerraformModule | TerraformChangedModule)[]} - An array of Terraform modules, each containing their
- *    corresponding change details. The modules may either be of type `TerraformModule` or `TerraformChangedModule`.
- * @throws {Error} - Throws an error if a module associated with a file is not found in the
- *    terraformModulesMap, indicating a mismatch in expected module structure.
+ * @param {CommitDetails[]} commits - Array of commit details to analyze for changes.
+ * @param {string[]} allTags - List of all tags associated with the modules.
+ * @param {GitHubRelease[]} allReleases - GitHub releases for the modules.
+ * @returns {(TerraformModule | TerraformChangedModule)[]} Array of Terraform modules with their corresponding
+ *   change details.
+ * @throws {Error} - If a module associated with a file is missing from the terraformModulesMap.
  */
+
 export function getAllTerraformModules(
   workspaceDir: string,
   commits: CommitDetails[],
@@ -254,7 +248,7 @@ export function getAllTerraformModules(
       // If it's a directory, recursively search inside it
       if (stat.isDirectory()) {
         if (isTerraformDirectory(filePath)) {
-          const moduleName = getTerraformModuleNameFromDirectory(path.relative(workspaceDir, filePath));
+          const moduleName = getTerraformModuleNameFromRelativePath(path.relative(workspaceDir, filePath));
           terraformModulesMap[moduleName] = {
             moduleName,
             directory: filePath,
@@ -273,13 +267,24 @@ export function getAllTerraformModules(
 
   // Now process commits to find changed modules
   for (const { message, sha, files } of commits) {
-    info(`Parsing commit ${sha}: ${message}`);
+    info(`Parsing commit ${sha}: ${message.trim().split('\n')[0].trim()} (Changed Files = ${files.length})`);
 
-    for (const filePath of files) {
-      const moduleName = getTerraformModuleNameAssociatedWithFile(filePath);
+    for (const relativeFilePath of files) {
+      info(`Analyzing file: ${relativeFilePath}`);
+      const moduleRelativePath = getTerraformModuleDirectoryRelativePath(relativeFilePath);
 
-      if (moduleName === null) {
+      if (moduleRelativePath === null) {
         // File isn't associated with a Terraform module
+        continue;
+      }
+
+      const moduleName = getTerraformModuleNameFromRelativePath(moduleRelativePath);
+
+      // Skip excluded files based on provided pattern
+      if (shouldExcludeFile(moduleRelativePath, relativeFilePath, config.moduleChangeExcludePatterns)) {
+        // Note: This could happen if we detect a change in a subdirectory of a terraform module
+        // but the change is in a file that we want to exclude.
+        info(`Excluding module "${moduleName}" match from "${relativeFilePath}" due to exclude pattern match.`);
         continue;
       }
 
@@ -287,8 +292,9 @@ export function getAllTerraformModules(
 
       if (!module) {
         // Module not found in the map, this should not happen
-        debug(moduleName);
-        throw new Error('Found code associated with a terraform module; however, associated module does not exist');
+        throw new Error(
+          `Found changed file "${relativeFilePath}" associated with a terraform module "${moduleName}"; however, associated module does not exist`,
+        );
       }
 
       // Update the module with the TerraformChangedModule properties
