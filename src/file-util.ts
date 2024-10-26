@@ -44,13 +44,11 @@ export function copyModuleContents(directory: string, tmpDir: string, baseDirect
       fs.mkdirSync(newDir, { recursive: true });
       // Note: Important we pass the original base directory.
       copyModuleContents(filePath, newDir, baseDir); // Recursion for directory contents
-    } else {
+    } else if (!shouldExcludeFile(baseDir, filePath, config.moduleAssetExcludePatterns)) {
       // Handle file copying
-      if (!shouldExcludeFile(baseDir, filePath, config.moduleAssetExcludePatterns)) {
-        fs.copyFileSync(filePath, path.join(tmpDir, file));
-      } else {
-        info(`Excluding file: ${filePath}`);
-      }
+      fs.copyFileSync(filePath, path.join(tmpDir, file));
+    } else {
+      info(`Excluding file: ${filePath}`);
     }
   }
 }
