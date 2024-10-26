@@ -28,7 +28,7 @@ export function shouldExcludeFile(baseDirectory: string, filePath: string, exclu
  *                                    Defaults to the source directory if not provided.
  */
 export function copyModuleContents(directory: string, tmpDir: string, baseDirectory?: string) {
-  const baseDir = baseDirectory || directory;
+  const baseDir = baseDirectory ?? directory;
 
   // Read the directory contents
   const filesToCopy = fs.readdirSync(directory);
