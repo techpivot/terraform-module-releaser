@@ -14,7 +14,7 @@ export function determineReleaseType(message: string, previousReleaseType: Relea
   const messageCleaned = message.toLowerCase().trim();
 
   // Destructure keywords from config
-  const { majorKeywords, minorKeywords, patchKeywords } = config;
+  const { majorKeywords, minorKeywords } = config;
 
   // Determine release type from message
   let currentReleaseType: ReleaseType = 'patch';
@@ -32,6 +32,9 @@ export function determineReleaseType(message: string, previousReleaseType: Relea
     return 'minor';
   }
 
+  // Note: For now, we don't have a separate default increment config and therefore we'll always
+  // return true which somewhat negates searching for patch keywords; however, in the future
+  // there may be a usecase where we make this configurable.
   return 'patch';
 }
 
