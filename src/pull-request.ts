@@ -214,7 +214,7 @@ export async function getPullRequestCommits(): Promise<CommitDetails[]> {
 export async function addReleasePlanComment(
   terraformChangedModules: TerraformChangedModule[],
   terraformModuleNamesToRemove: string[],
-  wikiStatus: { status: WikiStatus; errorMessage?: string | undefined },
+  wikiStatus: { status: WikiStatus; errorMessage?: string },
 ): Promise<void> {
   console.time('Elapsed time commenting on pull request');
   startGroup('Adding pull request release plan comment');

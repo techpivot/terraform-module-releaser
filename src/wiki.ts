@@ -271,11 +271,11 @@ async function updateWikiSidebar(terraformModules: TerraformModule[]): Promise<v
         const heading = headingMatch[1].trim();
 
         // Convert heading into a valid ID string (keep only [a-zA-Z0-9-_]) But we need spaces to go to a '-'
-        const idString = heading.replace(/[ ]+/g, '-').replace(/[^a-zA-Z0-9-_]/g, '');
+        const idString = heading.replace(/ +/g, '-').replace(/[^a-zA-Z0-9-_]/g, '');
 
         // Append the entry to changelogEntries
         changelogEntries.push(
-          `            <li><a href="${baselink}#${idString}">${heading.replace(/[`]/g, '')}</a></li>`,
+          `            <li><a href="${baselink}#${idString}">${heading.replace(/`/g, '')}</a></li>`,
         );
       }
 
