@@ -101,3 +101,5 @@ __tests__/runner/*
 .idea
 .vscode
 *.code-workspace
+# Ignore test
+*.tftest.hcl
