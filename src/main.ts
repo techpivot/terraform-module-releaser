@@ -6,8 +6,7 @@ import { createTaggedRelease, deleteLegacyReleases, getAllReleases } from './rel
 import { deleteLegacyTags, getAllTags } from './tags';
 import { installTerraformDocs } from './terraform-docs';
 import { getAllTerraformModules, getTerraformChangedModules, getTerraformModulesToRemove } from './terraform-module';
-import { checkoutWiki, updateWiki } from './wiki';
-import { WikiStatus } from './wiki';
+import { WikiStatus, checkoutWiki, updateWiki } from './wiki';
 
 /**
  * The main function for the action.
