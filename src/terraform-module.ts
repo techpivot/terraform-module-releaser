@@ -115,17 +115,31 @@ function isTerraformDirectory(dirPath: string): boolean {
  * @returns {string} A valid Terraform module name based on the provided directory path.
  */
 function getTerraformModuleNameFromRelativePath(terraformDirectory: string): string {
-  return terraformDirectory
+  // Use a loop to remove trailing dots without regex. Instead of using regex, this code iteratively
+  // checks each character from the end of the string. It decreases the endIndex until it finds a
+  // non-dot character. This approach runs in O(n) time, where n is the length of the string.
+  // It avoids the backtracking issues associated with regex patterns, making it more robust against
+  // potential DoS attacks.
+  const removeTrailingDots = (input: string) => {
+    let endIndex = input.length;
+    while (endIndex > 0 && input[endIndex - 1] === '.') {
+      endIndex--;
+    }
+    return input.slice(0, endIndex);
+  };
+
+  const cleanedDirectory = terraformDirectory
     .trim() // Remove leading/trailing whitespace
     .replace(/[^a-zA-Z0-9/_-]+/g, '-') // Remove invalid characters, allowing a-z, A-Z, 0-9, /, _, -
     .replace(/\/{2,}/g, '/') // Replace multiple consecutive slashes with a single slash
     .replace(/\/\.+/g, '/') // Remove slashes followed by dots
     .replace(/(^\/|\/$)/g, '') // Remove leading/trailing slashes
-    .replace(/\.+$/, '') // Remove trailing dots
     .replace(/\.\.+/g, '.') // Replace consecutive dots with a single dot
     .replace(/--+/g, '-') // Replace consecutive hyphens with a single hyphen
     .replace(/\s+/g, '') // Remove any remaining whitespace
     .toLowerCase(); // All of our module names will be lowercase
+
+  return removeTrailingDots(cleanedDirectory);
 }
 
 /**
