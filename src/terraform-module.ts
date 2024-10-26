@@ -123,7 +123,7 @@ function getTerraformModuleNameFromRelativePath(terraformDirectory: string): str
     .replace(/(^\/|\/$)/g, '') // Remove leading/trailing slashes
     .replace(/\.+$/, '') // Remove trailing dots
     .replace(/\.\.+/g, '.') // Replace consecutive dots with a single dot
-    .replace(/\-\-+/g, '-') // Replace consecutive hyphens with a single hyphen
+    .replace(/--+/g, '-') // Replace consecutive hyphens with a single hyphen
     .replace(/\s+/g, '') // Remove any remaining whitespace
     .toLowerCase(); // All of our module names will be lowercase
 }
