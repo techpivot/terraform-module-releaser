@@ -6,7 +6,7 @@ import { createTaggedRelease, deleteLegacyReleases, getAllReleases } from './rel
 import { deleteLegacyTags, getAllTags } from './tags';
 import { installTerraformDocs } from './terraform-docs';
 import { getAllTerraformModules, getTerraformChangedModules, getTerraformModulesToRemove } from './terraform-module';
-import { WikiStatus, checkoutWiki, updateWiki } from './wiki';
+import { WikiStatus, checkoutWiki, commitAndPushWikiChanges, generateWikiFiles } from './wiki';
 
 /**
  * The main function for the action.
@@ -64,6 +64,10 @@ export async function run(): Promise<void> {
       if (error !== undefined) {
         throw error;
       }
+
+      installTerraformDocs(config.terraformDocsVersion);
+      await generateWikiFiles(terraformModules);
+      commitAndPushWikiChanges();
     } else {
       // Create the tagged release and post a comment to the PR
       const updatedModules = await createTaggedRelease(terraformChangedModules);
@@ -78,7 +82,8 @@ export async function run(): Promise<void> {
       } else {
         installTerraformDocs(config.terraformDocsVersion);
         checkoutWiki();
-        updateWiki(terraformModules);
+        await generateWikiFiles(terraformModules);
+        commitAndPushWikiChanges();
       }
     }
   } catch (error) {
