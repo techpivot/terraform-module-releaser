@@ -64,10 +64,6 @@ export async function run(): Promise<void> {
       if (error !== undefined) {
         throw error;
       }
-
-      installTerraformDocs(config.terraformDocsVersion);
-      await generateWikiFiles(terraformModules);
-      commitAndPushWikiChanges();
     } else {
       // Create the tagged release and post a comment to the PR
       const updatedModules = await createTaggedRelease(terraformChangedModules);
