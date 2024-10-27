@@ -44,15 +44,15 @@ export function installTerraformDocs(terraformDocsVersion: string): void {
   const platform = process.platform;
   const goArch = getGoArch(process.arch);
 
-  execFileSync('curl', [
+  execFileSync('/usr/bin/curl', [
     '-sSLo',
     './terraform-docs.tar.gz',
     `https://terraform-docs.io/dl/${terraformDocsVersion}/terraform-docs-${terraformDocsVersion}-${platform}-${goArch}.tar.gz`,
   ]);
 
-  execFileSync('tar', ['-xzf', 'terraform-docs.tar.gz']);
-  execFileSync('chmod', ['+x', 'terraform-docs']);
-  execFileSync('sudo', ['mv', 'terraform-docs', '/usr/local/bin/terraform-docs']); // Alternatively, use custom non elevated path
+  execFileSync('/usr/bin/tar', ['-xzf', 'terraform-docs.tar.gz']);
+  execFileSync('/usr/bin/chmod', ['+x', 'terraform-docs']);
+  execFileSync('/usr/bin/sudo', ['mv', 'terraform-docs', '/usr/local/bin/terraform-docs']); // Alternatively, use custom non elevated path
   execFileSync('/usr/local/bin/terraform-docs', ['--version'], { stdio: 'inherit' });
   endGroup();
 }
