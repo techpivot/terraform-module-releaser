@@ -52,3 +52,53 @@ export function copyModuleContents(directory: string, tmpDir: string, baseDirect
     }
   }
 }
+
+/**
+ * Removes all contents of a specified directory except for specified items to preserve.
+ *
+ * @param directory - The path of the directory to clear.
+ * @param exceptions - An array of filenames or directory names to preserve within the directory.
+ *
+ * This function removes all files and subdirectories within the specified directory while
+ * retaining any items listed in the `exceptions` array. The names in `exceptions` should be
+ * relative to the `directory` (e.g., `['.git', 'README.md']`), referring to items within the
+ * directory you want to keep.
+ *
+ * ### Example Usage:
+ *
+ * Suppose you have a directory structure:
+ * ```
+ * /example-directory/
+ * ├── .git/
+ * ├── config.json
+ * ├── temp/
+ * └── README.md
+ * ```
+ *
+ * Using `removeDirectoryContents('/example-directory', ['.git', 'README.md'])` will:
+ * - Remove `config.json` and the `temp` folder.
+ * - Preserve the `.git` directory and `README.md` file within `/example-directory`.
+ *
+ * **Note:**
+ * - Items in `exceptions` are matched only by their names relative to the given `directory`.
+ * - If the `.git` directory or `README.md` file were in a nested subdirectory within `/example-directory`,
+ *   you would need to adjust the `exceptions` parameter accordingly to reflect the correct relative path.
+ *
+ * @example
+ * removeDirectoryContents('/home/user/project', ['.git', 'important-file.txt']);
+ * // This would remove all contents inside `/home/user/project`, except for the `.git` directory
+ * // and the `important-file.txt` file.
+ */
+export function removeDirectoryContents(directory: string, exceptions: string[] = []): void {
+  if (fs.existsSync(directory)) {
+    for (const item of fs.readdirSync(directory)) {
+      const itemPath = path.join(directory, item);
+
+      // Skip removal for items listed in the exceptions array
+      if (!exceptions.includes(item)) {
+        fs.rmSync(itemPath, { recursive: true, force: true });
+      }
+    }
+    info(`Removed contents of directory [${directory}], preserving items: ${exceptions.join(', ')}`);
+  }
+}
