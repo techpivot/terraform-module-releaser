@@ -293,7 +293,10 @@ async function generateWikiSidebar(terraformModules: TerraformModule[]): Promise
     const changelogContent = getModuleReleaseChangelog(module);
 
     // Regex to capture all headings starting with '## ' on a single line
-    const headingRegex = /^(?:#{2,3})\s+(.+)$/gm; // Matches '##' or '###' headings
+    // Note: Use ([^\n]+) Instead of (.+):
+    // The pattern [^\n]+ matches one or more characters that are not a newline. This restricts matches
+    // to a single line and reduces backtracking possibilities since it won't consume any newlines.
+    const headingRegex = /^(?:#{2,3})\s+([^\n]+)/gm; // Matches '##' or '###' headings
 
     // Initialize changelog entries
     const changelogEntries = [];
