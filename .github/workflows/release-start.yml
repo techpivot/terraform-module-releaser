@@ -45,6 +45,12 @@ jobs:
       - name: Build the package
         run: npm run package
 
+      - name: Run Tests Typescript
+        run: npm run test
+
+      - name: Update Coverage Badge
+        run: npm run coverage
+
       - name: Generate Changelog
         uses: actions/github-script@v7
         id: changelog

@@ -9,6 +9,7 @@ documentation.</b></sup>
 [![Lint](https://github.com/techpivot/terraform-module-releaser/actions/workflows/lint.yml/badge.svg)][3]
 [![CodeQL](https://github.com/techpivot/terraform-module-releaser/actions/workflows/codeql-analysis.yml/badge.svg)][4]
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=techpivot_terraform-module-releaser&metric=alert_status)][5]
+[![Coverage](./assets/coverage-badge.svg)](./assets/coverage-badge.svg)
 
 [1]: https://github.com/techpivot/terraform-module-releaser/releases/latest
 [2]: https://github.com/marketplace/actions/terraform-module-releaser
