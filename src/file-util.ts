@@ -2,7 +2,6 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { info } from '@actions/core';
 import { minimatch } from 'minimatch';
-import { config } from './config';
 
 /**
  * Checks if a file should be excluded from matching based on the defined exclude patterns
@@ -15,7 +14,18 @@ import { config } from './config';
  */
 export function shouldExcludeFile(baseDirectory: string, filePath: string, excludePatterns: string[]): boolean {
   const relativePath = path.relative(baseDirectory, filePath);
-  return excludePatterns.some((pattern: string) => minimatch(relativePath, pattern, { matchBase: true }));
+
+  // Expand patterns to include both directories and their contents, then remove duplicates
+  const expandedPatterns = Array.from(
+    new Set(
+      excludePatterns.flatMap((pattern) => [
+        pattern, // Original pattern
+        pattern.replace(/\/(?:\*\*)?$/, ''), // Match directories themselves, like `tests2/`
+      ]),
+    ),
+  );
+
+  return expandedPatterns.some((pattern: string) => minimatch(relativePath, pattern, { matchBase: true }));
 }
 
 /**
@@ -24,10 +34,16 @@ export function shouldExcludeFile(baseDirectory: string, filePath: string, exclu
  *
  * @param {string} directory - The directory to copy from.
  * @param {string} tmpDir - The temporary directory to copy to.
+ * @param {string[]} excludePatterns - An array of patterns to match against for exclusion.
  * @param {string} [baseDirectory] - The base directory for exclusion pattern matching.
  *                                    Defaults to the source directory if not provided.
  */
-export function copyModuleContents(directory: string, tmpDir: string, baseDirectory?: string) {
+export function copyModuleContents(
+  directory: string,
+  tmpDir: string,
+  excludePatterns: string[],
+  baseDirectory?: string,
+) {
   const baseDir = baseDirectory ?? directory;
 
   // Read the directory contents
@@ -43,8 +59,8 @@ export function copyModuleContents(directory: string, tmpDir: string, baseDirect
       const newDir = path.join(tmpDir, file);
       fs.mkdirSync(newDir, { recursive: true });
       // Note: Important we pass the original base directory.
-      copyModuleContents(filePath, newDir, baseDir); // Recursion for directory contents
-    } else if (!shouldExcludeFile(baseDir, filePath, config.moduleAssetExcludePatterns)) {
+      copyModuleContents(filePath, newDir, excludePatterns, baseDir); // Recursion for directory contents
+    } else if (!shouldExcludeFile(baseDir, filePath, excludePatterns)) {
       // Handle file copying
       fs.copyFileSync(filePath, path.join(tmpDir, file));
     } else {
@@ -90,15 +106,18 @@ export function copyModuleContents(directory: string, tmpDir: string, baseDirect
  * // and the `important-file.txt` file.
  */
 export function removeDirectoryContents(directory: string, exceptions: string[] = []): void {
-  if (fs.existsSync(directory)) {
-    for (const item of fs.readdirSync(directory)) {
-      const itemPath = path.join(directory, item);
-
-      // Skip removal for items listed in the exceptions array
-      if (!exceptions.includes(item)) {
-        fs.rmSync(itemPath, { recursive: true, force: true });
-      }
-    }
-    info(`Removed contents of directory [${directory}], preserving items: ${exceptions.join(', ')}`);
+  if (!fs.existsSync(directory)) {
+    return;
   }
+
+  for (const item of fs.readdirSync(directory)) {
+    const itemPath = path.join(directory, item);
+
+    // Skip removal for items listed in the exceptions array
+    if (!shouldExcludeFile(directory, itemPath, exceptions)) {
+      //if (!exceptions.includes(item)) {
+      fs.rmSync(itemPath, { recursive: true, force: true });
+    }
+  }
+  info(`Removed contents of directory [${directory}], preserving items: ${exceptions.join(', ')}`);
 }

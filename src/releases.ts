@@ -56,8 +56,8 @@ export async function getAllReleases(): Promise<GitHubRelease[]> {
       for (const release of response.data) {
         releases.push({
           id: release.id,
-          title: release.name || '', // same as tag as defined in our pull request for now (no need for tag)
-          body: release.body || '',
+          title: release.name ?? '', // same as tag as defined in our pull request for now (no need for tag)
+          body: release.body ?? '',
         });
       }
     }
@@ -117,7 +117,7 @@ export async function createTaggedRelease(
   try {
     for (const module of terraformChangedModules) {
       const { moduleName, directory, releaseType, nextTag, nextTagVersion } = module;
-      const tmpDir = path.join(process.env.RUNNER_TEMP || '', 'tmp', moduleName);
+      const tmpDir = path.join(process.env.RUNNER_TEMP ?? '', 'tmp', moduleName);
 
       info(`Release type: ${releaseType}`);
       info(`Next tag version: ${nextTag}`);
@@ -127,7 +127,7 @@ export async function createTaggedRelease(
       info(`Creating temp directory: ${tmpDir}`);
 
       // Copy the module's contents to the temporary directory, excluding specified patterns
-      copyModuleContents(directory, tmpDir);
+      copyModuleContents(directory, tmpDir, config.moduleAssetExcludePatterns);
 
       // Copy the module's .git directory
       fs.cpSync(path.join(workspaceDir, '.git'), path.join(tmpDir, '.git'), { recursive: true });
