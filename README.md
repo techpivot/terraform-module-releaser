@@ -8,14 +8,14 @@ documentation.</b></sup>
 ![CI](https://github.com/techpivot/terraform-module-releaser/actions/workflows/ci.yml/badge.svg?event=pull_request)
 [![Lint](https://github.com/techpivot/terraform-module-releaser/actions/workflows/lint.yml/badge.svg)][3]
 [![CodeQL](https://github.com/techpivot/terraform-module-releaser/actions/workflows/codeql-analysis.yml/badge.svg)][4]
-[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=techpivot_terraform-module-releaser&metric=alert_status)][5]
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=terraform-module-releaser&metric=alert_status)][5]
 [![Coverage](./assets/coverage-badge.svg)](./assets/coverage-badge.svg)
 
 [1]: https://github.com/techpivot/terraform-module-releaser/releases/latest
 [2]: https://github.com/marketplace/actions/terraform-module-releaser
 [3]: https://github.com/techpivot/terraform-module-releaser/actions/workflows/lint.yml
 [4]: https://github.com/techpivot/terraform-module-releaser/actions/workflows/codeql-analysis.yml
-[5]: https://sonarcloud.io/summary/new_code?id=techpivot_terraform-module-releaser
+[5]: https://sonarcloud.io/summary/new_code?id=terraform-module-releaser
 
 Simplify the management of Terraform modules in your monorepo with this **GitHub Action**, designed to automate
 module-specific versioning and releases. By streamlining the Terraform module release process, this action allows you to
