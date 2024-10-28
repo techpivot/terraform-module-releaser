@@ -8,7 +8,7 @@ type InputMap = {
   [key: string]: string;
 };
 
-describe('config', () => {
+describe('config.ts', () => {
   const defaultInputs: InputMap = {
     'major-keywords': 'BREAKING CHANGE,!',
     'minor-keywords': 'feat,feature',
