@@ -51,6 +51,7 @@ jobs:
           VALIDATE_ALL_CODEBASE: true
           VALIDATE_JAVASCRIPT_STANDARD: false # Using biome
           VALIDATE_JAVASCRIPT_PRETTIER: false # Using biome
+          VALIDATE_JSON_PRETTIER: false # Using biome
           VALIDATE_JSCPD: false # Using biome
           VALIDATE_TYPESCRIPT_STANDARD: false # Using biome
           VALIDATE_TYPESCRIPT_ES: false # Using biome

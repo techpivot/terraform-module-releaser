@@ -4,6 +4,7 @@
     "target": "ES2022",
     "module": "ES2022",
     "moduleResolution": "bundler",
+    "types": ["node"],
     "noEmit": true,
     "baseUrl": "./",
     "rootDir": "./src",
@@ -17,5 +18,5 @@
     "skipLibCheck": true,
     "newLine": "lf"
   },
-  "exclude": ["./dist", "./node_modules", "./__tests__", "./coverage"]
+  "exclude": ["./dist", "./node_modules", "./__tests__", "./coverage", "vitest.config.ts"]
 }

@@ -6,7 +6,7 @@
     "useIgnoreFile": true
   },
   "files": {
-    "ignore": ["dist", "node_modules", "*.json"]
+    "ignore": ["dist", "node_modules"]
   },
   "formatter": {
     "enabled": true,

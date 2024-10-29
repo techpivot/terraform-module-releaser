@@ -13,7 +13,7 @@ const OctokitRestApi = Octokit.plugin(restEndpointMethods, paginateRest);
 /**
  * Interface representing the repository structure of a GitHub repo in the form of the owner and name.
  */
-interface Repo {
+export interface Repo {
   /**
    * The owner of the repository, typically a GitHub user or an organization.
    */
@@ -29,7 +29,7 @@ interface Repo {
  * Interface representing the context required by this GitHub Action.
  * It contains the necessary GitHub API client, repository details, and pull request information.
  */
-interface Context {
+export interface Context {
   /**
    * The repository details (owner and name).
    */
@@ -122,6 +122,27 @@ function isPullRequestEvent(payload: unknown): payload is PullRequestEvent {
 }
 
 /**
+ * Clears the cached context instance during testing.
+ *
+ * This utility function is specifically designed for testing scenarios where
+ * multiple different configurations need to be tested. It resets the singleton
+ * instance to null, allowing the next context initialization to start fresh with
+ * new mocked values.
+ *
+ * @remarks
+ * - This function only works when NODE_ENV is set to 'test'
+ * - It is intended for testing purposes only and should not be used in production code
+ * - Typically used in beforeEach() test setup or before testing different context variations
+ *
+ * @throws {Error} Will not clear config if NODE_ENV !== 'test'
+ */
+export function clearContextForTesting(): void {
+  if (process.env.NODE_ENV === 'test') {
+    contextInstance = null;
+  }
+}
+
+/**
  * Lazily initializes the context object that contains details about the pull request and repository.
  * The context is only created once and reused for subsequent calls.
  *
@@ -139,49 +160,47 @@ function initializeContext(): Context {
   try {
     startGroup('Initializing Context');
 
+    // Get required environment variables
     const eventName = getRequiredEnvironmentVar('GITHUB_EVENT_NAME');
-    info(`Event Name: ${eventName}`);
+    const serverUrl = getRequiredEnvironmentVar('GITHUB_SERVER_URL');
+    const repository = getRequiredEnvironmentVar('GITHUB_REPOSITORY');
+    const eventPath = getRequiredEnvironmentVar('GITHUB_EVENT_PATH');
+    const workspaceDir = getRequiredEnvironmentVar('GITHUB_WORKSPACE');
+    const [owner, repo] = repository.split('/');
 
     if (eventName !== 'pull_request') {
-      const errorMessage =
-        'This workflow is not running in the context of a pull request. Ensure this workflow is triggered by a pull request event.';
-      setFailed(errorMessage);
-      throw new Error(errorMessage);
+      throw new Error(
+        'This workflow is not running in the context of a pull request. Ensure this workflow is triggered by a pull request event.',
+      );
     }
 
-    const [owner, repo] = getRequiredEnvironmentVar('GITHUB_REPOSITORY').split('/');
-    const payloadPath = getRequiredEnvironmentVar('GITHUB_EVENT_PATH');
-    let payload: PullRequestEvent;
-    if (existsSync(payloadPath)) {
-      payload = JSON.parse(readFileSync(payloadPath, { encoding: 'utf8' }));
-    } else {
-      const errorMessage = `Specified GITHUB_EVENT_PATH ${payloadPath} does not exist`;
-      setFailed(errorMessage);
-      throw new Error(errorMessage);
+    if (!existsSync(eventPath)) {
+      throw new Error(`Specified GITHUB_EVENT_PATH ${eventPath} does not exist`);
     }
+
+    const payload: PullRequestEvent = JSON.parse(readFileSync(eventPath, { encoding: 'utf8' }));
 
     // Good, we know we have a valid pull_request payload. Let's cast this as our interface
     if (isPullRequestEvent(payload) === false) {
-      const errorMessage = 'Event payload did not match expected pull_request event payload';
-      setFailed(errorMessage);
-      throw new Error(errorMessage);
+      throw new Error('Event payload did not match expected pull_request event payload');
     }
 
     contextInstance = {
       repo: { owner, repo },
-      repoUrl: `${getRequiredEnvironmentVar('GITHUB_SERVER_URL')}/${owner}/${repo}`,
+      repoUrl: `${serverUrl}/${owner}/${repo}`,
       octokit: new OctokitRestApi({
         auth: `token ${config.githubToken}`,
         userAgent: `[octokit] terraform-module-releaser/${version} (${homepage})`,
       }),
       prNumber: payload.pull_request.number,
-      prTitle: payload.pull_request.title,
+      prTitle: payload.pull_request.title.trim(),
       prBody: payload.pull_request.body || '',
       issueNumber: payload.pull_request.number,
-      workspaceDir: getRequiredEnvironmentVar('GITHUB_WORKSPACE'),
+      workspaceDir,
       isPrMergeEvent: payload.action === 'closed' && payload.pull_request.merged === true,
     };
 
+    info(`Event Name: ${eventName}`);
     info(`Repository: ${contextInstance.repo.owner}/${contextInstance.repo.repo}`);
     info(`Repository URL: ${contextInstance.repoUrl}`);
     info(`Pull Request Number: ${contextInstance.prNumber}`);
@@ -197,8 +216,14 @@ function initializeContext(): Context {
   }
 }
 
-/**
- * The exported `context` object, lazily initialized on first access, provides information about the repository,
- * pull request, and GitHub API client.
- */
-export const context: Context = initializeContext();
+// Create a getter for the context that initializes on first use
+export const getContext = (): Context => {
+  return initializeContext();
+};
+
+// For backward compatibility and existing usage
+export const context: Context = new Proxy({} as Context, {
+  get(target, prop) {
+    return getContext()[prop as keyof Context];
+  },
+});
