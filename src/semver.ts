@@ -18,9 +18,9 @@ export function determineReleaseType(message: string, previousReleaseType: Relea
 
   // Determine release type from message
   let currentReleaseType: ReleaseType = 'patch';
-  if (majorKeywords.some((keyword) => messageCleaned.includes(keyword))) {
+  if (majorKeywords.some((keyword) => messageCleaned.includes(keyword.toLowerCase()))) {
     currentReleaseType = 'major';
-  } else if (minorKeywords.some((keyword) => messageCleaned.includes(keyword))) {
+  } else if (minorKeywords.some((keyword) => messageCleaned.includes(keyword.toLowerCase()))) {
     currentReleaseType = 'minor';
   }
 

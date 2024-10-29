@@ -197,7 +197,7 @@ describe('config', () => {
     it('should initialize with valid inputs and log configuration', async () => {
       const config = getConfig();
 
-      expect(config.majorKeywords).toEqual(['BREAKING CHANGE', '!']);
+      expect(config.majorKeywords).toEqual(['MAJOR CHANGE', 'BREAKING CHANGE', '!']);
       expect(config.minorKeywords).toEqual(['feat', 'feature']);
       expect(config.patchKeywords).toEqual(['fix', 'chore']);
       expect(config.defaultFirstTag).toBe('v0.1.0');
@@ -214,7 +214,7 @@ describe('config', () => {
       expect(mockEndGroup).toHaveBeenCalledTimes(1);
       expect(mockInfo).toHaveBeenCalledTimes(10);
       expect(mockInfo.mock.calls).toEqual([
-        ['Major Keywords: BREAKING CHANGE, !'],
+        ['Major Keywords: MAJOR CHANGE, BREAKING CHANGE, !'],
         ['Minor Keywords: feat, feature'],
         ['Patch Keywords: fix, chore'],
         ['Default First Tag: v0.1.0'],
