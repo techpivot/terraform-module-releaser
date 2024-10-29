@@ -1,4 +1,5 @@
 import { execFile as execFileCallback, execFileSync } from 'node:child_process';
+import * as fs from 'node:fs';
 import { promisify } from 'node:util';
 import { endGroup, error, info, startGroup } from '@actions/core';
 import type { TerraformModule } from './terraform-module';
@@ -71,6 +72,13 @@ export function installTerraformDocs(terraformDocsVersion: string): void {
  */
 export async function generateTerraformDocs({ moduleName, directory }: TerraformModule) {
   info(`Generating tf-docs for: ${moduleName}`);
+
+  // We need to ensure that when we generate using the command line below we don't use the default
+  // config if it exists ".terraform-docs.yml".
+  if (fs.existsSync('.terraform-docs.yml')) {
+    info('Found .terraform-docs.yml file, removing...');
+    fs.unlinkSync('.terraform-docs.yml');
+  }
 
   const { stdout, stderr } = await execFile('/usr/local/bin/terraform-docs', [
     'markdown',

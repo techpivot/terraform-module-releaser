@@ -32,7 +32,6 @@ export async function run(): Promise<void> {
   try {
     // Initialize the config and context which will be used throughout the action
     // caching each instance as a singleton with proxy accesors to improve performance.
-    // Initialize everything in the correct order
     const { config, context } = initialize();
 
     if (await hasReleaseComment()) {
