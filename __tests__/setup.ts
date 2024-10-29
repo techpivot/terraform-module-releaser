@@ -45,4 +45,7 @@ afterEach(() => {
 
   // Clear mocks before each test
   vi.resetAllMocks();
+
+  // For now, we'll reset all config mocks to utilize default values
+  configMock.reset();
 });
