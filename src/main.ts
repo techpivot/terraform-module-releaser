@@ -1,6 +1,8 @@
 import { info, setFailed } from '@actions/core';
-import { config } from './config';
-import { context } from './context';
+import { getConfig } from './config';
+import type { Config } from './config';
+import { getContext } from './context';
+import type { Context } from './context';
 import { addPostReleaseComment, addReleasePlanComment, getPullRequestCommits, hasReleaseComment } from './pull-request';
 import { createTaggedRelease, deleteLegacyReleases, getAllReleases } from './releases';
 import { deleteLegacyTags, getAllTags } from './tags';
@@ -9,11 +11,30 @@ import { getAllTerraformModules, getTerraformChangedModules, getTerraformModules
 import { WikiStatus, checkoutWiki, commitAndPushWikiChanges, generateWikiFiles } from './wiki';
 
 /**
+ * Ensures both config and context are initialized in the correct order.
+ * This function handles the initialization sequence and returns both objects.
+ */
+function initialize(): { config: Config; context: Context } {
+  // Force config initialization first
+  const configInstance = getConfig();
+
+  // Then initialize context
+  const contextInstance = getContext();
+
+  return { config: configInstance, context: contextInstance };
+}
+
+/**
  * The main function for the action.
  * @returns {Promise<void>} Resolves when the action is complete.
  */
 export async function run(): Promise<void> {
   try {
+    // Initialize the config and context which will be used throughout the action
+    // caching each instance as a singleton with proxy accesors to improve performance.
+    // Initialize everything in the correct order
+    const { config, context } = initialize();
+
     if (await hasReleaseComment()) {
       info('Release comment found. Exiting.');
       return;

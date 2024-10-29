@@ -1,42 +1,47 @@
 import * as core from '@actions/core';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearConfigForTesting, config, getConfig } from '../src/config';
 import type { Config } from '../src/config';
+import { createInputsMock } from './__mocks__/config.mock';
 
 const originalGetInput = core.getInput;
 
-type InputMap = {
-  [key: string]: string;
-};
-
-describe('config.ts', () => {
-  const defaultInputs: InputMap = {
-    'major-keywords': 'BREAKING CHANGE,!',
-    'minor-keywords': 'feat,feature',
-    'patch-keywords': 'fix,chore',
-    'default-first-tag': 'v0.1.0',
-    'terraform-docs-version': 'v0.16.0',
-    'delete-legacy-tags': 'false',
-    'disable-wiki': 'false',
-    'wiki-sidebar-changelog-max': '10',
-    'disable-branding': 'false',
-    'module-change-exclude-patterns': '.gitignore,*.md',
-    'module-asset-exclude-patterns': 'tests/**,examples/**',
-    github_token: 'test-token',
-  };
-
+describe('config', () => {
+  const requiredInputs = [
+    'major-keywords',
+    'minor-keywords',
+    'patch-keywords',
+    'default-first-tag',
+    'terraform-docs-version',
+    'delete-legacy-tags',
+    'disable-wiki',
+    'wiki-sidebar-changelog-max',
+    'disable-branding',
+    'module-change-exclude-patterns',
+    'module-asset-exclude-patterns',
+    'github_token',
+  ];
   const booleanInputs = ['delete-legacy-tags', 'disable-wiki', 'disable-branding'];
   const booleanConfigKeys = ['deleteLegacyTags', 'disableWiki', 'disableBranding'] as Array<keyof Config>;
 
-  const mockInfo = jest.spyOn(core, 'info');
-  const mockStartGroup = jest.spyOn(core, 'startGroup');
-  const mockEndGroup = jest.spyOn(core, 'endGroup');
-  const mockGetInput = jest.spyOn(core, 'getInput');
-  const mockGetBooleanInput = jest.spyOn(core, 'getBooleanInput');
+  const mockInfo = vi.spyOn(core, 'info');
+  const mockStartGroup = vi.spyOn(core, 'startGroup');
+  const mockEndGroup = vi.spyOn(core, 'endGroup');
+  const mockGetInput = vi.spyOn(core, 'getInput');
+  const mockGetBooleanInput = vi.spyOn(core, 'getBooleanInput');
 
-  // The beforeEach() hook runs before each it() (test case)
+  beforeAll(() => {
+    // We globally mock context to facilitate majority of testing; however,
+    // this test case needs to explicitly test core functionality so we reset the
+    // mock implementation for this test.
+    vi.unmock('../src/config');
+    vi.unmock('@actions/core');
+  });
+
   beforeEach(() => {
-    jest.resetAllMocks();
     clearConfigForTesting();
+
+    const defaultInputs = createInputsMock();
 
     // Mock getInput to use our defaults
     mockGetInput.mockImplementation((name) => {
@@ -61,10 +66,10 @@ describe('config.ts', () => {
   });
 
   describe('required inputs validation', () => {
-    const requiredInputs = Object.keys(defaultInputs);
-
     for (const input of requiredInputs) {
       it(`should throw error when ${input} is missing`, () => {
+        const defaultInputs = createInputsMock();
+
         // Spy on the original getInput function
         mockGetBooleanInput.mockImplementation((name) => {
           core.getInput(name, { required: true }); // proxy to below method
@@ -87,6 +92,8 @@ describe('config.ts', () => {
   });
 
   describe('input validation', () => {
+    const defaultInputs = createInputsMock();
+
     for (const input of booleanInputs) {
       it(`should throw error when ${input} has an invalid boolean value`, () => {
         // Set invalid value for this input
@@ -104,8 +111,7 @@ describe('config.ts', () => {
     it('should throw error when moduleChangeExcludePatterns includes *.tf', () => {
       mockGetInput.mockImplementation(
         (name) =>
-          ({
-            ...defaultInputs,
+          createInputsMock({
             'module-change-exclude-patterns': '*.tf,tests/**',
           })[name] ?? '',
       );
@@ -119,8 +125,7 @@ describe('config.ts', () => {
     it('should throw error when moduleAssetExcludePatterns includes *.tf', async () => {
       mockGetInput.mockImplementation(
         (name) =>
-          ({
-            ...defaultInputs,
+          createInputsMock({
             'module-asset-exclude-patterns': '*.tf,tests/**',
           })[name] ?? '',
       );
@@ -142,20 +147,13 @@ describe('config.ts', () => {
         const booleanInputValues = booleanInputs.reduce((acc, key) => {
           acc[key] = boolValue; // Set each boolean input to the current boolValue
           return acc;
-        }, {} as InputMap);
+        }, {});
 
         // Mock getInput to return the combined defaultInputs and booleanInputValues
-        mockGetInput.mockImplementation(
-          (name: keyof InputMap) =>
-            ({
-              ...defaultInputs,
-              ...booleanInputValues,
-            })[name] ?? '',
-        );
-
-        const config = getConfig();
+        mockGetInput.mockImplementation((name) => createInputsMock(booleanInputValues)[name] ?? '');
 
         // Check the boolean conversion for each key in booleanInputs
+        const config = getConfig();
         for (const inputKey of booleanConfigKeys) {
           expect(config[inputKey]).toBe(boolValue.toLowerCase() === 'true');
         }
@@ -165,12 +163,10 @@ describe('config.ts', () => {
     it('should throw error for non-numeric wiki-sidebar-changelog-max', async () => {
       mockGetInput.mockImplementation(
         (name) =>
-          ({
-            ...defaultInputs,
+          createInputsMock({
             'wiki-sidebar-changelog-max': 'invalid',
           })[name] ?? '',
       );
-
       expect(() => getConfig()).toThrow(
         new TypeError('Wiki Sidebar Change Log Max must be an integer greater than or equal to one'),
       );
@@ -179,12 +175,10 @@ describe('config.ts', () => {
     it('should throw error for 0 wiki-sidebar-changelog-max', async () => {
       mockGetInput.mockImplementation(
         (name) =>
-          ({
-            ...defaultInputs,
+          createInputsMock({
             'wiki-sidebar-changelog-max': '0',
           })[name] ?? '',
       );
-
       expect(() => getConfig()).toThrow(
         new TypeError('Wiki Sidebar Change Log Max must be an integer greater than or equal to one'),
       );
@@ -192,6 +186,14 @@ describe('config.ts', () => {
   });
 
   describe('initialization', () => {
+    it('should maintain singleton instance across multiple imports', async () => {
+      const firstInstance = getConfig();
+      const secondInstance = getConfig();
+      expect(firstInstance).toBe(secondInstance);
+      expect(mockStartGroup).toHaveBeenCalledTimes(1);
+      expect(mockEndGroup).toHaveBeenCalledTimes(1);
+    });
+
     it('should initialize with valid inputs and log configuration', async () => {
       const config = getConfig();
 
@@ -225,24 +227,13 @@ describe('config.ts', () => {
       ]);
       expect(mockInfo).toHaveBeenCalledTimes(10);
     });
-
-    it('should maintain singleton instance across multiple imports', async () => {
-      const firstInstance = getConfig();
-      const secondInstance = getConfig();
-
-      expect(firstInstance).toBe(secondInstance);
-      expect(mockStartGroup).toHaveBeenCalledTimes(1);
-      expect(mockEndGroup).toHaveBeenCalledTimes(1);
-    });
   });
 
-  describe('proxy getters', () => {
-    it('should proxy the config', async () => {
-      const assertUnused = (arg: string[]) => {};
-
-      // First access should trigger initialization
-      const _majorKeywords = config.majorKeywords;
-      assertUnused(_majorKeywords);
+  describe('config proxy', () => {
+    it('should proxy config properties', async () => {
+      const proxyMajorKeywords = config.majorKeywords;
+      const getterMajorKeywords = getConfig().majorKeywords;
+      expect(proxyMajorKeywords).toEqual(getterMajorKeywords);
       expect(mockStartGroup).toHaveBeenCalledWith('Initializing Config');
       expect(mockInfo).toHaveBeenCalled();
 
@@ -252,7 +243,6 @@ describe('config.ts', () => {
 
       // Second access should not trigger initialization
       const _minorKeywords = config.minorKeywords;
-      assertUnused(_minorKeywords);
       expect(mockStartGroup).not.toHaveBeenCalled();
       expect(mockInfo).not.toHaveBeenCalled();
     });
@@ -261,14 +251,12 @@ describe('config.ts', () => {
   describe('input formatting', () => {
     it('should handle various whitespace and duplicates in comma-separated inputs', async () => {
       mockGetInput.mockImplementation(
-        (name: keyof InputMap) =>
-          ({
-            ...defaultInputs,
+        (name) =>
+          createInputsMock({
             'major-keywords': ' BREAKING CHANGE ,  ! ',
             'minor-keywords': '\tfeat,\nfeature\r,feat',
           })[name] ?? '',
       );
-
       const config = getConfig();
       expect(config.majorKeywords).toEqual(['BREAKING CHANGE', '!']);
       expect(config.minorKeywords).toEqual(['feat', 'feature']);
@@ -276,14 +264,12 @@ describe('config.ts', () => {
 
     it('should filter out empty items in arrays', async () => {
       mockGetInput.mockImplementation(
-        (name: keyof InputMap) =>
-          ({
-            ...defaultInputs,
+        (name) =>
+          createInputsMock({
             'major-keywords': 'BREAKING CHANGE,,!,,,',
             'module-change-exclude-patterns': ',.gitignore,,*.md,,',
           })[name] ?? '',
       );
-
       const config = getConfig();
       expect(config.majorKeywords).toEqual(['BREAKING CHANGE', '!']);
       expect(config.moduleChangeExcludePatterns).toEqual(['.gitignore', '*.md']);

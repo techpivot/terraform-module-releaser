@@ -27,10 +27,7 @@ export enum WikiStatus {
 }
 
 // Special subdirectory inside the primary repository where the wiki is checked out.
-const WIKI_SUBDIRECTORY = '.wiki';
-const WIKI_DIRECTORY = path.resolve(context.workspaceDir, WIKI_SUBDIRECTORY);
-
-const execWikiOpts: ExecSyncOptions = { cwd: WIKI_DIRECTORY, stdio: 'inherit' };
+const WIKI_SUBDIRECTORY_NAME = '.wiki';
 
 /**
  * Clones the wiki repository for the current GitHub repository into a specified subdirectory.
@@ -47,17 +44,19 @@ const execWikiOpts: ExecSyncOptions = { cwd: WIKI_DIRECTORY, stdio: 'inherit' };
  */
 export function checkoutWiki(): void {
   const wikiHtmlUrl = `${context.repoUrl}.wiki`;
+  const wikiDirectory = path.resolve(context.workspaceDir, WIKI_SUBDIRECTORY_NAME);
+  const execWikiOpts: ExecSyncOptions = { cwd: wikiDirectory, stdio: 'inherit' };
 
   startGroup(`Checking out wiki repository [${wikiHtmlUrl}]`);
 
   info('Adding repository directory to the temporary git global config as a safe directory');
-  execFileSync('/usr/bin/git', ['config', '--global', '--add', 'safe.directory', WIKI_DIRECTORY], { stdio: 'inherit' });
+  execFileSync('/usr/bin/git', ['config', '--global', '--add', 'safe.directory', wikiDirectory], { stdio: 'inherit' });
 
   info('Initializing the repository');
-  if (!fs.existsSync(WIKI_SUBDIRECTORY)) {
-    fs.mkdirSync(WIKI_SUBDIRECTORY);
+  if (!fs.existsSync(wikiDirectory)) {
+    fs.mkdirSync(wikiDirectory);
   }
-  execFileSync('/usr/bin/git', ['init', '--initial-branch=master', WIKI_DIRECTORY], execWikiOpts);
+  execFileSync('/usr/bin/git', ['init', '--initial-branch=master', wikiDirectory], execWikiOpts);
 
   info('Setting up origin');
   execFileSync('/usr/bin/git', ['remote', 'add', 'origin', wikiHtmlUrl], execWikiOpts);
@@ -199,7 +198,7 @@ async function generateWikiModule(terraformModule: TerraformModule): Promise<str
 
   try {
     const wikiSlugFile = `${getWikiSlug(moduleName)}.md`;
-    const wikiFile = path.join(WIKI_DIRECTORY, wikiSlugFile);
+    const wikiFile = path.join(context.workspaceDir, WIKI_SUBDIRECTORY_NAME, wikiSlugFile);
 
     // Generate a module changelog
     const changelog = getModuleReleaseChangelog(terraformModule);
@@ -278,7 +277,7 @@ async function generateWikiModule(terraformModule: TerraformModule): Promise<str
  * ```
  */
 async function generateWikiSidebar(terraformModules: TerraformModule[]): Promise<string> {
-  const sidebarFile = path.join(WIKI_DIRECTORY, '_Sidebar.md');
+  const sidebarFile = path.join(context.workspaceDir, WIKI_SUBDIRECTORY_NAME, '_Sidebar.md');
   const { owner, repo } = context.repo;
   const repoBaseUrl = `/${owner}/${repo}`;
   let moduleSidebarContent = '';
@@ -367,7 +366,7 @@ async function generateWikiFooter(): Promise<string | undefined> {
     return;
   }
 
-  const footerFile = path.join(WIKI_DIRECTORY, '_Footer.md');
+  const footerFile = path.join(context.workspaceDir, WIKI_SUBDIRECTORY_NAME, '_Footer.md');
 
   try {
     // If the file doesn't exist, create and write content to it
@@ -392,7 +391,7 @@ async function generateWikiFooter(): Promise<string | undefined> {
  * @throws {Error} Throws an error if the file writing operation fails.
  */
 async function generateWikiHome(terraformModules: TerraformModule[]): Promise<string> {
-  const homeFile = path.join(WIKI_DIRECTORY, 'Home.md');
+  const homeFile = path.join(context.workspaceDir, WIKI_SUBDIRECTORY_NAME, 'Home.md');
 
   const content = [
     '# Terraform Modules Home',
@@ -453,7 +452,7 @@ export async function generateWikiFiles(terraformModules: TerraformModule[]): Pr
   // - Ensuring the Wiki remains up-to-date without leftover or outdated files.
   // - Avoiding conflicts or unexpected results due to stale data.
   info('Removing existing wiki files...');
-  removeDirectoryContents(WIKI_DIRECTORY, ['.git']);
+  removeDirectoryContents(path.join(context.workspaceDir, WIKI_SUBDIRECTORY_NAME), ['.git']);
 
   const parallelism = os.cpus().length + 2;
 
@@ -496,10 +495,12 @@ export function commitAndPushWikiChanges(): void {
   try {
     const { prBody, prNumber, prTitle } = context;
     const commitMessage = `PR #${prNumber} - ${prTitle}\n\n${prBody}`.trim();
+    const wikiDirectory = path.resolve(context.workspaceDir, WIKI_SUBDIRECTORY_NAME);
+    const execWikiOpts: ExecSyncOptions = { cwd: wikiDirectory, stdio: 'inherit' };
 
     // Check if there are any changes (otherwise add/commit/push will error)
     info('Checking for changes in wiki repository');
-    const status = execFileSync('/usr/bin/git', ['status', '--porcelain'], { cwd: WIKI_DIRECTORY });
+    const status = execFileSync('/usr/bin/git', ['status', '--porcelain'], { cwd: wikiDirectory });
     info(`git status output: ${status.toString().trim()}`);
 
     if (status !== null && status.toString().trim() !== '') {

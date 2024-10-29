@@ -1,3 +1,5 @@
+name: Test
+
 on:
   # Trigger analysis when pushing in master or pull requests, and when creating
   # a pull request.
@@ -7,10 +9,10 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
 
-name: Test
 jobs:
   tests:
     runs-on: ubuntu-latest
+    name: Test
     permissions:
       contents: read
     steps:

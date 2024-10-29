@@ -28,7 +28,7 @@
         "markdown.extension.orderedList.marker": "one",
         "remote.SSH.enableAgentForwarding": true,
         "[json]": {
-          "editor.defaultFormatter": "esbenp.prettier-vscode"
+          "editor.defaultFormatter": "biomejs.biome"
         },
         "[markdown]": {
           "editor.defaultFormatter": "esbenp.prettier-vscode"

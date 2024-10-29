@@ -135,51 +135,53 @@ function initializeConfig(): Config {
     return configInstance;
   }
 
-  startGroup('Initializing Config');
+  try {
+    startGroup('Initializing Config');
 
-  // Initialize the config instance
-  configInstance = {
-    majorKeywords: getArrayInput('major-keywords'),
-    minorKeywords: getArrayInput('minor-keywords'),
-    patchKeywords: getArrayInput('patch-keywords'),
-    defaultFirstTag: getInput('default-first-tag', { required: true }),
-    terraformDocsVersion: getInput('terraform-docs-version', { required: true }),
-    deleteLegacyTags: getBooleanInput('delete-legacy-tags'),
-    disableWiki: getBooleanInput('disable-wiki'),
-    wikiSidebarChangelogMax: Number.parseInt(getInput('wiki-sidebar-changelog-max', { required: true }), 10),
-    disableBranding: getBooleanInput('disable-branding'),
-    githubToken: getInput('github_token', { required: true }),
-    moduleChangeExcludePatterns: getArrayInput('module-change-exclude-patterns'),
-    moduleAssetExcludePatterns: getArrayInput('module-asset-exclude-patterns'),
-  };
+    // Initialize the config instance
+    configInstance = {
+      majorKeywords: getArrayInput('major-keywords'),
+      minorKeywords: getArrayInput('minor-keywords'),
+      patchKeywords: getArrayInput('patch-keywords'),
+      defaultFirstTag: getInput('default-first-tag', { required: true }),
+      terraformDocsVersion: getInput('terraform-docs-version', { required: true }),
+      deleteLegacyTags: getBooleanInput('delete-legacy-tags'),
+      disableWiki: getBooleanInput('disable-wiki'),
+      wikiSidebarChangelogMax: Number.parseInt(getInput('wiki-sidebar-changelog-max', { required: true }), 10),
+      disableBranding: getBooleanInput('disable-branding'),
+      githubToken: getInput('github_token', { required: true }),
+      moduleChangeExcludePatterns: getArrayInput('module-change-exclude-patterns'),
+      moduleAssetExcludePatterns: getArrayInput('module-asset-exclude-patterns'),
+    };
 
-  // Validate that *.tf is not in excludePatterns
-  if (configInstance.moduleChangeExcludePatterns.some((pattern) => pattern === '*.tf')) {
-    throw new TypeError('Exclude patterns cannot contain "*.tf" as it is required for module detection');
+    // Validate that *.tf is not in excludePatterns
+    if (configInstance.moduleChangeExcludePatterns.some((pattern) => pattern === '*.tf')) {
+      throw new TypeError('Exclude patterns cannot contain "*.tf" as it is required for module detection');
+    }
+    if (configInstance.moduleAssetExcludePatterns.some((pattern) => pattern === '*.tf')) {
+      throw new TypeError('Asset exclude patterns cannot contain "*.tf" as these files are required');
+    }
+
+    // Validate WikiSidebar Changelog Max is a number and greater than zero
+    if (configInstance.wikiSidebarChangelogMax < 1 || Number.isNaN(configInstance.wikiSidebarChangelogMax)) {
+      throw new TypeError('Wiki Sidebar Change Log Max must be an integer greater than or equal to one');
+    }
+
+    info(`Major Keywords: ${configInstance.majorKeywords.join(', ')}`);
+    info(`Minor Keywords: ${configInstance.minorKeywords.join(', ')}`);
+    info(`Patch Keywords: ${configInstance.patchKeywords.join(', ')}`);
+    info(`Default First Tag: ${configInstance.defaultFirstTag}`);
+    info(`Terraform Docs Version: ${configInstance.terraformDocsVersion}`);
+    info(`Delete Legacy Tags: ${configInstance.deleteLegacyTags}`);
+    info(`Disable Wiki: ${configInstance.disableWiki}`);
+    info(`Wiki Sidebar Changelog Max: ${configInstance.wikiSidebarChangelogMax}`);
+    info(`Module Change Exclude Patterns: ${configInstance.moduleChangeExcludePatterns.join(', ')}`);
+    info(`Module Asset Exclude Patterns: ${configInstance.moduleAssetExcludePatterns.join(', ')}`);
+
+    return configInstance;
+  } finally {
+    endGroup();
   }
-  if (configInstance.moduleAssetExcludePatterns.some((pattern) => pattern === '*.tf')) {
-    throw new TypeError('Asset exclude patterns cannot contain "*.tf" as these files are required');
-  }
-
-  // Validate WikiSidebar Changelog Max is a number and greater than zero
-  if (configInstance.wikiSidebarChangelogMax < 1 || Number.isNaN(configInstance.wikiSidebarChangelogMax)) {
-    throw new TypeError('Wiki Sidebar Change Log Max must be an integer greater than or equal to one');
-  }
-
-  info(`Major Keywords: ${configInstance.majorKeywords.join(', ')}`);
-  info(`Minor Keywords: ${configInstance.minorKeywords.join(', ')}`);
-  info(`Patch Keywords: ${configInstance.patchKeywords.join(', ')}`);
-  info(`Default First Tag: ${configInstance.defaultFirstTag}`);
-  info(`Terraform Docs Version: ${configInstance.terraformDocsVersion}`);
-  info(`Delete Legacy Tags: ${configInstance.deleteLegacyTags}`);
-  info(`Disable Wiki: ${configInstance.disableWiki}`);
-  info(`Wiki Sidebar Changelog Max: ${configInstance.wikiSidebarChangelogMax}`);
-  info(`Module Change Exclude Patterns: ${configInstance.moduleChangeExcludePatterns.join(', ')}`);
-  info(`Module Asset Exclude Patterns: ${configInstance.moduleAssetExcludePatterns.join(', ')}`);
-
-  endGroup();
-
-  return configInstance;
 }
 
 // Create a getter for the config that initializes on first use
