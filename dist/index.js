@@ -25826,6 +25826,124 @@ module.exports = {
 
 /***/ }),
 
+/***/ 1189:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+const { isexe, sync: isexeSync } = __nccwpck_require__(4585)
+const { join, delimiter, sep, posix } = __nccwpck_require__(6928)
+
+const isWindows = process.platform === 'win32'
+
+// used to check for slashed in commands passed in. always checks for the posix
+// seperator on all platforms, and checks for the current separator when not on
+// a posix platform. don't use the isWindows check for this since that is mocked
+// in tests but we still need the code to actually work when called. that is also
+// why it is ignored from coverage.
+/* istanbul ignore next */
+const rSlash = new RegExp(`[${posix.sep}${sep === posix.sep ? '' : sep}]`.replace(/(\\)/g, '\\$1'))
+const rRel = new RegExp(`^\\.${rSlash.source}`)
+
+const getNotFoundError = (cmd) =>
+  Object.assign(new Error(`not found: ${cmd}`), { code: 'ENOENT' })
+
+const getPathInfo = (cmd, {
+  path: optPath = process.env.PATH,
+  pathExt: optPathExt = process.env.PATHEXT,
+  delimiter: optDelimiter = delimiter,
+}) => {
+  // If it has a slash, then we don't bother searching the pathenv.
+  // just check the file itself, and that's it.
+  const pathEnv = cmd.match(rSlash) ? [''] : [
+    // windows always checks the cwd first
+    ...(isWindows ? [process.cwd()] : []),
+    ...(optPath || /* istanbul ignore next: very unusual */ '').split(optDelimiter),
+  ]
+
+  if (isWindows) {
+    const pathExtExe = optPathExt ||
+      ['.EXE', '.CMD', '.BAT', '.COM'].join(optDelimiter)
+    const pathExt = pathExtExe.split(optDelimiter).flatMap((item) => [item, item.toLowerCase()])
+    if (cmd.includes('.') && pathExt[0] !== '') {
+      pathExt.unshift('')
+    }
+    return { pathEnv, pathExt, pathExtExe }
+  }
+
+  return { pathEnv, pathExt: [''] }
+}
+
+const getPathPart = (raw, cmd) => {
+  const pathPart = /^".*"$/.test(raw) ? raw.slice(1, -1) : raw
+  const prefix = !pathPart && rRel.test(cmd) ? cmd.slice(0, 2) : ''
+  return prefix + join(pathPart, cmd)
+}
+
+const which = async (cmd, opt = {}) => {
+  const { pathEnv, pathExt, pathExtExe } = getPathInfo(cmd, opt)
+  const found = []
+
+  for (const envPart of pathEnv) {
+    const p = getPathPart(envPart, cmd)
+
+    for (const ext of pathExt) {
+      const withExt = p + ext
+      const is = await isexe(withExt, { pathExt: pathExtExe, ignoreErrors: true })
+      if (is) {
+        if (!opt.all) {
+          return withExt
+        }
+        found.push(withExt)
+      }
+    }
+  }
+
+  if (opt.all && found.length) {
+    return found
+  }
+
+  if (opt.nothrow) {
+    return null
+  }
+
+  throw getNotFoundError(cmd)
+}
+
+const whichSync = (cmd, opt = {}) => {
+  const { pathEnv, pathExt, pathExtExe } = getPathInfo(cmd, opt)
+  const found = []
+
+  for (const pathEnvPart of pathEnv) {
+    const p = getPathPart(pathEnvPart, cmd)
+
+    for (const ext of pathExt) {
+      const withExt = p + ext
+      const is = isexeSync(withExt, { pathExt: pathExtExe, ignoreErrors: true })
+      if (is) {
+        if (!opt.all) {
+          return withExt
+        }
+        found.push(withExt)
+      }
+    }
+  }
+
+  if (opt.all && found.length) {
+    return found
+  }
+
+  if (opt.nothrow) {
+    return null
+  }
+
+  throw getNotFoundError(cmd)
+}
+
+module.exports = which
+which.sync = whichSync
+
+
+/***/ }),
+
 /***/ 2613:
 /***/ ((module) => {
 
@@ -25886,6 +26004,13 @@ module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("events");
 /***/ ((module) => {
 
 module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("fs");
+
+/***/ }),
+
+/***/ 1943:
+/***/ ((module) => {
+
+module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("fs/promises");
 
 /***/ }),
 
@@ -27647,6 +27772,208 @@ function parseParams (str) {
 module.exports = parseParams
 
 
+/***/ }),
+
+/***/ 4585:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.sync = exports.isexe = exports.posix = exports.win32 = void 0;
+const posix = __importStar(__nccwpck_require__(6098));
+exports.posix = posix;
+const win32 = __importStar(__nccwpck_require__(1078));
+exports.win32 = win32;
+__exportStar(__nccwpck_require__(6835), exports);
+const platform = process.env._ISEXE_TEST_PLATFORM_ || process.platform;
+const impl = platform === 'win32' ? win32 : posix;
+/**
+ * Determine whether a path is executable on the current platform.
+ */
+exports.isexe = impl.isexe;
+/**
+ * Synchronously determine whether a path is executable on the
+ * current platform.
+ */
+exports.sync = impl.sync;
+//# sourceMappingURL=index.js.map
+
+/***/ }),
+
+/***/ 6835:
+/***/ ((__unused_webpack_module, exports) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+//# sourceMappingURL=options.js.map
+
+/***/ }),
+
+/***/ 6098:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+
+/**
+ * This is the Posix implementation of isexe, which uses the file
+ * mode and uid/gid values.
+ *
+ * @module
+ */
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.sync = exports.isexe = void 0;
+const fs_1 = __nccwpck_require__(9896);
+const promises_1 = __nccwpck_require__(1943);
+/**
+ * Determine whether a path is executable according to the mode and
+ * current (or specified) user and group IDs.
+ */
+const isexe = async (path, options = {}) => {
+    const { ignoreErrors = false } = options;
+    try {
+        return checkStat(await (0, promises_1.stat)(path), options);
+    }
+    catch (e) {
+        const er = e;
+        if (ignoreErrors || er.code === 'EACCES')
+            return false;
+        throw er;
+    }
+};
+exports.isexe = isexe;
+/**
+ * Synchronously determine whether a path is executable according to
+ * the mode and current (or specified) user and group IDs.
+ */
+const sync = (path, options = {}) => {
+    const { ignoreErrors = false } = options;
+    try {
+        return checkStat((0, fs_1.statSync)(path), options);
+    }
+    catch (e) {
+        const er = e;
+        if (ignoreErrors || er.code === 'EACCES')
+            return false;
+        throw er;
+    }
+};
+exports.sync = sync;
+const checkStat = (stat, options) => stat.isFile() && checkMode(stat, options);
+const checkMode = (stat, options) => {
+    const myUid = options.uid ?? process.getuid?.();
+    const myGroups = options.groups ?? process.getgroups?.() ?? [];
+    const myGid = options.gid ?? process.getgid?.() ?? myGroups[0];
+    if (myUid === undefined || myGid === undefined) {
+        throw new Error('cannot get uid or gid');
+    }
+    const groups = new Set([myGid, ...myGroups]);
+    const mod = stat.mode;
+    const uid = stat.uid;
+    const gid = stat.gid;
+    const u = parseInt('100', 8);
+    const g = parseInt('010', 8);
+    const o = parseInt('001', 8);
+    const ug = u | g;
+    return !!(mod & o ||
+        (mod & g && groups.has(gid)) ||
+        (mod & u && uid === myUid) ||
+        (mod & ug && myUid === 0));
+};
+//# sourceMappingURL=posix.js.map
+
+/***/ }),
+
+/***/ 1078:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+
+/**
+ * This is the Windows implementation of isexe, which uses the file
+ * extension and PATHEXT setting.
+ *
+ * @module
+ */
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.sync = exports.isexe = void 0;
+const fs_1 = __nccwpck_require__(9896);
+const promises_1 = __nccwpck_require__(1943);
+/**
+ * Determine whether a path is executable based on the file extension
+ * and PATHEXT environment variable (or specified pathExt option)
+ */
+const isexe = async (path, options = {}) => {
+    const { ignoreErrors = false } = options;
+    try {
+        return checkStat(await (0, promises_1.stat)(path), path, options);
+    }
+    catch (e) {
+        const er = e;
+        if (ignoreErrors || er.code === 'EACCES')
+            return false;
+        throw er;
+    }
+};
+exports.isexe = isexe;
+/**
+ * Synchronously determine whether a path is executable based on the file
+ * extension and PATHEXT environment variable (or specified pathExt option)
+ */
+const sync = (path, options = {}) => {
+    const { ignoreErrors = false } = options;
+    try {
+        return checkStat((0, fs_1.statSync)(path), path, options);
+    }
+    catch (e) {
+        const er = e;
+        if (ignoreErrors || er.code === 'EACCES')
+            return false;
+        throw er;
+    }
+};
+exports.sync = sync;
+const checkPathExt = (path, options) => {
+    const { pathExt = process.env.PATHEXT || '' } = options;
+    const peSplit = pathExt.split(';');
+    if (peSplit.indexOf('') !== -1) {
+        return true;
+    }
+    for (let i = 0; i < peSplit.length; i++) {
+        const p = peSplit[i].toLowerCase();
+        const ext = path.substring(path.length - p.length).toLowerCase();
+        if (p && ext === p) {
+            return true;
+        }
+    }
+    return false;
+};
+const checkStat = (stat, path, options) => stat.isFile() && checkPathExt(path, options);
+//# sourceMappingURL=win32.js.map
+
 /***/ })
 
 /******/ });
@@ -27722,59 +28049,104 @@ var __webpack_exports__ = {};
 var core = __nccwpck_require__(7484);
 ;// CONCATENATED MODULE: ./src/config.ts
 
-// The config object will be initialized lazily
+// Keep configInstance private to this module
 let configInstance = null;
-// Function to split keywords or patterns
+/**
+ * Retrieves an array of values from a comma-separated input string. Duplicates any empty values
+ * are removed and each value is trimmed of whitespace.
+ *
+ * @param inputName - Name of the input to retrieve.
+ * @returns An array of trimmed and filtered values.
+ */
 const getArrayInput = (inputName) => {
-    return (0,core.getInput)(inputName, { required: true })
+    const input = (0,core.getInput)(inputName, { required: true });
+    return Array.from(new Set(input
         .split(',')
         .map((item) => item.trim())
-        .filter(Boolean);
+        .filter(Boolean)));
 };
 /**
- * Lazy-initialized configuration object.
+ * Clears the cached config instance during testing.
+ *
+ * This utility function is specifically designed for testing scenarios where
+ * multiple different configurations need to be tested. It resets the singleton
+ * instance to null, allowing the next config initialization to start fresh with
+ * new mocked values.
+ *
+ * @remarks
+ * - This function only works when NODE_ENV is set to 'test'
+ * - It is intended for testing purposes only and should not be used in production code
+ * - Typically used in beforeEach() test setup or before testing different config variations
+ *
+ * @throws {Error} Will not clear config if NODE_ENV !== 'test'
+ */
+function clearConfigForTesting() {
+    if (process.env.NODE_ENV === 'test') {
+        configInstance = null;
+    }
+}
+/**
+ * Lazy-initialized configuration object. This is kept separate from the exported
+ * config to allow testing utilities to be imported without triggering initialization.
  */
 function initializeConfig() {
     if (configInstance) {
         return configInstance;
     }
-    (0,core.startGroup)('Initializing Config');
-    // Initialize the config instance
-    configInstance = {
-        majorKeywords: getArrayInput('major-keywords'),
-        minorKeywords: getArrayInput('minor-keywords'),
-        patchKeywords: getArrayInput('patch-keywords'),
-        defaultFirstTag: (0,core.getInput)('default-first-tag', { required: true }),
-        terraformDocsVersion: (0,core.getInput)('terraform-docs-version', { required: true }),
-        deleteLegacyTags: (0,core.getInput)('delete-legacy-tags', { required: true }).toLowerCase() === 'true',
-        disableWiki: (0,core.getInput)('disable-wiki', { required: true }).toLowerCase() === 'true',
-        wikiSidebarChangelogMax: Number.parseInt((0,core.getInput)('wiki-sidebar-changelog-max', { required: true }), 10),
-        disableBranding: (0,core.getInput)('disable-branding', { required: true }).toLowerCase() === 'true',
-        githubToken: (0,core.getInput)('github_token', { required: true }),
-        moduleChangeExcludePatterns: getArrayInput('module-change-exclude-patterns'),
-        moduleAssetExcludePatterns: getArrayInput('module-asset-exclude-patterns'),
-    };
-    (0,core.info)(`Major Keywords: ${configInstance.majorKeywords.join(', ')}`);
-    (0,core.info)(`Minor Keywords: ${configInstance.minorKeywords.join(', ')}`);
-    (0,core.info)(`Patch Keywords: ${configInstance.patchKeywords.join(', ')}`);
-    (0,core.info)(`Default First Tag: ${configInstance.defaultFirstTag}`);
-    (0,core.info)(`Terraform Docs Version: ${configInstance.terraformDocsVersion}`);
-    (0,core.info)(`Delete Legacy Tags: ${configInstance.deleteLegacyTags}`);
-    (0,core.info)(`Disable Wiki: ${configInstance.disableWiki}`);
-    (0,core.info)(`Wiki Sidebar Changelog Max: ${configInstance.wikiSidebarChangelogMax}`);
-    (0,core.info)(`Module Change Exclude Patterns: ${configInstance.moduleChangeExcludePatterns.join(', ')}`);
-    (0,core.info)(`Module Asset Exclude Patterns: ${configInstance.moduleAssetExcludePatterns.join(', ')}`);
-    // Validate that *.tf is not in excludePatterns
-    if (configInstance.moduleChangeExcludePatterns.some((pattern) => pattern === '*.tf')) {
-        throw new Error('Exclude patterns cannot contain "*.tf" as it is required for module detection');
+    try {
+        (0,core.startGroup)('Initializing Config');
+        // Initialize the config instance
+        configInstance = {
+            majorKeywords: getArrayInput('major-keywords'),
+            minorKeywords: getArrayInput('minor-keywords'),
+            patchKeywords: getArrayInput('patch-keywords'),
+            defaultFirstTag: (0,core.getInput)('default-first-tag', { required: true }),
+            terraformDocsVersion: (0,core.getInput)('terraform-docs-version', { required: true }),
+            deleteLegacyTags: (0,core.getBooleanInput)('delete-legacy-tags'),
+            disableWiki: (0,core.getBooleanInput)('disable-wiki'),
+            wikiSidebarChangelogMax: Number.parseInt((0,core.getInput)('wiki-sidebar-changelog-max', { required: true }), 10),
+            disableBranding: (0,core.getBooleanInput)('disable-branding'),
+            githubToken: (0,core.getInput)('github_token', { required: true }),
+            moduleChangeExcludePatterns: getArrayInput('module-change-exclude-patterns'),
+            moduleAssetExcludePatterns: getArrayInput('module-asset-exclude-patterns'),
+        };
+        // Validate that *.tf is not in excludePatterns
+        if (configInstance.moduleChangeExcludePatterns.some((pattern) => pattern === '*.tf')) {
+            throw new TypeError('Exclude patterns cannot contain "*.tf" as it is required for module detection');
+        }
+        if (configInstance.moduleAssetExcludePatterns.some((pattern) => pattern === '*.tf')) {
+            throw new TypeError('Asset exclude patterns cannot contain "*.tf" as these files are required');
+        }
+        // Validate WikiSidebar Changelog Max is a number and greater than zero
+        if (configInstance.wikiSidebarChangelogMax < 1 || Number.isNaN(configInstance.wikiSidebarChangelogMax)) {
+            throw new TypeError('Wiki Sidebar Change Log Max must be an integer greater than or equal to one');
+        }
+        (0,core.info)(`Major Keywords: ${configInstance.majorKeywords.join(', ')}`);
+        (0,core.info)(`Minor Keywords: ${configInstance.minorKeywords.join(', ')}`);
+        (0,core.info)(`Patch Keywords: ${configInstance.patchKeywords.join(', ')}`);
+        (0,core.info)(`Default First Tag: ${configInstance.defaultFirstTag}`);
+        (0,core.info)(`Terraform Docs Version: ${configInstance.terraformDocsVersion}`);
+        (0,core.info)(`Delete Legacy Tags: ${configInstance.deleteLegacyTags}`);
+        (0,core.info)(`Disable Wiki: ${configInstance.disableWiki}`);
+        (0,core.info)(`Wiki Sidebar Changelog Max: ${configInstance.wikiSidebarChangelogMax}`);
+        (0,core.info)(`Module Change Exclude Patterns: ${configInstance.moduleChangeExcludePatterns.join(', ')}`);
+        (0,core.info)(`Module Asset Exclude Patterns: ${configInstance.moduleAssetExcludePatterns.join(', ')}`);
+        return configInstance;
     }
-    if (configInstance.moduleAssetExcludePatterns.some((pattern) => pattern === '*.tf')) {
-        throw new Error('Asset exclude patterns cannot contain "*.tf" as these files are required');
+    finally {
+        (0,core.endGroup)();
     }
-    (0,core.endGroup)();
-    return configInstance;
 }
-const config = initializeConfig();
+// Create a getter for the config that initializes on first use
+const getConfig = () => {
+    return initializeConfig();
+};
+// For backward compatibility and existing usage
+const config = new Proxy({}, {
+    get(target, prop) {
+        return getConfig()[prop];
+    },
+});
 
 ;// CONCATENATED MODULE: external "node:fs"
 const external_node_fs_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:fs");
@@ -31288,7 +31660,7 @@ legacyRestEndpointMethods.VERSION = dist_src_version_VERSION;
 //# sourceMappingURL=index.js.map
 
 ;// CONCATENATED MODULE: ./package.json
-const package_namespaceObject = /*#__PURE__*/JSON.parse('{"rE":"1.3.0","TB":"https://github.com/techpivot/terraform-module-releaser"}');
+const package_namespaceObject = /*#__PURE__*/JSON.parse('{"rE":"1.3.1","TB":"https://github.com/techpivot/terraform-module-releaser"}');
 ;// CONCATENATED MODULE: ./src/context.ts
 
 
@@ -31338,6 +31710,26 @@ function isPullRequestEvent(payload) {
         typeof payload.repository.full_name === 'string');
 }
 /**
+ * Clears the cached context instance during testing.
+ *
+ * This utility function is specifically designed for testing scenarios where
+ * multiple different configurations need to be tested. It resets the singleton
+ * instance to null, allowing the next context initialization to start fresh with
+ * new mocked values.
+ *
+ * @remarks
+ * - This function only works when NODE_ENV is set to 'test'
+ * - It is intended for testing purposes only and should not be used in production code
+ * - Typically used in beforeEach() test setup or before testing different context variations
+ *
+ * @throws {Error} Will not clear config if NODE_ENV !== 'test'
+ */
+function clearContextForTesting() {
+    if (process.env.NODE_ENV === 'test') {
+        contextInstance = null;
+    }
+}
+/**
  * Lazily initializes the context object that contains details about the pull request and repository.
  * The context is only created once and reused for subsequent calls.
  *
@@ -31353,44 +31745,39 @@ function initializeContext() {
     }
     try {
         (0,core.startGroup)('Initializing Context');
+        // Get required environment variables
         const eventName = getRequiredEnvironmentVar('GITHUB_EVENT_NAME');
-        (0,core.info)(`Event Name: ${eventName}`);
+        const serverUrl = getRequiredEnvironmentVar('GITHUB_SERVER_URL');
+        const repository = getRequiredEnvironmentVar('GITHUB_REPOSITORY');
+        const eventPath = getRequiredEnvironmentVar('GITHUB_EVENT_PATH');
+        const workspaceDir = getRequiredEnvironmentVar('GITHUB_WORKSPACE');
+        const [owner, repo] = repository.split('/');
         if (eventName !== 'pull_request') {
-            const errorMessage = 'This workflow is not running in the context of a pull request. Ensure this workflow is triggered by a pull request event.';
-            (0,core.setFailed)(errorMessage);
-            throw new Error(errorMessage);
+            throw new Error('This workflow is not running in the context of a pull request. Ensure this workflow is triggered by a pull request event.');
         }
-        const [owner, repo] = getRequiredEnvironmentVar('GITHUB_REPOSITORY').split('/');
-        const payloadPath = getRequiredEnvironmentVar('GITHUB_EVENT_PATH');
-        let payload;
-        if ((0,external_node_fs_namespaceObject.existsSync)(payloadPath)) {
-            payload = JSON.parse((0,external_node_fs_namespaceObject.readFileSync)(payloadPath, { encoding: 'utf8' }));
+        if (!external_node_fs_namespaceObject.existsSync(eventPath)) {
+            throw new Error(`Specified GITHUB_EVENT_PATH ${eventPath} does not exist`);
         }
-        else {
-            const errorMessage = `Specified GITHUB_EVENT_PATH ${payloadPath} does not exist`;
-            (0,core.setFailed)(errorMessage);
-            throw new Error(errorMessage);
-        }
+        const payload = JSON.parse(external_node_fs_namespaceObject.readFileSync(eventPath, { encoding: 'utf8' }));
         // Good, we know we have a valid pull_request payload. Let's cast this as our interface
         if (isPullRequestEvent(payload) === false) {
-            const errorMessage = 'Event payload did not match expected pull_request event payload';
-            (0,core.setFailed)(errorMessage);
-            throw new Error(errorMessage);
+            throw new Error('Event payload did not match expected pull_request event payload');
         }
         contextInstance = {
             repo: { owner, repo },
-            repoUrl: `${getRequiredEnvironmentVar('GITHUB_SERVER_URL')}/${owner}/${repo}`,
+            repoUrl: `${serverUrl}/${owner}/${repo}`,
             octokit: new OctokitRestApi({
                 auth: `token ${config.githubToken}`,
                 userAgent: `[octokit] terraform-module-releaser/${package_namespaceObject.rE} (${package_namespaceObject.TB})`,
             }),
             prNumber: payload.pull_request.number,
-            prTitle: payload.pull_request.title,
+            prTitle: payload.pull_request.title.trim(),
             prBody: payload.pull_request.body || '',
             issueNumber: payload.pull_request.number,
-            workspaceDir: getRequiredEnvironmentVar('GITHUB_WORKSPACE'),
+            workspaceDir,
             isPrMergeEvent: payload.action === 'closed' && payload.pull_request.merged === true,
         };
+        (0,core.info)(`Event Name: ${eventName}`);
         (0,core.info)(`Repository: ${contextInstance.repo.owner}/${contextInstance.repo.repo}`);
         (0,core.info)(`Repository URL: ${contextInstance.repoUrl}`);
         (0,core.info)(`Pull Request Number: ${contextInstance.prNumber}`);
@@ -31405,11 +31792,16 @@ function initializeContext() {
         (0,core.endGroup)();
     }
 }
-/**
- * The exported `context` object, lazily initialized on first access, provides information about the repository,
- * pull request, and GitHub API client.
- */
-const context = initializeContext();
+// Create a getter for the context that initializes on first use
+const getContext = () => {
+    return initializeContext();
+};
+// For backward compatibility and existing usage
+const context = new Proxy({}, {
+    get(target, prop) {
+        return getContext()[prop];
+    },
+});
 
 ;// CONCATENATED MODULE: ./src/changelog.ts
 
@@ -31722,6 +32114,9 @@ function validateConcurrency(concurrency) {
 	}
 }
 
+// EXTERNAL MODULE: ./node_modules/which/lib/index.js
+var lib = __nccwpck_require__(1189);
+var lib_default = /*#__PURE__*/__nccwpck_require__.n(lib);
 // EXTERNAL MODULE: ./node_modules/brace-expansion/index.js
 var brace_expansion = __nccwpck_require__(4691);
 ;// CONCATENATED MODULE: ./node_modules/minimatch/dist/esm/assert-valid-pattern.js
@@ -33520,7 +33915,6 @@ minimatch.unescape = unescape_unescape;
 
 
 
-
 /**
  * Checks if a file should be excluded from matching based on the defined exclude patterns
  * and relative paths from the base directory.
@@ -33532,7 +33926,12 @@ minimatch.unescape = unescape_unescape;
  */
 function shouldExcludeFile(baseDirectory, filePath, excludePatterns) {
     const relativePath = external_node_path_namespaceObject.relative(baseDirectory, filePath);
-    return excludePatterns.some((pattern) => minimatch(relativePath, pattern, { matchBase: true }));
+    // Expand patterns to include both directories and their contents, then remove duplicates
+    const expandedPatterns = Array.from(new Set(excludePatterns.flatMap((pattern) => [
+        pattern, // Original pattern
+        pattern.replace(/\/(?:\*\*)?$/, ''), // Match directories themselves, like `tests2/`
+    ])));
+    return expandedPatterns.some((pattern) => minimatch(relativePath, pattern, { matchBase: true }));
 }
 /**
  * Recursively copies the contents of a directory to a temporary directory,
@@ -33540,10 +33939,11 @@ function shouldExcludeFile(baseDirectory, filePath, excludePatterns) {
  *
  * @param {string} directory - The directory to copy from.
  * @param {string} tmpDir - The temporary directory to copy to.
+ * @param {string[]} excludePatterns - An array of patterns to match against for exclusion.
  * @param {string} [baseDirectory] - The base directory for exclusion pattern matching.
  *                                    Defaults to the source directory if not provided.
  */
-function copyModuleContents(directory, tmpDir, baseDirectory) {
+function copyModuleContents(directory, tmpDir, excludePatterns, baseDirectory) {
     const baseDir = baseDirectory ?? directory;
     // Read the directory contents
     const filesToCopy = external_node_fs_namespaceObject.readdirSync(directory);
@@ -33556,9 +33956,9 @@ function copyModuleContents(directory, tmpDir, baseDirectory) {
             const newDir = external_node_path_namespaceObject.join(tmpDir, file);
             external_node_fs_namespaceObject.mkdirSync(newDir, { recursive: true });
             // Note: Important we pass the original base directory.
-            copyModuleContents(filePath, newDir, baseDir); // Recursion for directory contents
+            copyModuleContents(filePath, newDir, excludePatterns, baseDir); // Recursion for directory contents
         }
-        else if (!shouldExcludeFile(baseDir, filePath, config.moduleAssetExcludePatterns)) {
+        else if (!shouldExcludeFile(baseDir, filePath, excludePatterns)) {
             // Handle file copying
             external_node_fs_namespaceObject.copyFileSync(filePath, external_node_path_namespaceObject.join(tmpDir, file));
         }
@@ -33604,16 +34004,18 @@ function copyModuleContents(directory, tmpDir, baseDirectory) {
  * // and the `important-file.txt` file.
  */
 function removeDirectoryContents(directory, exceptions = []) {
-    if (external_node_fs_namespaceObject.existsSync(directory)) {
-        for (const item of external_node_fs_namespaceObject.readdirSync(directory)) {
-            const itemPath = external_node_path_namespaceObject.join(directory, item);
-            // Skip removal for items listed in the exceptions array
-            if (!exceptions.includes(item)) {
-                external_node_fs_namespaceObject.rmSync(itemPath, { recursive: true, force: true });
-            }
-        }
-        (0,core.info)(`Removed contents of directory [${directory}], preserving items: ${exceptions.join(', ')}`);
+    if (!external_node_fs_namespaceObject.existsSync(directory)) {
+        return;
     }
+    for (const item of external_node_fs_namespaceObject.readdirSync(directory)) {
+        const itemPath = external_node_path_namespaceObject.join(directory, item);
+        // Skip removal for items listed in the exceptions array
+        if (!shouldExcludeFile(directory, itemPath, exceptions)) {
+            //if (!exceptions.includes(item)) {
+            external_node_fs_namespaceObject.rmSync(itemPath, { recursive: true, force: true });
+        }
+    }
+    (0,core.info)(`Removed contents of directory [${directory}], preserving items: ${exceptions.join(', ')}`);
 }
 
 // EXTERNAL MODULE: external "node:util"
@@ -33622,50 +34024,187 @@ var external_node_util_ = __nccwpck_require__(7975);
 
 
 
-const execFile = (0,external_node_util_.promisify)(external_node_child_process_namespaceObject.execFile);
-const nodeToGoArchMap = {
+
+
+
+
+
+const execFilePromisified = (0,external_node_util_.promisify)(external_node_child_process_namespaceObject.execFile);
+const platformConfigs = {
+    darwin: {
+        platform: 'darwin',
+        supportedArch: ['amd64', 'arm64'],
+        extension: '.tar.gz',
+    },
+    linux: {
+        platform: 'linux',
+        supportedArch: ['amd64', 'arm', 'arm64'],
+        extension: '.tar.gz',
+    },
+    freebsd: {
+        platform: 'freebsd',
+        supportedArch: ['amd64', 'arm', 'arm64'],
+        extension: '.tar.gz',
+    },
+    win32: {
+        platform: 'windows',
+        supportedArch: ['amd64', 'arm64'],
+        extension: '.zip',
+    },
+};
+const nodeArchToGoArch = {
     x64: 'amd64',
     arm: 'arm',
     arm64: 'arm64',
 };
 /**
- * Returns the Go architecture name corresponding to the given Node.js architecture.
- *
- * @param nodeArch - The Node.js architecture (e.g. 'x64', 'arm', 'arm64')
- * @returns The Go architecture name (e.g. 'amd64', 'arm', 'arm64')
- * @throws {Error} If the Node.js architecture is not supported
+ * Type guard for NodePlatform
  */
-function getGoArch(nodeArch) {
-    switch (nodeArch) {
-        case 'x64':
-        case 'arm':
-        case 'arm64':
-            return nodeToGoArchMap[nodeArch];
-        default:
-            throw new Error(`Unsupported architecture: ${nodeArch}`);
+function isNodePlatform(platform) {
+    return Object.keys(platformConfigs).includes(platform);
+}
+/**
+ * Type guard for NodeArch
+ */
+function isNodeArch(arch) {
+    return Object.keys(nodeArchToGoArch).includes(arch);
+}
+/**
+ * Converts Node platform to Go platform
+ */
+function getGoPlatform(nodePlatform) {
+    return platformConfigs[nodePlatform].platform;
+}
+/**
+ * Validates and returns the platform configuration for terraform-docs
+ *
+ * @param nodePlatform - The Node.js platform
+ * @param nodeArch - The Node.js architecture
+ * @returns The validated platform configuration and Go architecture
+ * @throws {Error} If the platform or architecture combination is not supported
+ */
+function getValidatedPlatformConfig(nodePlatform, nodeArch) {
+    // Validate platform
+    if (!isNodePlatform(nodePlatform)) {
+        throw new Error(`Unsupported platform: ${nodePlatform}. Supported platforms are: ${Object.keys(platformConfigs).join(', ')}`);
+    }
+    // Validate architecture
+    if (!isNodeArch(nodeArch)) {
+        throw new Error(`Unsupported architecture: ${nodeArch}. Supported architectures are: ${Object.keys(nodeArchToGoArch).join(', ')}`);
+    }
+    const platformConfig = platformConfigs[nodePlatform];
+    const goPlatform = getGoPlatform(nodePlatform);
+    const goArch = nodeArchToGoArch[nodeArch];
+    // Validate platform-architecture combination
+    if (!platformConfig.supportedArch.includes(goArch)) {
+        throw new Error(`Architecture ${goArch} is not supported for platform ${goPlatform}. ` +
+            `Supported architectures for ${goPlatform} are: ${platformConfig.supportedArch.join(', ')}`);
+    }
+    return {
+        goPlatform,
+        goArch,
+        extension: platformConfig.extension,
+    };
+}
+/**
+ * Validates that the terraform-docs version string matches the expected format (v#.#.#)
+ * @param version - Version string to validate
+ * @throws {Error} If the version string is invalid
+ */
+function validateTerraformDocsVersion(version) {
+    const versionPattern = /^v\d+\.\d+\.\d+$/;
+    if (!versionPattern.test(version)) {
+        throw new Error(`Invalid terraform-docs version format: ${version}. Version must match the format v#.#.# (e.g., v0.19.0)`);
     }
 }
 /**
  * Installs the specified version of terraform-docs.
  *
- * Note: We don't check if already installed as we want to ensure we have the specified version
- *
  * @param {string} terraformDocsVersion - The version of terraform-docs to install.
+ * @throws {Error} If the platform or architecture combination is not supported
  */
 function installTerraformDocs(terraformDocsVersion) {
+    console.time('Elapsed time installing terraform-docs');
     (0,core.startGroup)(`Installing terraform-docs ${terraformDocsVersion}`);
-    const platform = process.platform;
-    const goArch = getGoArch(process.arch);
-    (0,external_node_child_process_namespaceObject.execFileSync)('/usr/bin/curl', [
-        '-sSLo',
-        './terraform-docs.tar.gz',
-        `https://terraform-docs.io/dl/${terraformDocsVersion}/terraform-docs-${terraformDocsVersion}-${platform}-${goArch}.tar.gz`,
-    ]);
-    (0,external_node_child_process_namespaceObject.execFileSync)('/usr/bin/tar', ['-xzf', 'terraform-docs.tar.gz']);
-    (0,external_node_child_process_namespaceObject.execFileSync)('/usr/bin/chmod', ['+x', 'terraform-docs']);
-    (0,external_node_child_process_namespaceObject.execFileSync)('/usr/bin/sudo', ['mv', 'terraform-docs', '/usr/local/bin/terraform-docs']); // Alternatively, use custom non elevated path
-    (0,external_node_child_process_namespaceObject.execFileSync)('/usr/local/bin/terraform-docs', ['--version'], { stdio: 'inherit' });
-    (0,core.endGroup)();
+    const cwd = process.cwd();
+    let tempDir = null;
+    try {
+        validateTerraformDocsVersion(terraformDocsVersion);
+        const { goPlatform, goArch, extension } = getValidatedPlatformConfig(process.platform, process.arch);
+        const downloadFilename = `terraform-docs-${terraformDocsVersion}-${goPlatform}-${goArch}${extension}`;
+        const downloadUrl = `https://terraform-docs.io/dl/${terraformDocsVersion}/${downloadFilename}`;
+        // Create a temp directory to handle the extraction so this doesn't clobber our
+        // current working directory.
+        tempDir = (0,external_node_fs_namespaceObject.mkdtempSync)(external_node_path_namespaceObject.join((0,external_node_os_namespaceObject.tmpdir)(), 'terraform-docs-'));
+        process.chdir(tempDir);
+        if (goPlatform === 'windows') {
+            const powershellPath = lib_default().sync('powershell');
+            (0,core.info)('Downloading terraform-docs...');
+            (0,external_node_child_process_namespaceObject.execFileSync)(powershellPath, [
+                '-Command',
+                `Invoke-WebRequest -Uri "${downloadUrl}" -OutFile "./terraform-docs.zip"`,
+            ]);
+            (0,core.info)('Unzipping terraform-docs...');
+            (0,external_node_child_process_namespaceObject.execFileSync)(powershellPath, [
+                '-Command',
+                `Expand-Archive -Path "./terraform-docs.zip" -DestinationPath "./terraform-docs" -Force`,
+            ]);
+            (0,core.info)('Getting Windows system dir...');
+            const systemDir = (0,external_node_child_process_namespaceObject.execFileSync)(powershellPath, [
+                '-Command',
+                `Write-Output ([System.IO.Path]::GetFullPath([System.Environment]::GetFolderPath('System')))`,
+            ])
+                .toString()
+                .trim();
+            (0,core.info)(`Copying executable to system dir (${systemDir})...`);
+            (0,external_node_child_process_namespaceObject.execFileSync)(powershellPath, [
+                '-Command',
+                `Move-Item -Path "./terraform-docs/terraform-docs.exe" -Destination "${systemDir}\\terraform-docs.exe"`,
+            ]);
+            // terraform-docs version v0.19.0 af31cc6 windows/amd64
+            (0,external_node_child_process_namespaceObject.execFileSync)(`${systemDir}\\terraform-docs.exe`, ['--version'], { stdio: 'inherit' });
+        }
+        else {
+            const commands = ['curl', 'tar', 'chmod', 'sudo'];
+            const paths = {};
+            for (const command of commands) {
+                paths[command] = lib_default().sync(command);
+                (0,core.info)(`Found ${command} at: ${paths[command]}`);
+            }
+            (0,external_node_child_process_namespaceObject.execFileSync)(paths.curl, ['-sSLfo', './terraform-docs.tar.gz', downloadUrl]);
+            (0,external_node_child_process_namespaceObject.execFileSync)(paths.tar, ['-xzf', './terraform-docs.tar.gz']);
+            (0,external_node_child_process_namespaceObject.execFileSync)(paths.chmod, ['+x', 'terraform-docs']);
+            (0,external_node_child_process_namespaceObject.execFileSync)(paths.sudo, ['mv', 'terraform-docs', '/usr/local/bin/terraform-docs']);
+            // terraform-docs version v0.19.0 af31cc6 linux/amd64
+            (0,external_node_child_process_namespaceObject.execFileSync)('/usr/local/bin/terraform-docs', ['--version'], { stdio: 'inherit' });
+        }
+    }
+    finally {
+        if (tempDir !== null) {
+            (0,core.info)(`Removing temp dir ${tempDir}`);
+            (0,external_node_fs_namespaceObject.rmSync)(tempDir, { recursive: true });
+        }
+        process.chdir(cwd);
+        console.timeEnd('Elapsed time installing terraform-docs');
+        (0,core.endGroup)();
+    }
+}
+/**
+ * Ensures that the .terraform-docs.yml configuration file does not exist in the workspace directory.
+ * If the file exists, it will be removed to prevent conflicts during Terraform documentation generation.
+ *
+ * @returns {void} This function does not return a value.
+ */
+function ensureTerraformDocsConfigDoesNotExist() {
+    (0,core.info)('Ensuring .terraform-docs.yml does not exist');
+    const terraformDocsFile = external_node_path_namespaceObject.join(context.workspaceDir, '.terraform-docs.yml');
+    if ((0,external_node_fs_namespaceObject.existsSync)(terraformDocsFile)) {
+        (0,core.info)('Found .terraform-docs.yml file, removing.');
+        (0,external_node_fs_namespaceObject.unlinkSync)(terraformDocsFile);
+    }
+    else {
+        (0,core.info)('No .terraform-docs.yml found.');
+    }
 }
 /**
  * Generates Terraform documentation for a given module.
@@ -33681,15 +34220,9 @@ function installTerraformDocs(terraformDocsVersion) {
  */
 async function generateTerraformDocs({ moduleName, directory }) {
     (0,core.info)(`Generating tf-docs for: ${moduleName}`);
-    const { stdout, stderr } = await execFile('/usr/local/bin/terraform-docs', [
-        'markdown',
-        'table',
-        '--sort-by',
-        'required',
-        directory,
-    ]);
+    const terraformDocsPath = lib_default().sync('terraform-docs');
+    const { stdout, stderr } = await execFilePromisified(terraformDocsPath, ['markdown', 'table', '--sort-by', 'required', directory], { encoding: 'utf-8' });
     if (stderr) {
-        (0,core.error)(`Error generating tf-docs for ${moduleName}: ${stderr}`);
         throw new Error(`Terraform-docs generation failed for module: ${moduleName}\n${stderr}`);
     }
     (0,core.info)(`Finished tf-docs for: ${moduleName}`);
@@ -33710,6 +34243,7 @@ async function generateTerraformDocs({ moduleName, directory }) {
 
 
 
+
 var WikiStatus;
 (function (WikiStatus) {
     WikiStatus["SUCCESS"] = "SUCCESS";
@@ -33717,9 +34251,7 @@ var WikiStatus;
     WikiStatus["DISABLED"] = "DISABLED";
 })(WikiStatus || (WikiStatus = {}));
 // Special subdirectory inside the primary repository where the wiki is checked out.
-const WIKI_SUBDIRECTORY = '.wiki';
-const WIKI_DIRECTORY = external_node_path_default().resolve(context.workspaceDir, WIKI_SUBDIRECTORY);
-const execWikiOpts = { cwd: WIKI_DIRECTORY, stdio: 'inherit' };
+const WIKI_SUBDIRECTORY_NAME = '.wiki';
 /**
  * Clones the wiki repository for the current GitHub repository into a specified subdirectory.
  *
@@ -33735,30 +34267,33 @@ const execWikiOpts = { cwd: WIKI_DIRECTORY, stdio: 'inherit' };
  */
 function checkoutWiki() {
     const wikiHtmlUrl = `${context.repoUrl}.wiki`;
+    const wikiDirectory = external_node_path_default().resolve(context.workspaceDir, WIKI_SUBDIRECTORY_NAME);
+    const execWikiOpts = { cwd: wikiDirectory, stdio: 'inherit' };
     (0,core.startGroup)(`Checking out wiki repository [${wikiHtmlUrl}]`);
+    const gitPath = lib_default().sync('git');
     (0,core.info)('Adding repository directory to the temporary git global config as a safe directory');
-    (0,external_node_child_process_namespaceObject.execFileSync)('/usr/bin/git', ['config', '--global', '--add', 'safe.directory', WIKI_DIRECTORY], { stdio: 'inherit' });
+    (0,external_node_child_process_namespaceObject.execFileSync)(gitPath, ['config', '--global', '--add', 'safe.directory', wikiDirectory], { stdio: 'inherit' });
     (0,core.info)('Initializing the repository');
-    if (!external_node_fs_default().existsSync(WIKI_SUBDIRECTORY)) {
-        external_node_fs_default().mkdirSync(WIKI_SUBDIRECTORY);
+    if (!external_node_fs_default().existsSync(wikiDirectory)) {
+        external_node_fs_default().mkdirSync(wikiDirectory);
     }
-    (0,external_node_child_process_namespaceObject.execFileSync)('/usr/bin/git', ['init', '--initial-branch=master', WIKI_DIRECTORY], execWikiOpts);
+    (0,external_node_child_process_namespaceObject.execFileSync)(gitPath, ['init', '--initial-branch=master', wikiDirectory], execWikiOpts);
     (0,core.info)('Setting up origin');
-    (0,external_node_child_process_namespaceObject.execFileSync)('/usr/bin/git', ['remote', 'add', 'origin', wikiHtmlUrl], execWikiOpts);
+    (0,external_node_child_process_namespaceObject.execFileSync)(gitPath, ['remote', 'add', 'origin', wikiHtmlUrl], execWikiOpts);
     (0,core.info)('Configuring authentication');
     // Configure Git to use the PAT for the wiki repository (emulating the behavior of GitHub Actions
     // from the checkout@v4 action.
     const basicCredential = Buffer.from(`x-access-token:${config.githubToken}`, 'utf8').toString('base64');
     try {
-        (0,external_node_child_process_namespaceObject.execFileSync)('/usr/bin/git', ['config', '--local', '--unset-all', 'http.https://github.com/.extraheader'], execWikiOpts);
+        (0,external_node_child_process_namespaceObject.execFileSync)(gitPath, ['config', '--local', '--unset-all', 'http.https://github.com/.extraheader'], execWikiOpts);
     }
     catch (error) {
         // This returns exit code 5 if not set. Not a problem. Let's ignore.
     }
-    (0,external_node_child_process_namespaceObject.execFileSync)('/usr/bin/git', ['config', '--local', 'http.https://github.com/.extraheader', `Authorization: Basic ${basicCredential}`], execWikiOpts);
+    (0,external_node_child_process_namespaceObject.execFileSync)(gitPath, ['config', '--local', 'http.https://github.com/.extraheader', `Authorization: Basic ${basicCredential}`], execWikiOpts);
     try {
         (0,core.info)('Fetching the repository');
-        (0,external_node_child_process_namespaceObject.execFileSync)('/usr/bin/git', [
+        (0,external_node_child_process_namespaceObject.execFileSync)(gitPath, [
             'fetch',
             '--no-tags',
             '--prune',
@@ -33768,7 +34303,7 @@ function checkoutWiki() {
             '+refs/heads/master*:refs/remotes/origin/master*',
             '+refs/tags/master*:refs/tags/master*',
         ], execWikiOpts);
-        (0,external_node_child_process_namespaceObject.execFileSync)('/usr/bin/git', ['checkout', 'master'], execWikiOpts);
+        (0,external_node_child_process_namespaceObject.execFileSync)(gitPath, ['checkout', 'master'], execWikiOpts);
         (0,core.info)('Successfully checked out wiki repository');
     }
     finally {
@@ -33863,7 +34398,7 @@ async function generateWikiModule(terraformModule) {
     const { moduleName, latestTag } = terraformModule;
     try {
         const wikiSlugFile = `${getWikiSlug(moduleName)}.md`;
-        const wikiFile = external_node_path_default().join(WIKI_DIRECTORY, wikiSlugFile);
+        const wikiFile = external_node_path_default().join(context.workspaceDir, WIKI_SUBDIRECTORY_NAME, wikiSlugFile);
         // Generate a module changelog
         const changelog = getModuleReleaseChangelog(terraformModule);
         const tfDocs = await generateTerraformDocs(terraformModule);
@@ -33938,7 +34473,7 @@ async function generateWikiModule(terraformModule) {
  * ```
  */
 async function generateWikiSidebar(terraformModules) {
-    const sidebarFile = external_node_path_default().join(WIKI_DIRECTORY, '_Sidebar.md');
+    const sidebarFile = external_node_path_default().join(context.workspaceDir, WIKI_SUBDIRECTORY_NAME, '_Sidebar.md');
     const { owner, repo } = context.repo;
     const repoBaseUrl = `/${owner}/${repo}`;
     let moduleSidebarContent = '';
@@ -34008,7 +34543,7 @@ async function generateWikiFooter() {
         (0,core.info)('Skipping footer generation as branding is disabled');
         return;
     }
-    const footerFile = external_node_path_default().join(WIKI_DIRECTORY, '_Footer.md');
+    const footerFile = external_node_path_default().join(context.workspaceDir, WIKI_SUBDIRECTORY_NAME, '_Footer.md');
     try {
         // If the file doesn't exist, create and write content to it
         await promises_namespaceObject.writeFile(footerFile, BRANDING_WIKI, 'utf8');
@@ -34032,7 +34567,7 @@ async function generateWikiFooter() {
  * @throws {Error} Throws an error if the file writing operation fails.
  */
 async function generateWikiHome(terraformModules) {
-    const homeFile = external_node_path_default().join(WIKI_DIRECTORY, 'Home.md');
+    const homeFile = external_node_path_default().join(context.workspaceDir, WIKI_SUBDIRECTORY_NAME, 'Home.md');
     const content = [
         '# Terraform Modules Home',
         '\nWelcome to the Terraform Modules Wiki! This page serves as an index for all the available Terraform modules,',
@@ -34085,7 +34620,7 @@ async function generateWikiFiles(terraformModules) {
     // - Ensuring the Wiki remains up-to-date without leftover or outdated files.
     // - Avoiding conflicts or unexpected results due to stale data.
     (0,core.info)('Removing existing wiki files...');
-    removeDirectoryContents(WIKI_DIRECTORY, ['.git']);
+    removeDirectoryContents(external_node_path_default().join(context.workspaceDir, WIKI_SUBDIRECTORY_NAME), ['.git']);
     const parallelism = external_node_os_default().cpus().length + 2;
     (0,core.info)(`Using parallelism: ${parallelism}`);
     const limit = pLimit(parallelism);
@@ -34120,17 +34655,24 @@ function commitAndPushWikiChanges() {
     try {
         const { prBody, prNumber, prTitle } = context;
         const commitMessage = `PR #${prNumber} - ${prTitle}\n\n${prBody}`.trim();
+        const wikiDirectory = external_node_path_default().resolve(context.workspaceDir, WIKI_SUBDIRECTORY_NAME);
+        const execWikiOpts = { cwd: wikiDirectory, stdio: 'inherit' };
+        const gitPath = lib_default().sync('git');
         // Check if there are any changes (otherwise add/commit/push will error)
         (0,core.info)('Checking for changes in wiki repository');
-        const status = (0,external_node_child_process_namespaceObject.execFileSync)('/usr/bin/git', ['status', '--porcelain'], { cwd: WIKI_DIRECTORY });
+        const status = (0,external_node_child_process_namespaceObject.execFileSync)(gitPath, ['status', '--porcelain'], { cwd: wikiDirectory });
         (0,core.info)(`git status output: ${status.toString().trim()}`);
         if (status !== null && status.toString().trim() !== '') {
             // There are changes, commit and push
-            (0,external_node_child_process_namespaceObject.execFileSync)('/usr/bin/git', ['config', '--local', 'user.name', GITHUB_ACTIONS_BOT_NAME], execWikiOpts);
-            (0,external_node_child_process_namespaceObject.execFileSync)('/usr/bin/git', ['config', '--local', 'user.email', GITHUB_ACTIONS_BOT_EMAIL], execWikiOpts);
-            (0,external_node_child_process_namespaceObject.execFileSync)('/usr/bin/git', ['add', '.'], execWikiOpts);
-            (0,external_node_child_process_namespaceObject.execFileSync)('/usr/bin/git', ['commit', '-m', commitMessage.trim()], execWikiOpts);
-            (0,external_node_child_process_namespaceObject.execFileSync)('/usr/bin/git', ['push', 'origin'], execWikiOpts);
+            for (const cmd of [
+                ['config', '--local', 'user.name', GITHUB_ACTIONS_BOT_NAME],
+                ['config', '--local', 'user.email', GITHUB_ACTIONS_BOT_EMAIL],
+                ['add', '.'],
+                ['commit', '-m', commitMessage.trim()],
+                ['push', 'origin'],
+            ]) {
+                (0,external_node_child_process_namespaceObject.execFileSync)(gitPath, cmd, execWikiOpts);
+            }
             (0,core.info)('Changes committed and pushed to wiki repository');
         }
         else {
@@ -34450,6 +34992,7 @@ async function addPostReleaseComment(updatedModules) {
 
 
 
+
 /**
  * Retrieves all releases from the specified GitHub repository.
  *
@@ -34472,8 +35015,8 @@ async function getAllReleases() {
             for (const release of response.data) {
                 releases.push({
                     id: release.id,
-                    title: release.name || '', // same as tag as defined in our pull request for now (no need for tag)
-                    body: release.body || '',
+                    title: release.name ?? '', // same as tag as defined in our pull request for now (no need for tag)
+                    body: release.body ?? '',
                 });
             }
         }
@@ -34521,25 +35064,30 @@ async function createTaggedRelease(terraformChangedModules) {
     try {
         for (const module of terraformChangedModules) {
             const { moduleName, directory, releaseType, nextTag, nextTagVersion } = module;
-            const tmpDir = external_node_path_namespaceObject.join(process.env.RUNNER_TEMP || '', 'tmp', moduleName);
+            const tmpDir = external_node_path_namespaceObject.join(process.env.RUNNER_TEMP ?? '', 'tmp', moduleName);
             (0,core.info)(`Release type: ${releaseType}`);
             (0,core.info)(`Next tag version: ${nextTag}`);
             // Create a temporary working directory
             external_node_fs_namespaceObject.mkdirSync(tmpDir, { recursive: true });
             (0,core.info)(`Creating temp directory: ${tmpDir}`);
             // Copy the module's contents to the temporary directory, excluding specified patterns
-            copyModuleContents(directory, tmpDir);
+            copyModuleContents(directory, tmpDir, config.moduleAssetExcludePatterns);
             // Copy the module's .git directory
             external_node_fs_namespaceObject.cpSync(external_node_path_namespaceObject.join(workspaceDir, '.git'), external_node_path_namespaceObject.join(tmpDir, '.git'), { recursive: true });
-            const gitOpts = { cwd: tmpDir }; // Lots of adds and deletions here so don't inherit
             // Git operations: commit the changes and tag the release
             const commitMessage = `${nextTag}\n\n${prTitle}\n\n${prBody}`.trim();
-            (0,external_node_child_process_namespaceObject.execFileSync)('/usr/bin/git', ['config', '--local', 'user.name', GITHUB_ACTIONS_BOT_NAME], gitOpts);
-            (0,external_node_child_process_namespaceObject.execFileSync)('/usr/bin/git', ['config', '--local', 'user.email', GITHUB_ACTIONS_BOT_EMAIL], gitOpts);
-            (0,external_node_child_process_namespaceObject.execFileSync)('/usr/bin/git', ['add', '.'], gitOpts);
-            (0,external_node_child_process_namespaceObject.execFileSync)('/usr/bin/git', ['commit', '-m', commitMessage.trim()], gitOpts);
-            (0,external_node_child_process_namespaceObject.execFileSync)('/usr/bin/git', ['tag', nextTag], gitOpts);
-            (0,external_node_child_process_namespaceObject.execFileSync)('/usr/bin/git', ['push', 'origin', nextTag], gitOpts);
+            const gitPath = await lib_default()('git');
+            const gitOpts = { cwd: tmpDir }; // Lots of adds and deletions here so don't inherit
+            for (const cmd of [
+                ['config', '--local', 'user.name', GITHUB_ACTIONS_BOT_NAME],
+                ['config', '--local', 'user.email', GITHUB_ACTIONS_BOT_EMAIL],
+                ['add', '.'],
+                ['commit', '-m', commitMessage.trim()],
+                ['tag', nextTag],
+                ['push', 'origin', nextTag],
+            ]) {
+                (0,external_node_child_process_namespaceObject.execFileSync)(gitPath, cmd, gitOpts);
+            }
             // Create a GitHub release using the tag
             (0,core.info)(`Creating GitHub release for ${moduleName}@${nextTag}`);
             const body = getModuleChangelog(module);
@@ -34765,10 +35313,10 @@ function determineReleaseType(message, previousReleaseType = null) {
     const { majorKeywords, minorKeywords } = config;
     // Determine release type from message
     let currentReleaseType = 'patch';
-    if (majorKeywords.some((keyword) => messageCleaned.includes(keyword))) {
+    if (majorKeywords.some((keyword) => messageCleaned.includes(keyword.toLowerCase()))) {
         currentReleaseType = 'major';
     }
-    else if (minorKeywords.some((keyword) => messageCleaned.includes(keyword))) {
+    else if (minorKeywords.some((keyword) => messageCleaned.includes(keyword.toLowerCase()))) {
         currentReleaseType = 'minor';
     }
     // Determine the next release type considering the previous release type
@@ -35095,11 +35643,25 @@ function getTerraformModulesToRemove(allTags, terraformModules) {
 
 
 /**
+ * Ensures both config and context are initialized in the correct order.
+ * This function handles the initialization sequence and returns both objects.
+ */
+function initialize() {
+    // Force config initialization first
+    const configInstance = getConfig();
+    // Then initialize context
+    const contextInstance = getContext();
+    return { config: configInstance, context: contextInstance };
+}
+/**
  * The main function for the action.
  * @returns {Promise<void>} Resolves when the action is complete.
  */
 async function run() {
     try {
+        // Initialize the config and context which will be used throughout the action
+        // caching each instance as a singleton with proxy accesors to improve performance.
+        const { config, context } = initialize();
         if (await hasReleaseComment()) {
             (0,core.info)('Release comment found. Exiting.');
             return;
@@ -35156,6 +35718,7 @@ async function run() {
             }
             else {
                 installTerraformDocs(config.terraformDocsVersion);
+                ensureTerraformDocsConfigDoesNotExist();
                 checkoutWiki();
                 await generateWikiFiles(terraformModules);
                 commitAndPushWikiChanges();
