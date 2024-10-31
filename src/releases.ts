@@ -4,6 +4,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { debug, endGroup, info, startGroup } from '@actions/core';
 import { RequestError } from '@octokit/request-error';
+import which from 'which';
 import { getModuleChangelog } from './changelog';
 import { config } from './config';
 import { GITHUB_ACTIONS_BOT_EMAIL, GITHUB_ACTIONS_BOT_NAME } from './constants';
@@ -132,17 +133,21 @@ export async function createTaggedRelease(
       // Copy the module's .git directory
       fs.cpSync(path.join(workspaceDir, '.git'), path.join(tmpDir, '.git'), { recursive: true });
 
-      const gitOpts: ExecSyncOptions = { cwd: tmpDir }; // Lots of adds and deletions here so don't inherit
-
       // Git operations: commit the changes and tag the release
       const commitMessage = `${nextTag}\n\n${prTitle}\n\n${prBody}`.trim();
+      const gitPath = await which('git');
+      const gitOpts: ExecSyncOptions = { cwd: tmpDir }; // Lots of adds and deletions here so don't inherit
 
-      execFileSync('/usr/bin/git', ['config', '--local', 'user.name', GITHUB_ACTIONS_BOT_NAME], gitOpts);
-      execFileSync('/usr/bin/git', ['config', '--local', 'user.email', GITHUB_ACTIONS_BOT_EMAIL], gitOpts);
-      execFileSync('/usr/bin/git', ['add', '.'], gitOpts);
-      execFileSync('/usr/bin/git', ['commit', '-m', commitMessage.trim()], gitOpts);
-      execFileSync('/usr/bin/git', ['tag', nextTag], gitOpts);
-      execFileSync('/usr/bin/git', ['push', 'origin', nextTag], gitOpts);
+      for (const cmd of [
+        ['config', '--local', 'user.name', GITHUB_ACTIONS_BOT_NAME],
+        ['config', '--local', 'user.email', GITHUB_ACTIONS_BOT_EMAIL],
+        ['add', '.'],
+        ['commit', '-m', commitMessage.trim()],
+        ['tag', nextTag],
+        ['push', 'origin', nextTag],
+      ]) {
+        execFileSync(gitPath, cmd, gitOpts);
+      }
 
       // Create a GitHub release using the tag
       info(`Creating GitHub release for ${moduleName}@${nextTag}`);

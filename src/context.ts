@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import * as fs from 'node:fs';
 import { endGroup, info, setFailed, startGroup } from '@actions/core';
 import { Octokit } from '@octokit/core';
 import { paginateRest } from '@octokit/plugin-paginate-rest';
@@ -174,11 +174,11 @@ function initializeContext(): Context {
       );
     }
 
-    if (!existsSync(eventPath)) {
+    if (!fs.existsSync(eventPath)) {
       throw new Error(`Specified GITHUB_EVENT_PATH ${eventPath} does not exist`);
     }
 
-    const payload: PullRequestEvent = JSON.parse(readFileSync(eventPath, { encoding: 'utf8' }));
+    const payload: PullRequestEvent = JSON.parse(fs.readFileSync(eventPath, { encoding: 'utf8' }));
 
     // Good, we know we have a valid pull_request payload. Let's cast this as our interface
     if (isPullRequestEvent(payload) === false) {
