@@ -6,7 +6,7 @@ import type { Context } from './context';
 import { addPostReleaseComment, addReleasePlanComment, getPullRequestCommits, hasReleaseComment } from './pull-request';
 import { createTaggedRelease, deleteLegacyReleases, getAllReleases } from './releases';
 import { deleteLegacyTags, getAllTags } from './tags';
-import { installTerraformDocs } from './terraform-docs';
+import { ensureTerraformDocsConfigDoesNotExist, installTerraformDocs } from './terraform-docs';
 import { getAllTerraformModules, getTerraformChangedModules, getTerraformModulesToRemove } from './terraform-module';
 import { WikiStatus, checkoutWiki, commitAndPushWikiChanges, generateWikiFiles } from './wiki';
 
@@ -97,6 +97,7 @@ export async function run(): Promise<void> {
         info('Wiki generation is disabled.');
       } else {
         installTerraformDocs(config.terraformDocsVersion);
+        ensureTerraformDocsConfigDoesNotExist();
         checkoutWiki();
         await generateWikiFiles(terraformModules);
         commitAndPushWikiChanges();

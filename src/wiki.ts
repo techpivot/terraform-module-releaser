@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { endGroup, info, startGroup } from '@actions/core';
 import pLimit from 'p-limit';
+import which from 'which';
 import { getModuleReleaseChangelog } from './changelog';
 import { config } from './config';
 import {
@@ -49,33 +50,31 @@ export function checkoutWiki(): void {
 
   startGroup(`Checking out wiki repository [${wikiHtmlUrl}]`);
 
+  const gitPath = which.sync('git');
+
   info('Adding repository directory to the temporary git global config as a safe directory');
-  execFileSync('/usr/bin/git', ['config', '--global', '--add', 'safe.directory', wikiDirectory], { stdio: 'inherit' });
+  execFileSync(gitPath, ['config', '--global', '--add', 'safe.directory', wikiDirectory], { stdio: 'inherit' });
 
   info('Initializing the repository');
   if (!fs.existsSync(wikiDirectory)) {
     fs.mkdirSync(wikiDirectory);
   }
-  execFileSync('/usr/bin/git', ['init', '--initial-branch=master', wikiDirectory], execWikiOpts);
+  execFileSync(gitPath, ['init', '--initial-branch=master', wikiDirectory], execWikiOpts);
 
   info('Setting up origin');
-  execFileSync('/usr/bin/git', ['remote', 'add', 'origin', wikiHtmlUrl], execWikiOpts);
+  execFileSync(gitPath, ['remote', 'add', 'origin', wikiHtmlUrl], execWikiOpts);
 
   info('Configuring authentication');
   // Configure Git to use the PAT for the wiki repository (emulating the behavior of GitHub Actions
   // from the checkout@v4 action.
   const basicCredential = Buffer.from(`x-access-token:${config.githubToken}`, 'utf8').toString('base64');
   try {
-    execFileSync(
-      '/usr/bin/git',
-      ['config', '--local', '--unset-all', 'http.https://github.com/.extraheader'],
-      execWikiOpts,
-    );
+    execFileSync(gitPath, ['config', '--local', '--unset-all', 'http.https://github.com/.extraheader'], execWikiOpts);
   } catch (error) {
     // This returns exit code 5 if not set. Not a problem. Let's ignore.
   }
   execFileSync(
-    '/usr/bin/git',
+    gitPath,
     ['config', '--local', 'http.https://github.com/.extraheader', `Authorization: Basic ${basicCredential}`],
     execWikiOpts,
   );
@@ -83,7 +82,7 @@ export function checkoutWiki(): void {
   try {
     info('Fetching the repository');
     execFileSync(
-      '/usr/bin/git',
+      gitPath,
       [
         'fetch',
         '--no-tags',
@@ -97,7 +96,7 @@ export function checkoutWiki(): void {
       execWikiOpts,
     );
 
-    execFileSync('/usr/bin/git', ['checkout', 'master'], execWikiOpts);
+    execFileSync(gitPath, ['checkout', 'master'], execWikiOpts);
 
     info('Successfully checked out wiki repository');
   } finally {
@@ -497,19 +496,25 @@ export function commitAndPushWikiChanges(): void {
     const commitMessage = `PR #${prNumber} - ${prTitle}\n\n${prBody}`.trim();
     const wikiDirectory = path.resolve(context.workspaceDir, WIKI_SUBDIRECTORY_NAME);
     const execWikiOpts: ExecSyncOptions = { cwd: wikiDirectory, stdio: 'inherit' };
+    const gitPath = which.sync('git');
 
     // Check if there are any changes (otherwise add/commit/push will error)
     info('Checking for changes in wiki repository');
-    const status = execFileSync('/usr/bin/git', ['status', '--porcelain'], { cwd: wikiDirectory });
+    const status = execFileSync(gitPath, ['status', '--porcelain'], { cwd: wikiDirectory });
     info(`git status output: ${status.toString().trim()}`);
 
     if (status !== null && status.toString().trim() !== '') {
       // There are changes, commit and push
-      execFileSync('/usr/bin/git', ['config', '--local', 'user.name', GITHUB_ACTIONS_BOT_NAME], execWikiOpts);
-      execFileSync('/usr/bin/git', ['config', '--local', 'user.email', GITHUB_ACTIONS_BOT_EMAIL], execWikiOpts);
-      execFileSync('/usr/bin/git', ['add', '.'], execWikiOpts);
-      execFileSync('/usr/bin/git', ['commit', '-m', commitMessage.trim()], execWikiOpts);
-      execFileSync('/usr/bin/git', ['push', 'origin'], execWikiOpts);
+      for (const cmd of [
+        ['config', '--local', 'user.name', GITHUB_ACTIONS_BOT_NAME],
+        ['config', '--local', 'user.email', GITHUB_ACTIONS_BOT_EMAIL],
+        ['add', '.'],
+        ['commit', '-m', commitMessage.trim()],
+        ['push', 'origin'],
+      ]) {
+        execFileSync(gitPath, cmd, execWikiOpts);
+      }
+
       info('Changes committed and pushed to wiki repository');
     } else {
       info('No changes detected, skipping commit and push');

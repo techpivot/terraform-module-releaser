@@ -4,11 +4,15 @@ import { clearContextForTesting, context, getContext } from '../src/context';
 import { createPullRequestMock } from './__mocks__/context.mock';
 import { mockCore } from './setup';
 
-// Mock functions
-vi.mock('node:fs', () => ({
-  existsSync: vi.fn(),
-  readFileSync: vi.fn(),
-}));
+// Mock node:fs. (Note: Appears we can't spy on functions via node:fs)
+vi.mock('node:fs', async () => {
+  const original = await vi.importActual('node:fs');
+  return {
+    ...original,
+    existsSync: vi.fn(),
+    readFileSync: vi.fn(),
+  };
+});
 
 describe('context', () => {
   // Mock implementations for fs just in this current test

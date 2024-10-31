@@ -63,13 +63,15 @@
     "@octokit/plugin-rest-endpoint-methods": "^13.2.6",
     "@octokit/request-error": "^6.1.5",
     "minimatch": "^10.0.1",
-    "p-limit": "^6.1.0"
+    "p-limit": "^6.1.0",
+    "which": "^5.0.0"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.2",
     "@jest/globals": "^29.7.0",
     "@octokit/webhooks-types": "^7.6.1",
     "@types/node": "^22.8.1",
+    "@types/which": "^3.0.4",
     "@vercel/ncc": "^0.38.1",
     "@vitest/coverage-v8": "^2.1.4",
     "make-coverage-badge": "^1.2.0",

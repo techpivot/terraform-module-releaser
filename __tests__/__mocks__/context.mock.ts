@@ -79,15 +79,33 @@ const defaultPullRequestPayload = {
   },
 };
 
-// Create a mock context factory function
-//export function createContextMock(overrides: Partial<Context> = {}): Context {
-//  return merge(defaultContext, overrides);
-//}
-
 // Create a mock pull request factory function
 export function createPullRequestMock(overrides = {}) {
   return merge(defaultPullRequestPayload, overrides);
 }
 
-// Create the mock handler
-export const contextMock = vi.fn(() => defaultContext);
+// Create a mocked context object with a set method to deep merge additional ovverides.
+export const contextMock: Context & {
+  reset: () => void;
+  set: (overrides?: Partial<Context>) => void;
+} = {
+  ...defaultContext,
+
+  reset: () => {
+    for (const key of Object.keys(defaultContext)) {
+      if (key !== 'reset' && key !== 'set') {
+        contextMock[key] = defaultContext[key];
+      }
+    }
+  },
+
+  // Method to update specific values
+  set: (overrides: Partial<Context> = {}) => {
+    const updated = merge(contextMock, overrides);
+    for (const key of Object.keys(updated)) {
+      if (key !== 'reset' && key !== 'set') {
+        contextMock[key] = updated[key];
+      }
+    }
+  },
+};
