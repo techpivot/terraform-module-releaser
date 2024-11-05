@@ -5,18 +5,23 @@
     "module": "ES2022",
     "moduleResolution": "bundler",
     "types": ["node"],
-    "noEmit": true,
-    "baseUrl": "./",
-    "rootDir": "./src",
+    "baseUrl": ".",
+    "rootDir": ".",
     "outDir": "./dist",
     "sourceMap": true,
+    "strict": true,
+    "noEmit": true,
     "noImplicitAny": true,
     "esModuleInterop": true,
     "resolveJsonModule": true,
     "forceConsistentCasingInFileNames": true,
-    "strict": true,
     "skipLibCheck": true,
-    "newLine": "lf"
+    "newLine": "lf",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@/mocks/*": ["./src/__mocks__/*"],
+      "@/tests/*": ["./__tests__/*"]
+    }
   },
-  "exclude": ["./dist", "./node_modules", "./__tests__", "./coverage", "vitest.config.ts"]
+  "exclude": ["./dist", "./node_modules", "./coverage"]
 }

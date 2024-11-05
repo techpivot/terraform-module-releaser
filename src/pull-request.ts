@@ -1,12 +1,12 @@
+import { getPullRequestChangelog } from '@/changelog';
+import { config } from '@/config';
+import { BRANDING_COMMENT, PR_RELEASE_MARKER, PR_SUMMARY_MARKER } from '@/constants';
+import { context } from '@/context';
+import type { GitHubRelease } from '@/releases';
+import type { TerraformChangedModule } from '@/terraform-module';
+import { WikiStatus, getWikiLink } from '@/wiki';
 import { debug, endGroup, info, startGroup } from '@actions/core';
 import { RequestError } from '@octokit/request-error';
-import { getPullRequestChangelog } from './changelog';
-import { config } from './config';
-import { BRANDING_COMMENT, PR_RELEASE_MARKER, PR_SUMMARY_MARKER } from './constants';
-import { context } from './context';
-import type { GitHubRelease } from './releases';
-import type { TerraformChangedModule } from './terraform-module';
-import { WikiStatus, getWikiLink } from './wiki';
 
 export interface CommitDetails {
   /**

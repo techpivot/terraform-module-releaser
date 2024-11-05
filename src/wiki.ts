@@ -1,25 +1,25 @@
 import { execFileSync } from 'node:child_process';
 import type { ExecSyncOptions } from 'node:child_process';
-import fs from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import * as fsp from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
-import { endGroup, info, startGroup } from '@actions/core';
-import pLimit from 'p-limit';
-import which from 'which';
-import { getModuleReleaseChangelog } from './changelog';
-import { config } from './config';
+import { cpus } from 'node:os';
+import { join, resolve } from 'node:path';
+import { getModuleReleaseChangelog } from '@/changelog';
+import { config } from '@/config';
 import {
   BRANDING_WIKI,
   GITHUB_ACTIONS_BOT_EMAIL,
   GITHUB_ACTIONS_BOT_NAME,
   PROJECT_URL,
   WIKI_TITLE_REPLACEMENTS,
-} from './constants';
-import { context } from './context';
-import { removeDirectoryContents } from './file-util';
-import { generateTerraformDocs } from './terraform-docs';
-import type { TerraformModule } from './terraform-module';
+} from '@/constants';
+import { context } from '@/context';
+import { removeDirectoryContents } from '@/file-util';
+import { generateTerraformDocs } from '@/terraform-docs';
+import type { TerraformModule } from '@/terraform-module';
+import { endGroup, info, startGroup } from '@actions/core';
+import pLimit from 'p-limit';
+import which from 'which';
 
 export enum WikiStatus {
   SUCCESS = 'SUCCESS',
@@ -45,7 +45,7 @@ const WIKI_SUBDIRECTORY_NAME = '.wiki';
  */
 export function checkoutWiki(): void {
   const wikiHtmlUrl = `${context.repoUrl}.wiki`;
-  const wikiDirectory = path.resolve(context.workspaceDir, WIKI_SUBDIRECTORY_NAME);
+  const wikiDirectory = resolve(context.workspaceDir, WIKI_SUBDIRECTORY_NAME);
   const execWikiOpts: ExecSyncOptions = { cwd: wikiDirectory, stdio: 'inherit' };
 
   startGroup(`Checking out wiki repository [${wikiHtmlUrl}]`);
@@ -56,8 +56,8 @@ export function checkoutWiki(): void {
   execFileSync(gitPath, ['config', '--global', '--add', 'safe.directory', wikiDirectory], { stdio: 'inherit' });
 
   info('Initializing the repository');
-  if (!fs.existsSync(wikiDirectory)) {
-    fs.mkdirSync(wikiDirectory);
+  if (!existsSync(wikiDirectory)) {
+    mkdirSync(wikiDirectory);
   }
   execFileSync(gitPath, ['init', '--initial-branch=master', wikiDirectory], execWikiOpts);
 
@@ -197,7 +197,7 @@ async function generateWikiModule(terraformModule: TerraformModule): Promise<str
 
   try {
     const wikiSlugFile = `${getWikiSlug(moduleName)}.md`;
-    const wikiFile = path.join(context.workspaceDir, WIKI_SUBDIRECTORY_NAME, wikiSlugFile);
+    const wikiFile = join(context.workspaceDir, WIKI_SUBDIRECTORY_NAME, wikiSlugFile);
 
     // Generate a module changelog
     const changelog = getModuleReleaseChangelog(terraformModule);
@@ -276,7 +276,7 @@ async function generateWikiModule(terraformModule: TerraformModule): Promise<str
  * ```
  */
 async function generateWikiSidebar(terraformModules: TerraformModule[]): Promise<string> {
-  const sidebarFile = path.join(context.workspaceDir, WIKI_SUBDIRECTORY_NAME, '_Sidebar.md');
+  const sidebarFile = join(context.workspaceDir, WIKI_SUBDIRECTORY_NAME, '_Sidebar.md');
   const { owner, repo } = context.repo;
   const repoBaseUrl = `/${owner}/${repo}`;
   let moduleSidebarContent = '';
@@ -365,7 +365,7 @@ async function generateWikiFooter(): Promise<string | undefined> {
     return;
   }
 
-  const footerFile = path.join(context.workspaceDir, WIKI_SUBDIRECTORY_NAME, '_Footer.md');
+  const footerFile = join(context.workspaceDir, WIKI_SUBDIRECTORY_NAME, '_Footer.md');
 
   try {
     // If the file doesn't exist, create and write content to it
@@ -390,7 +390,7 @@ async function generateWikiFooter(): Promise<string | undefined> {
  * @throws {Error} Throws an error if the file writing operation fails.
  */
 async function generateWikiHome(terraformModules: TerraformModule[]): Promise<string> {
-  const homeFile = path.join(context.workspaceDir, WIKI_SUBDIRECTORY_NAME, 'Home.md');
+  const homeFile = join(context.workspaceDir, WIKI_SUBDIRECTORY_NAME, 'Home.md');
 
   const content = [
     '# Terraform Modules Home',
@@ -451,9 +451,9 @@ export async function generateWikiFiles(terraformModules: TerraformModule[]): Pr
   // - Ensuring the Wiki remains up-to-date without leftover or outdated files.
   // - Avoiding conflicts or unexpected results due to stale data.
   info('Removing existing wiki files...');
-  removeDirectoryContents(path.join(context.workspaceDir, WIKI_SUBDIRECTORY_NAME), ['.git']);
+  removeDirectoryContents(join(context.workspaceDir, WIKI_SUBDIRECTORY_NAME), ['.git']);
 
-  const parallelism = os.cpus().length + 2;
+  const parallelism = cpus().length + 2;
 
   info(`Using parallelism: ${parallelism}`);
 
@@ -494,7 +494,7 @@ export function commitAndPushWikiChanges(): void {
   try {
     const { prBody, prNumber, prTitle } = context;
     const commitMessage = `PR #${prNumber} - ${prTitle}\n\n${prBody}`.trim();
-    const wikiDirectory = path.resolve(context.workspaceDir, WIKI_SUBDIRECTORY_NAME);
+    const wikiDirectory = resolve(context.workspaceDir, WIKI_SUBDIRECTORY_NAME);
     const execWikiOpts: ExecSyncOptions = { cwd: wikiDirectory, stdio: 'inherit' };
     const gitPath = which.sync('git');
 

@@ -1,16 +1,16 @@
 import { execFileSync } from 'node:child_process';
 import type { ExecSyncOptions } from 'node:child_process';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
+import { cpSync, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { getModuleChangelog } from '@/changelog';
+import { config } from '@/config';
+import { GITHUB_ACTIONS_BOT_EMAIL, GITHUB_ACTIONS_BOT_NAME } from '@/constants';
+import { context } from '@/context';
+import { copyModuleContents } from '@/file-util';
+import type { TerraformChangedModule } from '@/terraform-module';
 import { debug, endGroup, info, startGroup } from '@actions/core';
 import { RequestError } from '@octokit/request-error';
 import which from 'which';
-import { getModuleChangelog } from './changelog';
-import { config } from './config';
-import { GITHUB_ACTIONS_BOT_EMAIL, GITHUB_ACTIONS_BOT_NAME } from './constants';
-import { context } from './context';
-import { copyModuleContents } from './file-util';
-import type { TerraformChangedModule } from './terraform-module';
 
 export interface GitHubRelease {
   /**
@@ -118,20 +118,20 @@ export async function createTaggedRelease(
   try {
     for (const module of terraformChangedModules) {
       const { moduleName, directory, releaseType, nextTag, nextTagVersion } = module;
-      const tmpDir = path.join(process.env.RUNNER_TEMP ?? '', 'tmp', moduleName);
+      const tmpDir = join(process.env.RUNNER_TEMP ?? '', 'tmp', moduleName);
 
       info(`Release type: ${releaseType}`);
       info(`Next tag version: ${nextTag}`);
 
       // Create a temporary working directory
-      fs.mkdirSync(tmpDir, { recursive: true });
+      mkdirSync(tmpDir, { recursive: true });
       info(`Creating temp directory: ${tmpDir}`);
 
       // Copy the module's contents to the temporary directory, excluding specified patterns
       copyModuleContents(directory, tmpDir, config.moduleAssetExcludePatterns);
 
       // Copy the module's .git directory
-      fs.cpSync(path.join(workspaceDir, '.git'), path.join(tmpDir, '.git'), { recursive: true });
+      cpSync(join(workspaceDir, '.git'), join(tmpDir, '.git'), { recursive: true });
 
       // Git operations: commit the changes and tag the release
       const commitMessage = `${nextTag}\n\n${prTitle}\n\n${prBody}`.trim();

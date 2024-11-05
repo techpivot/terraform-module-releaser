@@ -1,4 +1,3 @@
-import { describe, expect, it } from 'vitest';
 import {
   BRANDING_COMMENT,
   BRANDING_WIKI,
@@ -8,7 +7,8 @@ import {
   PR_RELEASE_MARKER,
   PR_SUMMARY_MARKER,
   WIKI_TITLE_REPLACEMENTS,
-} from '../src/constants';
+} from '@/constants';
+import { describe, expect, it } from 'vitest';
 
 describe('constants', () => {
   it('should have the correct GitHub Actions bot name', () => {

@@ -1,5 +1,5 @@
-import { context } from './context';
-import type { TerraformChangedModule, TerraformModule } from './terraform-module';
+import { context } from '@/context';
+import type { TerraformChangedModule, TerraformModule } from '@/terraform-module';
 
 /**
  * Creates a changelog entry for a Terraform module.

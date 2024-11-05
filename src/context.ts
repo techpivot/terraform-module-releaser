@@ -1,11 +1,11 @@
 import * as fs from 'node:fs';
-import { endGroup, info, setFailed, startGroup } from '@actions/core';
+import { config } from '@/config';
+import { endGroup, info, startGroup } from '@actions/core';
 import { Octokit } from '@octokit/core';
 import { paginateRest } from '@octokit/plugin-paginate-rest';
 import { restEndpointMethods } from '@octokit/plugin-rest-endpoint-methods';
 import type { PullRequestEvent } from '@octokit/webhooks-types';
 import { homepage, version } from '../package.json';
-import { config } from './config';
 
 // Extend Octokit with REST API methods and pagination support using the plugins
 const OctokitRestApi = Octokit.plugin(restEndpointMethods, paginateRest);
@@ -92,9 +92,9 @@ let contextInstance: Context | null = null;
 function getRequiredEnvironmentVar(name: string): string {
   const value = process.env[name];
   if (!value || typeof value !== 'string') {
-    const errorMessage = `The ${name} environment variable is missing or invalid. This variable should be automatically set by GitHub for each workflow run. If this variable is missing or not correctly set, it indicates a serious issue with the GitHub Actions environment, potentially affecting the execution of subsequent steps in the workflow. Please review the workflow setup or consult the documentation for proper configuration.`;
-    setFailed(errorMessage);
-    throw new Error(errorMessage);
+    throw new Error(
+      `The ${name} environment variable is missing or invalid. This variable should be automatically set by GitHub for each workflow run. If this variable is missing or not correctly set, it indicates a serious issue with the GitHub Actions environment, potentially affecting the execution of subsequent steps in the workflow. Please review the workflow setup or consult the documentation for proper configuration.`,
+    );
   }
 
   return value;
@@ -185,10 +185,13 @@ function initializeContext(): Context {
       throw new Error('Event payload did not match expected pull_request event payload');
     }
 
+    // Extend Octokit with REST API methods and pagination support using the plugins
+    const OctokitExtended = Octokit.plugin(restEndpointMethods, paginateRest);
+
     contextInstance = {
       repo: { owner, repo },
       repoUrl: `${serverUrl}/${owner}/${repo}`,
-      octokit: new OctokitRestApi({
+      octokit: new OctokitExtended({
         auth: `token ${config.githubToken}`,
         userAgent: `[octokit] terraform-module-releaser/${version} (${homepage})`,
       }),

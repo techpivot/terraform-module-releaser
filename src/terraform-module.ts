@@ -1,12 +1,12 @@
-import fs from 'node:fs';
-import path from 'node:path';
+import { existsSync, readdirSync, statSync } from 'node:fs';
+import { dirname, extname, join, relative, resolve } from 'node:path';
+import { config } from '@/config';
+import { shouldExcludeFile } from '@/file-util';
+import type { CommitDetails } from '@/pull-request';
+import type { GitHubRelease } from '@/releases';
+import type { ReleaseType } from '@/semver';
+import { determineReleaseType, getNextTagVersion } from '@/semver';
 import { debug, endGroup, info, startGroup } from '@actions/core';
-import { config } from './config';
-import { shouldExcludeFile } from './file-util';
-import type { CommitDetails } from './pull-request';
-import type { GitHubRelease } from './releases';
-import type { ReleaseType } from './semver';
-import { determineReleaseType, getNextTagVersion } from './semver';
 
 /**
  * Represents a Terraform module.
@@ -96,7 +96,7 @@ export function getTerraformChangedModules(
  * @returns {boolean} True if the directory contains at least one .tf file, otherwise false.
  */
 function isTerraformDirectory(dirPath: string): boolean {
-  return fs.existsSync(dirPath) && fs.readdirSync(dirPath).some((file) => path.extname(file) === '.tf');
+  return existsSync(dirPath) && readdirSync(dirPath).some((file) => extname(file) === '.tf');
 }
 
 /**
@@ -153,17 +153,17 @@ function getTerraformModuleNameFromRelativePath(terraformDirectory: string): str
  *                          if no directory is found.
  */
 function getTerraformModuleDirectoryRelativePath(filePath: string): string | null {
-  let directory = path.resolve(path.dirname(filePath)); // Convert to absolute path
+  let directory = resolve(dirname(filePath)); // Convert to absolute path
   const cwd = process.cwd();
-  const rootDir = path.resolve(cwd); // Get absolute path to current working directory
+  const rootDir = resolve(cwd); // Get absolute path to current working directory
 
   // Traverse upward until the current working directory (rootDir) is reached
-  while (directory !== rootDir && directory !== path.resolve(directory, '..')) {
+  while (directory !== rootDir && directory !== resolve(directory, '..')) {
     if (isTerraformDirectory(directory)) {
-      return path.relative(cwd, directory);
+      return relative(cwd, directory);
     }
 
-    directory = path.resolve(directory, '..'); // Move up a directory
+    directory = resolve(directory, '..'); // Move up a directory
   }
 
   // Return null if no Terraform module directory is found
@@ -253,16 +253,16 @@ export function getAllTerraformModules(
 
   // Helper function to recursively search for Terraform modules
   const searchDirectory = (dir: string) => {
-    const files = fs.readdirSync(dir);
+    const files = readdirSync(dir);
 
     for (const file of files) {
-      const filePath = path.join(dir, file);
-      const stat = fs.statSync(filePath);
+      const filePath = join(dir, file);
+      const stat = statSync(filePath);
 
       // If it's a directory, recursively search inside it
       if (stat.isDirectory()) {
         if (isTerraformDirectory(filePath)) {
-          const moduleName = getTerraformModuleNameFromRelativePath(path.relative(workspaceDir, filePath));
+          const moduleName = getTerraformModuleNameFromRelativePath(relative(workspaceDir, filePath));
           terraformModulesMap[moduleName] = {
             moduleName,
             directory: filePath,

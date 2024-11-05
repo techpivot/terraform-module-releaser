@@ -99,7 +99,7 @@ const getArrayInput = (inputName: string): string[] => {
     new Set(
       input
         .split(',')
-        .map((item) => item.trim())
+        .map((item: string) => item.trim())
         .filter(Boolean),
     ),
   );
@@ -145,10 +145,10 @@ function initializeConfig(): Config {
       patchKeywords: getArrayInput('patch-keywords'),
       defaultFirstTag: getInput('default-first-tag', { required: true }),
       terraformDocsVersion: getInput('terraform-docs-version', { required: true }),
-      deleteLegacyTags: getBooleanInput('delete-legacy-tags'),
-      disableWiki: getBooleanInput('disable-wiki'),
+      deleteLegacyTags: getBooleanInput('delete-legacy-tags', { required: true }),
+      disableWiki: getBooleanInput('disable-wiki', { required: true }),
       wikiSidebarChangelogMax: Number.parseInt(getInput('wiki-sidebar-changelog-max', { required: true }), 10),
-      disableBranding: getBooleanInput('disable-branding'),
+      disableBranding: getBooleanInput('disable-branding', { required: true }),
       githubToken: getInput('github_token', { required: true }),
       moduleChangeExcludePatterns: getArrayInput('module-change-exclude-patterns'),
       moduleAssetExcludePatterns: getArrayInput('module-asset-exclude-patterns'),
@@ -185,9 +185,9 @@ function initializeConfig(): Config {
 }
 
 // Create a getter for the config that initializes on first use
-export const getConfig = (): Config => {
+export function getConfig(): Config {
   return initializeConfig();
-};
+}
 
 // For backward compatibility and existing usage
 export const config: Config = new Proxy({} as Config, {

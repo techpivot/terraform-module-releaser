@@ -1,5 +1,5 @@
-import * as fs from 'node:fs';
-import * as path from 'node:path';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { join, relative } from 'node:path';
 import { info } from '@actions/core';
 import { minimatch } from 'minimatch';
 
@@ -13,7 +13,7 @@ import { minimatch } from 'minimatch';
  * @returns {boolean} True if the file should be excluded, false otherwise.
  */
 export function shouldExcludeFile(baseDirectory: string, filePath: string, excludePatterns: string[]): boolean {
-  const relativePath = path.relative(baseDirectory, filePath);
+  const relativePath = relative(baseDirectory, filePath);
 
   // Expand patterns to include both directories and their contents, then remove duplicates
   const expandedPatterns = Array.from(
@@ -47,22 +47,22 @@ export function copyModuleContents(
   const baseDir = baseDirectory ?? directory;
 
   // Read the directory contents
-  const filesToCopy = fs.readdirSync(directory);
+  const filesToCopy = readdirSync(directory);
 
   info(`Copying "${directory}" to directory: ${tmpDir}`);
   for (const file of filesToCopy) {
-    const filePath = path.join(directory, file);
-    const stats = fs.statSync(filePath);
+    const filePath = join(directory, file);
+    const stats = statSync(filePath);
 
     if (stats.isDirectory()) {
       // If the item is a directory, create the directory in tmpDir and copy its contents
-      const newDir = path.join(tmpDir, file);
-      fs.mkdirSync(newDir, { recursive: true });
+      const newDir = join(tmpDir, file);
+      mkdirSync(newDir, { recursive: true });
       // Note: Important we pass the original base directory.
       copyModuleContents(filePath, newDir, excludePatterns, baseDir); // Recursion for directory contents
     } else if (!shouldExcludeFile(baseDir, filePath, excludePatterns)) {
       // Handle file copying
-      fs.copyFileSync(filePath, path.join(tmpDir, file));
+      copyFileSync(filePath, join(tmpDir, file));
     } else {
       info(`Excluding file: ${filePath}`);
     }
@@ -106,17 +106,17 @@ export function copyModuleContents(
  * // and the `important-file.txt` file.
  */
 export function removeDirectoryContents(directory: string, exceptions: string[] = []): void {
-  if (!fs.existsSync(directory)) {
+  if (!existsSync(directory)) {
     return;
   }
 
-  for (const item of fs.readdirSync(directory)) {
-    const itemPath = path.join(directory, item);
+  for (const item of readdirSync(directory)) {
+    const itemPath = join(directory, item);
 
     // Skip removal for items listed in the exceptions array
     if (!shouldExcludeFile(directory, itemPath, exceptions)) {
       //if (!exceptions.includes(item)) {
-      fs.rmSync(itemPath, { recursive: true, force: true });
+      rmSync(itemPath, { recursive: true, force: true });
     }
   }
   info(`Removed contents of directory [${directory}], preserving items: ${exceptions.join(', ')}`);

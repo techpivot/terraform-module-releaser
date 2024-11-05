@@ -1,4 +1,4 @@
-import { config } from './config';
+import { config } from '@/config';
 
 // Define a type for the release type options
 export type ReleaseType = 'major' | 'minor' | 'patch';
