@@ -30,6 +30,9 @@
         "[json]": {
           "editor.defaultFormatter": "biomejs.biome"
         },
+        "[jsonc]": {
+          "editor.defaultFormatter": "biomejs.biome"
+        },
         "[markdown]": {
           "editor.defaultFormatter": "esbenp.prettier-vscode"
         },

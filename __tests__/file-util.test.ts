@@ -1,8 +1,8 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { copyModuleContents, removeDirectoryContents, shouldExcludeFile } from '@/file-util';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { copyModuleContents, removeDirectoryContents, shouldExcludeFile } from '../src/file-util';
 
 describe('file-util', () => {
   let tempDir: string;

@@ -1,17 +1,23 @@
+import { config } from '@/config';
+import { context } from '@/context';
 import { debug, endGroup, info, startGroup } from '@actions/core';
 import { RequestError } from '@octokit/request-error';
-import { config } from './config';
-import { context } from './context';
+
+interface GetAllTagsOptions {
+  per_page?: number;
+}
 
 /**
  * Fetches all tags from the specified GitHub repository.
  *
  * This function utilizes pagination to retrieve all tags, returning them as an array of strings.
  *
+ * @param {GetAllTagsOptions} options - Optional configuration for the API request
+ * @param {number} options.perPage - Number of items per page (default: 100)
  * @returns {Promise<string[]>} A promise that resolves to an array of tag names.
  * @throws {RequestError} Throws an error if the request to fetch tags fails.
  */
-export async function getAllTags(): Promise<string[]> {
+export async function getAllTags(options: GetAllTagsOptions = { per_page: 100 }): Promise<string[]> {
   console.time('Elapsed time fetching tags');
   startGroup('Fetching repository tags');
 
@@ -22,16 +28,20 @@ export async function getAllTags(): Promise<string[]> {
     } = context;
 
     const tags: string[] = [];
+    let totalRequests = 0;
 
     for await (const response of octokit.paginate.iterator(octokit.rest.repos.listTags, {
+      ...options,
       owner,
       repo,
     })) {
+      totalRequests++;
       for (const tag of response.data) {
         tags.push(tag.name);
       }
     }
 
+    debug(`Total page requests: ${totalRequests}`);
     info(`Found ${tags.length} tag${tags.length !== 1 ? 's' : ''}.`);
     debug(JSON.stringify(tags, null, 2));
 
@@ -78,6 +88,7 @@ export async function deleteLegacyTags(terraformModuleNames: string[], allTags: 
 
   if (tagsToDelete.length === 0) {
     info('No legacy tags found to delete. Skipping.');
+    endGroup();
     return;
   }
 

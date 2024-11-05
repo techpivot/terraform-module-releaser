@@ -13,13 +13,7 @@
   "bugs": {
     "url": "https://github.com/techpivot/terraform-module-releaser/issues"
   },
-  "keywords": [
-    "terraform",
-    "module",
-    "releaser",
-    "github-action",
-    "monorepo"
-  ],
+  "keywords": ["terraform", "module", "releaser", "github-action", "monorepo"],
   "license": "MIT",
   "exports": {
     ".": "./dist/index.js"
@@ -47,9 +41,7 @@
       }
     ],
     "pull-request": true,
-    "plugins": [
-      "@semantic-release/release-notes-generator"
-    ],
+    "plugins": ["@semantic-release/release-notes-generator"],
     "tagFormat": "v${version}"
   },
   "scripts": {
@@ -77,6 +69,7 @@
   "devDependencies": {
     "@biomejs/biome": "^1.9.2",
     "@jest/globals": "^29.7.0",
+    "@octokit/types": "^13.6.1",
     "@octokit/webhooks-types": "^7.6.1",
     "@types/node": "^22.8.1",
     "@types/which": "^3.0.4",

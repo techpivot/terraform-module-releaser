@@ -1,11 +1,15 @@
-import { describe, expect, it } from 'vitest';
-import { determineReleaseType, getNextTagVersion } from '../src/semver';
-import { configMock } from './__mocks__/config.mock';
+import { config } from '@/mocks/config';
+import { determineReleaseType, getNextTagVersion } from '@/semver';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 describe('semver', () => {
+  beforeEach(() => {
+    config.resetDefaults();
+  });
+
   describe('determineReleaseType', () => {
     it('should return major when commit message contains major keyword', () => {
-      configMock.set({
+      config.set({
         majorKeywords: ['major change', 'breaking change'],
       });
       const message = 'BREAKING CHANGE: completely restructured API';
@@ -23,7 +27,7 @@ describe('semver', () => {
     });
 
     it('should be case insensitive when checking keywords', () => {
-      configMock.set({
+      config.set({
         majorKeywords: ['BReaKING CHANGE', '!', 'major CHANGE'],
       });
       const message = 'bReAkInG cHaNgE: major update';
@@ -58,7 +62,7 @@ describe('semver', () => {
   describe('getNextTagVersion', () => {
     it('should return default first tag when latest tag is null', () => {
       const defaultTag = 'v3.5.1';
-      configMock.set({
+      config.set({
         defaultFirstTag: defaultTag,
       });
       expect(getNextTagVersion(null, 'patch')).toBe(defaultTag);

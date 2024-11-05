@@ -1,8 +1,8 @@
 import { existsSync, readFileSync } from 'node:fs';
+import { clearContextForTesting, context, getContext } from '@/context';
+import { createPullRequestMock } from '@/mocks/context';
+import { info, startGroup } from '@actions/core';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { clearContextForTesting, context, getContext } from '../src/context';
-import { createPullRequestMock } from './__mocks__/context.mock';
-import { mockCore } from './setup';
 
 // Mock node:fs. (Note: Appears we can't spy on functions via node:fs)
 vi.mock('node:fs', async () => {
@@ -31,7 +31,7 @@ describe('context', () => {
     // We globally mock context to facilitate majority of testing; however,
     // this test case needs to explicitly test core functionality so we reset the
     // mock implementation for this test.
-    vi.unmock('../src/context');
+    vi.unmock('@/context');
   });
 
   beforeEach(() => {
@@ -77,12 +77,12 @@ describe('context', () => {
 
   describe('initialization', () => {
     it('should maintain singleton instance across multiple imports', () => {
-      expect(mockCore.startGroup).toHaveBeenCalledTimes(0);
+      expect(startGroup).toHaveBeenCalledTimes(0);
       const firstInstance = getContext();
-      expect(mockCore.startGroup).toHaveBeenCalledTimes(1);
-      expect(mockCore.startGroup).toBeCalledWith('Initializing Context');
+      expect(startGroup).toHaveBeenCalledTimes(1);
+      expect(startGroup).toBeCalledWith('Initializing Context');
       const secondInstance = getContext();
-      expect(mockCore.startGroup).toHaveBeenCalledTimes(1);
+      expect(startGroup).toHaveBeenCalledTimes(1);
       expect(firstInstance).toBe(secondInstance);
     });
 
@@ -167,17 +167,17 @@ describe('context', () => {
       const proxyRepo = context.repo;
       const getterRepo = getContext().repo;
       expect(proxyRepo).toEqual(getterRepo);
-      expect(mockCore.startGroup).toHaveBeenCalledWith('Initializing Context');
-      expect(mockCore.info).toHaveBeenCalledTimes(9);
+      expect(startGroup).toHaveBeenCalledWith('Initializing Context');
+      expect(info).toHaveBeenCalledTimes(9);
 
-      // Reset mock call counts
-      mockCore.startGroup.mockClear();
-      mockCore.info.mockClear();
+      // Reset mock call counts/history via mockClear()
+      vi.mocked(info).mockClear();
+      vi.mocked(startGroup).mockClear();
 
       // Second access should not trigger initialization
       const prNumber = context.prNumber;
-      expect(mockCore.startGroup).not.toHaveBeenCalled();
-      expect(mockCore.info).not.toHaveBeenCalled();
+      expect(startGroup).not.toHaveBeenCalled();
+      expect(info).not.toHaveBeenCalled();
     });
   });
 });

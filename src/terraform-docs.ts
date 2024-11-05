@@ -1,12 +1,12 @@
 import { execFile, execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, rmSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import * as path from 'node:path';
+import { join } from 'node:path';
 import { promisify } from 'node:util';
+import { context } from '@/context';
+import type { TerraformModule } from '@/terraform-module';
 import { endGroup, info, startGroup } from '@actions/core';
 import which from 'which';
-import { context } from './context';
-import type { TerraformModule } from './terraform-module';
 
 const execFilePromisified = promisify(execFile);
 
@@ -156,7 +156,7 @@ export function installTerraformDocs(terraformDocsVersion: string): void {
 
     // Create a temp directory to handle the extraction so this doesn't clobber our
     // current working directory.
-    tempDir = mkdtempSync(path.join(tmpdir(), 'terraform-docs-'));
+    tempDir = mkdtempSync(join(tmpdir(), 'terraform-docs-'));
     process.chdir(tempDir);
 
     if (goPlatform === 'windows') {
@@ -225,7 +225,7 @@ export function installTerraformDocs(terraformDocsVersion: string): void {
 export function ensureTerraformDocsConfigDoesNotExist(): void {
   info('Ensuring .terraform-docs.yml does not exist');
 
-  const terraformDocsFile = path.join(context.workspaceDir, '.terraform-docs.yml');
+  const terraformDocsFile = join(context.workspaceDir, '.terraform-docs.yml');
   if (existsSync(terraformDocsFile)) {
     info('Found .terraform-docs.yml file, removing.');
     unlinkSync(terraformDocsFile);

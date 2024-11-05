@@ -1,14 +1,14 @@
+import { getConfig } from '@/config';
+import type { Config } from '@/config';
+import { getContext } from '@/context';
+import type { Context } from '@/context';
+import { addPostReleaseComment, addReleasePlanComment, getPullRequestCommits, hasReleaseComment } from '@/pull-request';
+import { createTaggedRelease, deleteLegacyReleases, getAllReleases } from '@/releases';
+import { deleteLegacyTags, getAllTags } from '@/tags';
+import { ensureTerraformDocsConfigDoesNotExist, installTerraformDocs } from '@/terraform-docs';
+import { getAllTerraformModules, getTerraformChangedModules, getTerraformModulesToRemove } from '@/terraform-module';
+import { WikiStatus, checkoutWiki, commitAndPushWikiChanges, generateWikiFiles } from '@/wiki';
 import { info, setFailed } from '@actions/core';
-import { getConfig } from './config';
-import type { Config } from './config';
-import { getContext } from './context';
-import type { Context } from './context';
-import { addPostReleaseComment, addReleasePlanComment, getPullRequestCommits, hasReleaseComment } from './pull-request';
-import { createTaggedRelease, deleteLegacyReleases, getAllReleases } from './releases';
-import { deleteLegacyTags, getAllTags } from './tags';
-import { ensureTerraformDocsConfigDoesNotExist, installTerraformDocs } from './terraform-docs';
-import { getAllTerraformModules, getTerraformChangedModules, getTerraformModulesToRemove } from './terraform-module';
-import { WikiStatus, checkoutWiki, commitAndPushWikiChanges, generateWikiFiles } from './wiki';
 
 /**
  * Ensures both config and context are initialized in the correct order.

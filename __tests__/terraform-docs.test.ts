@@ -1,42 +1,32 @@
-import * as cp from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import type { PromiseWithChild } from 'node:child_process';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
+import { existsSync, unlinkSync } from 'node:fs';
+import { join } from 'node:path';
 import { promisify } from 'node:util';
+import { context } from '@/mocks/context';
+import { ensureTerraformDocsConfigDoesNotExist, generateTerraformDocs, installTerraformDocs } from '@/terraform-docs';
+import type { TerraformModule } from '@/terraform-module';
+import { info } from '@actions/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import which from 'which';
-import {
-  ensureTerraformDocsConfigDoesNotExist,
-  generateTerraformDocs,
-  installTerraformDocs,
-} from '../src/terraform-docs';
-import type { TerraformModule } from '../src/terraform-module';
-import { contextMock } from './__mocks__/context.mock';
-import { mockCore } from './setup';
 
-const execFilePromisified = promisify(cp.execFile);
+const execFilePromisified = promisify(execFile);
 const realPlatform = process.platform;
 const realArch = process.arch;
 
 // Mock node:fs functions
-vi.mock('node:fs', async () => {
-  const original = await vi.importActual('node:fs');
-  return {
-    ...original,
-    existsSync: vi.fn(),
-    unlinkSync: vi.fn(),
-  };
-});
+vi.mock('node:fs', async () => ({
+  ...(await vi.importActual('node:fs')),
+  existsSync: vi.fn(),
+  unlinkSync: vi.fn(),
+}));
 
 // Mock node:child_process functions
-vi.mock('node:child_process', async () => {
-  const original = await vi.importActual('node:child_process');
-  return {
-    ...original,
-    execFileSync: vi.fn(),
-    execFile: vi.fn(),
-  };
-});
+vi.mock('node:child_process', async () => ({
+  ...(await vi.importActual('node:child_process')),
+  execFileSync: vi.fn(),
+  execFile: vi.fn(),
+}));
 
 vi.mock('which', () => ({
   default: {
@@ -51,17 +41,16 @@ vi.mock('node:util', () => ({
 
 describe('terraform-docs', async () => {
   const terraformDocsVersion = 'v0.19.0';
-  const mockExecFileSync = vi.mocked(cp.execFileSync);
+  const mockExecFileSync = vi.mocked(execFileSync);
   const mockWhichSync = vi.mocked(which.sync);
-  const mockFsExistsSync = vi.mocked(fs.existsSync);
-  const mockFsUnlinkSync = vi.mocked(fs.unlinkSync);
+  const fsExistsSyncMock = vi.mocked(existsSync);
+  const mockFsUnlinkSync = vi.mocked(unlinkSync);
   const mockExecFilePromisified = vi.mocked(execFilePromisified);
-
-  beforeEach(() => {});
 
   afterEach(() => {
     Object.defineProperty(process, 'platform', { value: realPlatform });
     Object.defineProperty(process, 'arch', { value: realArch });
+    vi.resetAllMocks();
   });
 
   describe('install terraform-docs (linux, darwin, freebsd)', () => {
@@ -88,7 +77,7 @@ describe('terraform-docs', async () => {
 
     beforeEach(() => {
       mockExecFileSync.mockReturnValue('mocked output');
-      mockWhichSync.mockImplementation((command) => commands[command]);
+      mockWhichSync.mockImplementation((command) => commands[command as keyof typeof commands]);
     });
 
     for (const { platform, arch } of validCombinations) {
@@ -134,7 +123,7 @@ describe('terraform-docs', async () => {
     ];
 
     beforeEach(() => {
-      mockWhichSync.mockImplementation((command) => commands[command]);
+      mockWhichSync.mockImplementation((command) => commands[command as keyof typeof commands]);
       mockExecFileSync.mockImplementation((cmd: string, args?: readonly string[]) => {
         // Check for 'GetFolderPath('System')' in args and return systemDir if found
         if (cmd === commands.powershell && args?.some((arg) => arg.includes("GetFolderPath('System')"))) {
@@ -226,8 +215,8 @@ describe('terraform-docs', async () => {
       'terraform-docs',
       'terraform-docs.tar.gz',
       'terraform-docs.zip',
-      path.join('/usr/local/bin', 'terraform-docs'),
-      path.join('C:\\Windows\\System32', 'terraform-docs.exe'),
+      join('/usr/local/bin', 'terraform-docs'),
+      join('C:\\Windows\\System32', 'terraform-docs.exe'),
     ];
 
     beforeEach(async () => {
@@ -238,7 +227,7 @@ describe('terraform-docs', async () => {
 
       // Replace mock implementations with real ones
       mockExecFileSync.mockImplementation(realChildProcess.execFileSync);
-      mockFsExistsSync.mockImplementation(realFs.existsSync);
+      fsExistsSyncMock.mockImplementation(realFs.existsSync);
       mockFsUnlinkSync.mockImplementation(realFs.unlinkSync);
       mockWhichSync.mockImplementation(realWhich.sync);
     });
@@ -247,7 +236,7 @@ describe('terraform-docs', async () => {
       // Cleanup downloaded/installed files
       for (const file of cleanupFiles) {
         try {
-          fs.unlinkSync(file);
+          unlinkSync(file);
         } catch (err) {
           // Ignore cleanup errors
         }
@@ -260,7 +249,7 @@ describe('terraform-docs', async () => {
       installTerraformDocs(terraformDocsVersion);
 
       // Verify installation by checking version output
-      const output = cp.execFileSync(
+      const output = execFileSync(
         process.platform === 'win32' ? 'terraform-docs.exe' : 'terraform-docs',
         ['--version'],
         { encoding: 'utf8' },
@@ -321,7 +310,7 @@ describe('terraform-docs', async () => {
     };
 
     beforeEach(() => {
-      mockFsExistsSync.mockReturnValue(false);
+      fsExistsSyncMock.mockReturnValue(false);
       mockExecFilePromisified.mockReturnValue(
         Promise.resolve({
           stdout: '# Test Module\nThis is test documentation.',
@@ -331,28 +320,28 @@ describe('terraform-docs', async () => {
     });
 
     it('should remove existing ".terraform-docs.yml" config if present', async () => {
-      mockFsExistsSync.mockReturnValue(true);
+      fsExistsSyncMock.mockReturnValue(true);
 
-      const terraformDocsFile = path.join(contextMock.workspaceDir, '.terraform-docs.yml');
+      const terraformDocsFile = join(context.workspaceDir, '.terraform-docs.yml');
 
       ensureTerraformDocsConfigDoesNotExist();
-      expect(mockFsExistsSync).toHaveBeenCalledWith(terraformDocsFile);
+      expect(fsExistsSyncMock).toHaveBeenCalledWith(terraformDocsFile);
       expect(mockFsUnlinkSync).toHaveBeenCalledWith(terraformDocsFile);
-      expect(mockCore.info.mock.calls).toEqual([
+      expect(vi.mocked(info).mock.calls).toEqual([
         ['Ensuring .terraform-docs.yml does not exist'],
         ['Found .terraform-docs.yml file, removing.'],
       ]);
     });
 
     it('should not remove ".terraform-docs.yml" config if not present', async () => {
-      mockFsExistsSync.mockReturnValue(false);
+      fsExistsSyncMock.mockReturnValue(false);
 
-      const terraformDocsFile = path.join(contextMock.workspaceDir, '.terraform-docs.yml');
+      const terraformDocsFile = join(context.workspaceDir, '.terraform-docs.yml');
 
       ensureTerraformDocsConfigDoesNotExist();
-      expect(mockFsExistsSync).toHaveBeenCalledWith(terraformDocsFile);
+      expect(fsExistsSyncMock).toHaveBeenCalledWith(terraformDocsFile);
       expect(mockFsUnlinkSync).not.toHaveBeenCalledWith(terraformDocsFile);
-      expect(mockCore.info.mock.calls).toEqual([
+      expect(vi.mocked(info).mock.calls).toEqual([
         ['Ensuring .terraform-docs.yml does not exist'],
         ['No .terraform-docs.yml found.'],
       ]);
@@ -402,8 +391,8 @@ describe('terraform-docs', async () => {
     it('should call core.info with appropriate messages', async () => {
       await generateTerraformDocs(mockModule);
 
-      expect(mockCore.info).toHaveBeenCalledWith(`Generating tf-docs for: ${mockModule.moduleName}`);
-      expect(mockCore.info).toHaveBeenCalledWith(`Finished tf-docs for: ${mockModule.moduleName}`);
+      expect(info).toHaveBeenCalledWith(`Generating tf-docs for: ${mockModule.moduleName}`);
+      expect(info).toHaveBeenCalledWith(`Finished tf-docs for: ${mockModule.moduleName}`);
     });
   });
 });

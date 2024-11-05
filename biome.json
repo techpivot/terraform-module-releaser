@@ -23,9 +23,15 @@
   },
   "javascript": {
     "formatter": {
+      "enabled": true,
       "trailingCommas": "all",
       "semicolons": "always",
       "quoteStyle": "single"
+    }
+  },
+  "json": {
+    "formatter": {
+      "enabled": true
     }
   }
 }
