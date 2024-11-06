@@ -1,11 +1,11 @@
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { dirname, extname, join, relative, resolve } from 'node:path';
 import { config } from '@/config';
-import { shouldExcludeFile } from '@/file-util';
 import type { CommitDetails } from '@/pull-request';
 import type { GitHubRelease } from '@/releases';
-import type { ReleaseType } from '@/semver';
-import { determineReleaseType, getNextTagVersion } from '@/semver';
+import { shouldExcludeFile } from '@/utils/file';
+import type { ReleaseType } from '@/utils/semver';
+import { determineReleaseType, getNextTagVersion } from '@/utils/semver';
 import { debug, endGroup, info, startGroup } from '@actions/core';
 
 /**
