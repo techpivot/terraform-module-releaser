@@ -57,6 +57,7 @@ export async function getAllTags(options: GetAllTagsOptions = { per_page: 100 })
     }
 
     throw new Error(errorMessage, { cause: error });
+    /* c8 ignore next */
   } finally {
     console.timeEnd('Elapsed time fetching tags');
     endGroup();

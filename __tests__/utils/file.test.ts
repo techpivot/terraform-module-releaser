@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { copyModuleContents, removeDirectoryContents, shouldExcludeFile } from '@/file-util';
+import { copyModuleContents, removeDirectoryContents, shouldExcludeFile } from '@/utils/file';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 describe('file-util', () => {

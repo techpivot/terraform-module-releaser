@@ -14,9 +14,9 @@ import {
   WIKI_TITLE_REPLACEMENTS,
 } from '@/constants';
 import { context } from '@/context';
-import { removeDirectoryContents } from '@/file-util';
 import { generateTerraformDocs } from '@/terraform-docs';
 import type { TerraformModule } from '@/terraform-module';
+import { removeDirectoryContents } from '@/utils/file';
 import { endGroup, info, startGroup } from '@actions/core';
 import pLimit from 'p-limit';
 import which from 'which';

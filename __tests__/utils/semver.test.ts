@@ -1,5 +1,5 @@
 import { config } from '@/mocks/config';
-import { determineReleaseType, getNextTagVersion } from '@/semver';
+import { determineReleaseType, getNextTagVersion } from '@/utils/semver';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 describe('semver', () => {
