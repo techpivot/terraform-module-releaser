@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import { copyModuleContents, removeDirectoryContents, shouldExcludeFile } from '@/utils/file';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-describe('file-util', () => {
+describe('utils/file', () => {
   let tempDir: string;
 
   beforeEach(() => {
@@ -17,7 +17,7 @@ describe('file-util', () => {
     fs.rmSync(tempDir, { recursive: true });
   });
 
-  describe('shouldExcludeFile', () => {
+  describe('shouldExcludeFile()', () => {
     it('should exclude file when pattern matches', () => {
       const baseDirectory = tempDir;
       const filePath = path.join(tempDir, 'file.txt');
@@ -87,7 +87,7 @@ describe('file-util', () => {
     });
   });
 
-  describe('copyModuleContents', () => {
+  describe('copyModuleContents()', () => {
     beforeEach(() => {
       // Create src and dest directories for every test in this suite
       fs.mkdirSync(path.join(tempDir, 'src'), { recursive: true });
@@ -195,7 +195,7 @@ describe('file-util', () => {
     });
   });
 
-  describe('removeDirectoryContents', () => {
+  describe('removeDirectoryContents()', () => {
     it('should remove directory contents except for specified exceptions', () => {
       const directory = path.join(tempDir, 'dir');
       const exceptions = ['file.txt'];

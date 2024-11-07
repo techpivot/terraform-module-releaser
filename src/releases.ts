@@ -12,6 +12,10 @@ import { debug, endGroup, info, startGroup } from '@actions/core';
 import { RequestError } from '@octokit/request-error';
 import which from 'which';
 
+interface GetAllReleasesOptions {
+  per_page?: number;
+}
+
 export interface GitHubRelease {
   /**
    * The release ID
@@ -27,6 +31,11 @@ export interface GitHubRelease {
    * The body content of the release.
    */
   body: string;
+
+  /**
+   * The tag name assocaited with this release. E.g. `modules/aws/vpc/v1.0.0`
+   */
+  tagName: string;
 }
 
 /**
@@ -35,10 +44,11 @@ export interface GitHubRelease {
  * This function fetches the list of releases for the repository specified in the configuration.
  * It returns the releases as an array of objects containing the title, body, and tag name.
  *
+ * @param {GetAllReleasesOptions} options - Optional configuration for the API request
  * @returns {Promise<GitHubRelease[]>} A promise that resolves to an array of release details.
  * @throws {RequestError} Throws an error if the request to fetch releases fails.
  */
-export async function getAllReleases(): Promise<GitHubRelease[]> {
+export async function getAllReleases(options: GetAllReleasesOptions = { per_page: 100 }): Promise<GitHubRelease[]> {
   console.time('Elapsed time fetching releases'); // Start timing
   startGroup('Fetching repository releases');
 
@@ -49,21 +59,26 @@ export async function getAllReleases(): Promise<GitHubRelease[]> {
     } = context;
 
     const releases: GitHubRelease[] = [];
+    let totalRequests = 0;
 
     for await (const response of octokit.paginate.iterator(octokit.rest.repos.listReleases, {
+      ...options,
       owner,
       repo,
     })) {
+      totalRequests++;
       for (const release of response.data) {
         releases.push({
           id: release.id,
           title: release.name ?? '', // same as tag as defined in our pull request for now (no need for tag)
           body: release.body ?? '',
+          tagName: release.tag_name,
         });
       }
     }
 
-    info(`Found ${releases.length} releases${releases.length !== 1 ? 's' : ''}.`);
+    debug(`Total page requests: ${totalRequests}`);
+    info(`Found ${releases.length} release${releases.length !== 1 ? 's' : ''}.`);
     debug(JSON.stringify(releases, null, 2));
 
     // Note: No need to sort currently as they by default return in indexed order with most recent first.
@@ -79,6 +94,7 @@ export async function getAllReleases(): Promise<GitHubRelease[]> {
     }
 
     throw new Error(errorMessage, { cause: error });
+    /* c8 ignore next */
   } finally {
     console.timeEnd('Elapsed time fetching releases');
     endGroup();
@@ -152,6 +168,7 @@ export async function createTaggedRelease(
       // Create a GitHub release using the tag
       info(`Creating GitHub release for ${moduleName}@${nextTag}`);
       const body = getModuleChangelog(module);
+
       const response = await octokit.rest.repos.createRelease({
         owner,
         repo,
@@ -170,6 +187,7 @@ export async function createTaggedRelease(
         id: response.data.id,
         title: nextTag,
         body,
+        tagName: nextTag,
       };
       module.releases.unshift(release);
 
@@ -194,6 +212,7 @@ export async function createTaggedRelease(
     }
 
     throw new Error(`Failed to create tags in repository: ${errorMessage}`, { cause: error });
+    /* c8 ignore next */
   } finally {
     // Cleanup: remove the temp directory
     console.timeEnd('Elapsed time pushing new tags & release');

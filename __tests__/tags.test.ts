@@ -67,7 +67,7 @@ describe('tags', () => {
 
   describe('getAllTags() - pagination', () => {
     beforeAll(() => {
-      // Reset to mock Octokit before each test
+      // Reset to mock Octokit before test suite
       context.useMockOctokit();
     });
 

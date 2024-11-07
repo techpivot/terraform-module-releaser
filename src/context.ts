@@ -197,7 +197,7 @@ function initializeContext(): Context {
       }),
       prNumber: payload.pull_request.number,
       prTitle: payload.pull_request.title.trim(),
-      prBody: payload.pull_request.body || '',
+      prBody: payload.pull_request.body ?? '',
       issueNumber: payload.pull_request.number,
       workspaceDir,
       isPrMergeEvent: payload.action === 'closed' && payload.pull_request.merged === true,
