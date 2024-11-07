@@ -13,6 +13,19 @@
  * trimSlashes("///another/example///");
  */
 export function trimSlashes(str: string): string {
-  // Remove leading slashes separately from the trailing to prevent backtracking.
-  return str.replace(/^\/+/, '').replace(/\/+$/, '');
+  let start = 0;
+  let end = str.length;
+
+  // Remove leading slashes by adjusting start index
+  while (start < end && str[start] === '/') {
+    start++;
+  }
+
+  // Remove trailing slashes by adjusting end index
+  while (end > start && str[end - 1] === '/') {
+    end--;
+  }
+
+  // Return the substring without leading and trailing slashes
+  return str.slice(start, end);
 }

@@ -1,7 +1,7 @@
 import { trimSlashes } from '@/utils/string';
 import { describe, expect, it } from 'vitest';
 
-describe('string', () => {
+describe('utils/string', () => {
   describe('trimSlashes', () => {
     it('should remove leading and trailing slashes while preserving internal ones', () => {
       const testCases = [

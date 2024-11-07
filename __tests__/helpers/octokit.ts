@@ -25,7 +25,20 @@ type OctokitDataShape = {
   repos: {
     getCommit: { sha: string };
     listTags: Array<{ name: string }>;
-    listReleases: [];
+    listReleases: Array<{
+      id: number;
+      name: string | null;
+      body: string | null;
+      tag_name: string;
+    }>;
+    createRelease: {
+      id: number;
+      name: string;
+      body: string;
+      tag_name: string;
+      draft: boolean;
+      prerelease: boolean;
+    };
   };
 };
 
@@ -65,7 +78,28 @@ const defaultOctokitData: OctokitDataShape = {
       { name: 'v1.1.0' },
       { name: 'v1.1.2' },
     ],
-    listReleases: [],
+    listReleases: [
+      {
+        id: 182147836,
+        name: 'moduleA/v1.0.0',
+        body: 'Release notes for moduleA v1.0.0',
+        tag_name: 'moduleA/v1.0.0',
+      },
+      {
+        id: 179452510,
+        name: 'moduleB/v1.0.0',
+        body: 'Release notes for moduleB v1.0.0',
+        tag_name: 'moduleB/v1.0.0',
+      },
+    ],
+    createRelease: {
+      id: 3,
+      name: 'moduleA/v1.1.0',
+      body: 'New release',
+      tag_name: 'moduleA/v1.1.0',
+      draft: false,
+      prerelease: false,
+    },
   },
 };
 
@@ -188,7 +222,12 @@ export function createDefaultOctokitMock() {
       repos: {
         getCommit: vi.fn().mockResolvedValue(currentOctokitData.repos.getCommit),
         listTags: createPaginatedMockImplementation('repos.listTags', '/tags'),
-        listReleases: vi.fn().mockResolvedValue(currentOctokitData.repos.listReleases),
+        listReleases: createPaginatedMockImplementation('repos.listReleases', '/releases'),
+        createRelease: vi.fn().mockImplementation(async () => ({
+          data: currentOctokitData.repos.createRelease,
+          status: 201,
+        })),
+        deleteRelease: vi.fn().mockResolvedValue({ status: 204, data: null }),
       },
     },
     paginate: {
