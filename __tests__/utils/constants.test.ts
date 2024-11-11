@@ -7,7 +7,7 @@ import {
   PR_RELEASE_MARKER,
   PR_SUMMARY_MARKER,
   WIKI_TITLE_REPLACEMENTS,
-} from '@/constants';
+} from '@/utils/constants';
 import { describe, expect, it } from 'vitest';
 
 describe('constants', () => {

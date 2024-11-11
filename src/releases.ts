@@ -4,17 +4,16 @@ import { cpSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { getModuleChangelog } from '@/changelog';
 import { config } from '@/config';
-import { GITHUB_ACTIONS_BOT_EMAIL, GITHUB_ACTIONS_BOT_NAME } from '@/constants';
 import { context } from '@/context';
 import type { TerraformChangedModule } from '@/terraform-module';
+import { GITHUB_ACTIONS_BOT_EMAIL, GITHUB_ACTIONS_BOT_NAME } from '@/utils/constants';
 import { copyModuleContents } from '@/utils/file';
 import { debug, endGroup, info, startGroup } from '@actions/core';
+import type { RestEndpointMethodTypes } from '@octokit/plugin-rest-endpoint-methods';
 import { RequestError } from '@octokit/request-error';
 import which from 'which';
 
-interface GetAllReleasesOptions {
-  per_page?: number;
-}
+type ListReleasesParams = Omit<RestEndpointMethodTypes['repos']['listReleases']['parameters'], 'owner' | 'repo'>;
 
 export interface GitHubRelease {
   /**
@@ -48,7 +47,9 @@ export interface GitHubRelease {
  * @returns {Promise<GitHubRelease[]>} A promise that resolves to an array of release details.
  * @throws {RequestError} Throws an error if the request to fetch releases fails.
  */
-export async function getAllReleases(options: GetAllReleasesOptions = { per_page: 100 }): Promise<GitHubRelease[]> {
+export async function getAllReleases(
+  options: ListReleasesParams = { per_page: 100, page: 1 },
+): Promise<GitHubRelease[]> {
   console.time('Elapsed time fetching releases'); // Start timing
   startGroup('Fetching repository releases');
 
@@ -61,13 +62,15 @@ export async function getAllReleases(options: GetAllReleasesOptions = { per_page
     const releases: GitHubRelease[] = [];
     let totalRequests = 0;
 
-    for await (const response of octokit.paginate.iterator(octokit.rest.repos.listReleases, {
+    const iterator = octokit.paginate.iterator(octokit.rest.repos.listReleases, {
       ...options,
       owner,
       repo,
-    })) {
+    });
+    for await (const { data } of iterator) {
       totalRequests++;
-      for (const release of response.data) {
+
+      for (const release of data) {
         releases.push({
           id: release.id,
           title: release.name ?? '', // same as tag as defined in our pull request for now (no need for tag)

@@ -1,9 +1,9 @@
 import { getPullRequestChangelog } from '@/changelog';
 import { config } from '@/config';
-import { BRANDING_COMMENT, PR_RELEASE_MARKER, PR_SUMMARY_MARKER } from '@/constants';
 import { context } from '@/context';
 import type { GitHubRelease } from '@/releases';
 import type { TerraformChangedModule } from '@/terraform-module';
+import { BRANDING_COMMENT, GITHUB_ACTIONS_BOT_USER_ID, PR_RELEASE_MARKER, PR_SUMMARY_MARKER } from '@/utils/constants';
 import { WikiStatus, getWikiLink } from '@/wiki';
 import { debug, endGroup, info, startGroup } from '@actions/core';
 import { RequestError } from '@octokit/request-error';
@@ -40,14 +40,21 @@ export async function hasReleaseComment(): Promise<boolean> {
     } = context;
 
     // Fetch all comments on the pull request
-    const { data: comments } = await octokit.rest.issues.listComments({
+    const iterator = octokit.paginate.iterator(octokit.rest.issues.listComments, {
       owner,
       repo,
       issue_number,
     });
 
-    // Check if any comment includes the release marker
-    return comments.some((comment) => comment.body?.includes(PR_RELEASE_MARKER));
+    for await (const { data } of iterator) {
+      for (const comment of data) {
+        if (comment.user?.id === GITHUB_ACTIONS_BOT_USER_ID && comment.body?.includes(PR_RELEASE_MARKER)) {
+          return true;
+        }
+      }
+    }
+
+    return false;
   } catch (error) {
     const requestError = error as RequestError;
     // If we got a 403 because the pull request doesn't have permissions. Let's really help wrap this error
@@ -79,14 +86,16 @@ async function getChangedFilesInPullRequest(): Promise<Set<string>> {
       prNumber: pull_number,
     } = context;
 
-    const { data: files } = await octokit.rest.pulls.listFiles({
-      owner,
-      repo,
-      pull_number,
-    });
+    const iterator = octokit.paginate.iterator(octokit.rest.pulls.listFiles, { owner, repo, pull_number });
 
-    // Return a Set of file names
-    return new Set(files.map((file) => file.filename));
+    const changedFiles = new Set<string>();
+    for await (const { data } of iterator) {
+      for (const file of data) {
+        changedFiles.add(file.filename);
+      }
+    }
+
+    return changedFiles;
   } catch (error) {
     const requestError = error as RequestError;
     // Handle 403 error specifically for permission issues
@@ -139,11 +148,12 @@ export async function getPullRequestCommits(): Promise<CommitDetails[]> {
     info(`Found ${prChangedFiles.size} file${prChangedFiles.size !== 1 ? 's' : ''} changed in pull request.`);
     info(JSON.stringify(Array.from(prChangedFiles), null, 2));
 
-    const listCommitsResponse = await octokit.rest.pulls.listCommits({ owner, repo, pull_number });
+    const iterator = octokit.paginate.iterator(octokit.rest.pulls.listCommits, { owner, repo, pull_number });
 
     // Iterate over the fetched commits to retrieve details and files
-    const commits = await Promise.all(
-      listCommitsResponse.data.map(async (commit) => {
+    const commits = [];
+    for await (const { data } of iterator) {
+      for (const commit of data) {
         const commitDetailsResponse = await octokit.rest.repos.getCommit({
           owner,
           repo,
@@ -156,13 +166,13 @@ export async function getPullRequestCommits(): Promise<CommitDetails[]> {
             ?.map((file) => file.filename)
             .filter((filename) => prChangedFiles.has(filename)) ?? [];
 
-        return {
+        commits.push({
           message: commit.commit.message,
           sha: commit.sha,
           files,
-        };
-      }),
-    );
+        });
+      }
+    }
 
     info(`Found ${commits.length} commit${commits.length !== 1 ? 's' : ''}.`);
     debug(JSON.stringify(commits, null, 2));
@@ -170,8 +180,7 @@ export async function getPullRequestCommits(): Promise<CommitDetails[]> {
     return commits;
   } catch (error) {
     const requestError = error as RequestError;
-    // If we got a 403 because the pull request doesn't have permissions. Let's really help wrap this error
-    // and make it clear to the consumer what actions need to be taken.
+
     if (requestError.status === 403) {
       throw new Error(
         `Unable to read and write pull requests due to insufficient permissions. Ensure the workflow permissions.pull-requests is set to "write".\n${requestError.message}`,
@@ -179,6 +188,7 @@ export async function getPullRequestCommits(): Promise<CommitDetails[]> {
       );
     }
     throw error;
+    /* c8 ignore next */
   } finally {
     console.timeEnd('Elapsed time fetching commits');
     endGroup();

@@ -1,11 +1,10 @@
 import { config } from '@/config';
 import { context } from '@/context';
 import { debug, endGroup, info, startGroup } from '@actions/core';
+import type { RestEndpointMethodTypes } from '@octokit/plugin-rest-endpoint-methods';
 import { RequestError } from '@octokit/request-error';
 
-interface GetAllTagsOptions {
-  per_page?: number;
-}
+type ListTagsParams = Omit<RestEndpointMethodTypes['repos']['listTags']['parameters'], 'owner' | 'repo'>;
 
 /**
  * Fetches all tags from the specified GitHub repository.
@@ -17,7 +16,7 @@ interface GetAllTagsOptions {
  * @returns {Promise<string[]>} A promise that resolves to an array of tag names.
  * @throws {RequestError} Throws an error if the request to fetch tags fails.
  */
-export async function getAllTags(options: GetAllTagsOptions = { per_page: 100 }): Promise<string[]> {
+export async function getAllTags(options: ListTagsParams = { per_page: 100, page: 1 }): Promise<string[]> {
   console.time('Elapsed time fetching tags');
   startGroup('Fetching repository tags');
 

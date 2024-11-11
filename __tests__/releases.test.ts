@@ -1,4 +1,3 @@
-import { execFileSync } from 'node:child_process';
 import { config } from '@/mocks/config';
 import { context } from '@/mocks/context';
 import { createTaggedRelease, deleteLegacyReleases, getAllReleases } from '@/releases';
@@ -22,28 +21,30 @@ vi.mock('node:fs', () => ({
 
 describe('releases', () => {
   const url = 'https://api.github.com/repos/techpivot/terraform-module-releaser/releases';
-  const mockReleaseData = [
-    {
-      id: 182147836,
-      name: 'v1.3.0',
-      body:
-        '## 1.3.0 (2024-10-27)\r\n' +
-        '\r\n' +
-        '### New Features ✨\r\n' +
-        '\r\n' +
-        '- **Enhanced Wiki Generation** 📚: Improved the wiki content generation process, ensuring a more secure and clean directory structure. @virgofx (#90)\r\n',
-      tag_name: 'v1.3.0',
-    },
-    {
-      id: 179452510,
-      name: 'v1.0.1 - Bug Fixes for Wiki Checkout and Doc Updates',
-      body:
-        "## What's Changed\r\n" +
-        '* Fixed wiki generation failures due to incorrect checkout and authentication logic ([#6](https://github.com/techpivot/terraform-module-releaser/pull/6))\r\n',
-      tag_name: 'v1.0.1',
-    },
-  ];
-  const mockGitHubReleases = mockReleaseData.map((release) => ({
+  const mockListReleasesResponse = {
+    data: [
+      {
+        id: 182147836,
+        name: 'v1.3.0',
+        body:
+          '## 1.3.0 (2024-10-27)\r\n' +
+          '\r\n' +
+          '### New Features ✨\r\n' +
+          '\r\n' +
+          '- **Enhanced Wiki Generation** 📚: Improved the wiki content generation process, ensuring a more secure and clean directory structure. @virgofx (#90)\r\n',
+        tag_name: 'v1.3.0',
+      },
+      {
+        id: 179452510,
+        name: 'v1.0.1 - Bug Fixes for Wiki Checkout and Doc Updates',
+        body:
+          "## What's Changed\r\n" +
+          '* Fixed wiki generation failures due to incorrect checkout and authentication logic ([#6](https://github.com/techpivot/terraform-module-releaser/pull/6))\r\n',
+        tag_name: 'v1.0.1',
+      },
+    ],
+  };
+  const mockGetAllReleasesResponse = mockListReleasesResponse.data.map((release) => ({
     id: release.id,
     title: release.name,
     body: release.body,
@@ -128,26 +129,30 @@ describe('releases', () => {
     });
 
     it('should fetch all available releases when pagination is required', async () => {
-      stubOctokitReturnData('repos.listReleases', mockReleaseData);
+      stubOctokitReturnData('repos.listReleases', mockListReleasesResponse);
       const releases = await getAllReleases({ per_page: 1 });
 
       expect(Array.isArray(releases)).toBe(true);
-      expect(releases.length).toBe(mockReleaseData.length);
+      expect(releases.length).toBe(mockListReleasesResponse.data.length);
 
       // Exact match of known tags to ensure no unexpected tags are included
-      expect(releases).toEqual(mockGitHubReleases);
+      expect(releases).toEqual(mockGetAllReleasesResponse);
 
       // Additional assertions to verify pagination calls and debug info
-      expect(info).toHaveBeenCalledWith(`Found ${mockGitHubReleases.length} releases.`);
+      expect(info).toHaveBeenCalledWith(`Found ${mockGetAllReleasesResponse.length} releases.`);
       expect(vi.mocked(debug).mock.calls).toEqual([
-        [`Total page requests: ${mockGitHubReleases.length}`],
-        [JSON.stringify(mockGitHubReleases, null, 2)],
+        [`Total page requests: ${mockGetAllReleasesResponse.length}`],
+        [JSON.stringify(mockGetAllReleasesResponse, null, 2)],
       ]);
     });
 
     it('should output singular "release" when only one', async () => {
-      const mockReleaseDataSingle = mockReleaseData.slice(0, 1);
-      const mappedReleaseDataSingle = mockGitHubReleases.slice(0, 1);
+      const mockReleaseDataSingle = {
+        ...mockListReleasesResponse,
+        data: [...mockListReleasesResponse.data.slice(0, 1)],
+      };
+
+      const mappedReleaseDataSingle = mockGetAllReleasesResponse.slice(0, 1);
 
       stubOctokitReturnData('repos.listReleases', mockReleaseDataSingle);
       const releases = await getAllReleases({ per_page: 1 });
@@ -167,32 +172,34 @@ describe('releases', () => {
     });
 
     it('should fetch all available tags when pagination is not required', async () => {
-      stubOctokitReturnData('repos.listReleases', mockReleaseData);
+      stubOctokitReturnData('repos.listReleases', mockListReleasesResponse);
       const releases = await getAllReleases({ per_page: 20 });
 
       expect(Array.isArray(releases)).toBe(true);
-      expect(releases.length).toBe(mockReleaseData.length);
+      expect(releases.length).toBe(mockListReleasesResponse.data.length);
 
       // Exact match of known tags to ensure no unexpected tags are included
-      expect(releases).toEqual(mockGitHubReleases);
+      expect(releases).toEqual(mockGetAllReleasesResponse);
 
       // Additional assertions to verify pagination calls and debug info
-      expect(info).toHaveBeenCalledWith(`Found ${mockGitHubReleases.length} releases.`);
+      expect(info).toHaveBeenCalledWith(`Found ${mockGetAllReleasesResponse.length} releases.`);
       expect(vi.mocked(debug).mock.calls).toEqual([
         ['Total page requests: 1'],
-        [JSON.stringify(mockGitHubReleases, null, 2)],
+        [JSON.stringify(mockGetAllReleasesResponse, null, 2)],
       ]);
     });
 
     it('should truncate empty release name/title and body', async () => {
-      stubOctokitReturnData('repos.listReleases', [
-        {
-          id: 182147836,
-          name: null,
-          body: null,
-          tag_name: 'v1.3.0',
-        },
-      ]);
+      stubOctokitReturnData('repos.listReleases', {
+        data: [
+          {
+            id: 182147836,
+            name: null,
+            body: null,
+            tag_name: 'v1.3.0',
+          },
+        ],
+      });
       const releases = await getAllReleases({ per_page: 1 });
 
       expect(Array.isArray(releases)).toBe(true);
@@ -305,16 +312,15 @@ describe('releases', () => {
     };
 
     it('should successfully create a tagged release', async () => {
-      const mockRelease = {
-        id: 1,
-        name: 'test-module/v1.0.1',
-        body: 'Release notes',
-        tag_name: 'test-module/v1.0.1',
-        draft: false,
-        prerelease: false,
-      };
-
-      stubOctokitReturnData('repos.createRelease', mockRelease);
+      stubOctokitReturnData('repos.createRelease', {
+        data: {
+          name: 'test-module/v1.0.1',
+          body: 'Release notes',
+          tag_name: 'test-module/v1.0.1',
+          draft: false,
+          prerelease: false,
+        },
+      });
       const result = await createTaggedRelease([mockTerraformModule]);
 
       expect(result).toHaveLength(1);
@@ -396,8 +402,8 @@ describe('releases', () => {
 
     it('should delete matching legacy releases (plural)', async () => {
       config.set({ deleteLegacyTags: true });
-      const moduleNames = mockReleaseData.map((release) => release.name);
-      await deleteLegacyReleases(moduleNames, mockGitHubReleases);
+      const moduleNames = mockGetAllReleasesResponse.map((release) => release.title);
+      await deleteLegacyReleases(moduleNames, mockGetAllReleasesResponse);
 
       expect(context.octokit.rest.repos.deleteRelease).toHaveBeenCalledTimes(moduleNames.length);
       expect(startGroup).toHaveBeenCalledWith('Deleting legacy Terraform module releases');
@@ -405,7 +411,7 @@ describe('releases', () => {
         [`Found ${moduleNames.length} legacy releases to delete.`],
         [
           JSON.stringify(
-            mockGitHubReleases.map((release) => release.title),
+            mockGetAllReleasesResponse.map((release) => release.title),
             null,
             2,
           ),
@@ -417,8 +423,8 @@ describe('releases', () => {
 
     it('should delete matching legacy release (singular)', async () => {
       config.set({ deleteLegacyTags: true });
-      const releases = mockGitHubReleases.slice(0, 1);
-      const moduleNames = mockReleaseData.map((release) => release.name).slice(0, 1);
+      const releases = mockGetAllReleasesResponse.slice(0, 1);
+      const moduleNames = mockGetAllReleasesResponse.map((release) => release.title).slice(0, 1);
       await deleteLegacyReleases(moduleNames, releases);
 
       expect(context.octokit.rest.repos.deleteRelease).toHaveBeenCalledTimes(moduleNames.length);
@@ -438,7 +444,7 @@ describe('releases', () => {
 
     it('should provide helpful error for permission issues', async () => {
       config.set({ deleteLegacyTags: true });
-      const moduleNames = mockReleaseData.map((release) => release.name);
+      const moduleNames = mockGetAllReleasesResponse.map((release) => release.title);
 
       vi.mocked(context.octokit.rest.repos.deleteRelease).mockRejectedValueOnce(
         new RequestError('Permission Error', 403, {
@@ -447,7 +453,7 @@ describe('releases', () => {
         }),
       );
 
-      await expect(deleteLegacyReleases(moduleNames, mockGitHubReleases)).rejects.toThrow(
+      await expect(deleteLegacyReleases(moduleNames, mockGetAllReleasesResponse)).rejects.toThrow(
         `Failed to delete release: v1.3.0 Permission Error.
 Ensure that the GitHub Actions workflow has the correct permissions to delete releases by ensuring that your workflow YAML file has the following block under "permissions":
 
@@ -459,7 +465,7 @@ permissions:
 
     it('should handle non-permission errors', async () => {
       config.set({ deleteLegacyTags: true });
-      const moduleNames = mockReleaseData.map((release) => release.name);
+      const moduleNames = mockGetAllReleasesResponse.map((release) => release.title);
 
       vi.mocked(context.octokit.rest.repos.deleteRelease).mockRejectedValueOnce(
         new RequestError('Not Found', 404, {
@@ -468,7 +474,7 @@ permissions:
         }),
       );
 
-      await expect(deleteLegacyReleases(moduleNames, mockGitHubReleases)).rejects.toThrow(
+      await expect(deleteLegacyReleases(moduleNames, mockGetAllReleasesResponse)).rejects.toThrow(
         'Failed to delete release: [Status = 404] Not Found',
       );
       expect(endGroup).toHaveBeenCalled();
