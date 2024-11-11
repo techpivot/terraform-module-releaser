@@ -76,8 +76,8 @@ describe('tags', () => {
     });
 
     it('should fetch all available tags when pagination is required', async () => {
-      const mockTagData = [{ name: 'v2.0.0' }, { name: 'v2.0.1' }, { name: 'v2.0.2' }];
-      const expectedTags = mockTagData.map((tag) => tag.name);
+      const mockTagData = { data: [{ name: 'v2.0.0' }, { name: 'v2.0.1' }, { name: 'v2.0.2' }] };
+      const expectedTags = mockTagData.data.map((tag) => tag.name);
 
       stubOctokitReturnData('repos.listTags', mockTagData);
       const tags = await getAllTags({ per_page: 1 });
@@ -97,8 +97,8 @@ describe('tags', () => {
     });
 
     it('should output singular "tag" when only one', async () => {
-      const mockTagData = [{ name: 'v4.0.0' }];
-      const expectedTags = mockTagData.map((tag) => tag.name);
+      const mockTagData = { data: [{ name: 'v4.0.0' }] };
+      const expectedTags = mockTagData.data.map((tag) => tag.name);
 
       stubOctokitReturnData('repos.listTags', mockTagData);
       const tags = await getAllTags({ per_page: 1 });
@@ -118,7 +118,7 @@ describe('tags', () => {
     });
 
     it('should fetch all available tags when pagination is not required', async () => {
-      stubOctokitReturnData('repos.listTags', [{ name: 'v2.0.0' }, { name: 'v2.0.1' }, { name: 'v2.0.2' }]);
+      stubOctokitReturnData('repos.listTags', { data: [{ name: 'v2.0.0' }, { name: 'v2.0.1' }, { name: 'v2.0.2' }] });
 
       const tags = await getAllTags({ per_page: 20 });
 

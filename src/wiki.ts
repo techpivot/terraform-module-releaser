@@ -6,16 +6,16 @@ import { cpus } from 'node:os';
 import { join, resolve } from 'node:path';
 import { getModuleReleaseChangelog } from '@/changelog';
 import { config } from '@/config';
+import { context } from '@/context';
+import { generateTerraformDocs } from '@/terraform-docs';
+import type { TerraformModule } from '@/terraform-module';
 import {
   BRANDING_WIKI,
   GITHUB_ACTIONS_BOT_EMAIL,
   GITHUB_ACTIONS_BOT_NAME,
   PROJECT_URL,
   WIKI_TITLE_REPLACEMENTS,
-} from '@/constants';
-import { context } from '@/context';
-import { generateTerraformDocs } from '@/terraform-docs';
-import type { TerraformModule } from '@/terraform-module';
+} from '@/utils/constants';
 import { removeDirectoryContents } from '@/utils/file';
 import { endGroup, info, startGroup } from '@actions/core';
 import pLimit from 'p-limit';
