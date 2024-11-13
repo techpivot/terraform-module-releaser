@@ -1,9 +1,8 @@
 import { config } from '@/mocks/config';
 import { context } from '@/mocks/context';
 import { createTaggedRelease, deleteLegacyReleases, getAllReleases } from '@/releases';
-import type { GitHubRelease } from '@/releases';
-import type { TerraformChangedModule } from '@/terraform-module';
 import { stubOctokitReturnData } from '@/tests/helpers/octokit';
+import type { GitHubRelease, TerraformChangedModule } from '@/types';
 import { debug, endGroup, info, startGroup } from '@actions/core';
 import { RequestError } from '@octokit/request-error';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';

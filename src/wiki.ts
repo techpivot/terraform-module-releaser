@@ -8,7 +8,7 @@ import { getModuleReleaseChangelog } from '@/changelog';
 import { config } from '@/config';
 import { context } from '@/context';
 import { generateTerraformDocs } from '@/terraform-docs';
-import type { TerraformModule } from '@/terraform-module';
+import type { TerraformModule } from '@/types';
 import {
   BRANDING_WIKI,
   GITHUB_ACTIONS_BOT_EMAIL,

@@ -1,12 +1,6 @@
-import type { Context, Repo } from '@/context';
 import { createDefaultOctokitMock, createRealOctokit } from '@/tests/helpers/octokit';
-import { Octokit } from '@octokit/core';
-import { paginateRest } from '@octokit/plugin-paginate-rest';
-import { restEndpointMethods } from '@octokit/plugin-rest-endpoint-methods';
+import type { Context, OctokitRestApi, Repo } from '@/types';
 import { merge } from 'ts-deepmerge';
-
-// Create the extended Octokit type with plugins, matching the real context
-const OctokitExtended = Octokit.plugin(restEndpointMethods, paginateRest);
 
 /**
  * Default repository configuration
@@ -23,7 +17,7 @@ export interface ContextWithMethods extends Context {
   set: (overrides?: Partial<Context>) => void;
   reset: () => void;
   useRealOctokit: () => Promise<void>;
-  useMockOctokit: () => InstanceType<typeof OctokitExtended>;
+  useMockOctokit: () => OctokitRestApi;
 }
 
 /**
@@ -32,7 +26,7 @@ export interface ContextWithMethods extends Context {
 const defaultContext: Context = {
   repo: defaultRepo,
   repoUrl: 'https://github.com/techpivot/terraform-module-releaser',
-  octokit: createDefaultOctokitMock() as unknown as InstanceType<typeof OctokitExtended>,
+  octokit: createDefaultOctokitMock(),
   prNumber: 1,
   prTitle: 'Test Pull Request',
   prBody: 'This is a test pull request body.',
@@ -86,28 +80,28 @@ const contextProxyHandler: ProxyHandler<ContextWithMethods> = {
     if (typeof prop === 'string') {
       if (prop === 'set') {
         return (overrides: Partial<Context> = {}) => {
-          currentContext = merge(currentContext, overrides) as Context;
+          // Note: No need for deep merge
+          currentContext = { ...currentContext, ...overrides } as Context;
         };
       }
       if (prop === 'reset') {
         return () => {
-          const mockOctokit = createDefaultOctokitMock() as unknown as InstanceType<typeof OctokitExtended>;
           currentContext = {
             ...defaultContext,
-            octokit: mockOctokit,
+            octokit: createDefaultOctokitMock(),
           };
         };
       }
       if (prop === 'useRealOctokit') {
         return async () => {
-          currentContext.octokit = (await createRealOctokit()) as unknown as InstanceType<typeof OctokitExtended>;
+          currentContext.octokit = await createRealOctokit();
+          return currentContext.octokit;
         };
       }
       if (prop === 'useMockOctokit') {
         return () => {
-          const mockOctokit = createDefaultOctokitMock() as unknown as InstanceType<typeof OctokitExtended>;
-          currentContext.octokit = mockOctokit;
-          return mockOctokit;
+          currentContext.octokit = createDefaultOctokitMock();
+          return currentContext.octokit;
         };
       }
       return currentContext[prop as keyof Context];

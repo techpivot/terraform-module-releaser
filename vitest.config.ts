@@ -12,7 +12,7 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['json-summary', 'text', 'lcov'],
       include: ['src'],
-      exclude: ['__tests__', '__mocks__', 'src/__mocks__'],
+      exclude: ['__tests__', '__mocks__', 'src/__mocks__', 'src/types'],
     },
     setupFiles: ['__tests__/_setup'],
     include: ['__tests__/**/*.test.ts'],

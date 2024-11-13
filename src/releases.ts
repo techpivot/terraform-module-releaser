@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { getModuleChangelog } from '@/changelog';
 import { config } from '@/config';
 import { context } from '@/context';
-import type { TerraformChangedModule } from '@/terraform-module';
+import type { GitHubRelease, TerraformChangedModule } from '@/types';
 import { GITHUB_ACTIONS_BOT_EMAIL, GITHUB_ACTIONS_BOT_NAME } from '@/utils/constants';
 import { copyModuleContents } from '@/utils/file';
 import { debug, endGroup, info, startGroup } from '@actions/core';
@@ -14,28 +14,6 @@ import { RequestError } from '@octokit/request-error';
 import which from 'which';
 
 type ListReleasesParams = Omit<RestEndpointMethodTypes['repos']['listReleases']['parameters'], 'owner' | 'repo'>;
-
-export interface GitHubRelease {
-  /**
-   * The release ID
-   */
-  id: number;
-
-  /**
-   * The title of the release.
-   */
-  title: string;
-
-  /**
-   * The body content of the release.
-   */
-  body: string;
-
-  /**
-   * The tag name assocaited with this release. E.g. `modules/aws/vpc/v1.0.0`
-   */
-  tagName: string;
-}
 
 /**
  * Retrieves all releases from the specified GitHub repository.

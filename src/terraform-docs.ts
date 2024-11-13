@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { context } from '@/context';
-import type { TerraformModule } from '@/terraform-module';
+import type { TerraformModule } from '@/types';
 import { endGroup, info, startGroup } from '@actions/core';
 import which from 'which';
 

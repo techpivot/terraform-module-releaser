@@ -1,7 +1,5 @@
 import { config } from '@/config';
-
-// Define a type for the release type options
-export type ReleaseType = 'major' | 'minor' | 'patch';
+import type { ReleaseType } from '@/types';
 
 /**
  * Determines the release type based on the provided commit message and previous release type.

@@ -1,78 +1,23 @@
-import { existsSync, readdirSync, statSync } from 'node:fs';
-import { dirname, extname, join, relative, resolve } from 'node:path';
+import { readdirSync, statSync } from 'node:fs';
+import { dirname, join, relative, resolve } from 'node:path';
 import { config } from '@/config';
-import type { CommitDetails } from '@/pull-request';
-import type { GitHubRelease } from '@/releases';
-import { shouldExcludeFile } from '@/utils/file';
-import type { ReleaseType } from '@/utils/semver';
+import type { CommitDetails, GitHubRelease, TerraformChangedModule, TerraformModule } from '@/types';
+import { isTerraformDirectory, shouldExcludeFile } from '@/utils/file';
 import { determineReleaseType, getNextTagVersion } from '@/utils/semver';
+import { removeTrailingDots } from '@/utils/string';
 import { debug, endGroup, info, startGroup } from '@actions/core';
 
 /**
- * Represents a Terraform module.
+ * Type guard function to determine if a given module is a `TerraformChangedModule`.
+ *
+ * This function checks if the `module` object has the property `isChanged` set to `true`.
+ * It can be used to narrow down the type of the module within TypeScript's type system.
+ *
+ * @param {TerraformModule | TerraformChangedModule} module - The module to check.
+ * @returns {module is TerraformChangedModule} - Returns `true` if the module is a `TerraformChangedModule`, otherwise `false`.
  */
-export interface TerraformModule {
-  /**
-   * The relative Terraform module path used for tagging with some special characters removed.
-   */
-  moduleName: string;
-
-  /**
-   * The relative path to the directory where the module is located. (This may include other non-name characters)
-   */
-  directory: string;
-
-  /**
-   * Array of tags relevant to this module
-   */
-  tags: string[];
-
-  /**
-   * Array of releases relevant to this module
-   */
-  releases: GitHubRelease[];
-
-  /**
-   * Specifies the full tag associated with the module or null if no tag is found.
-   */
-  latestTag: string | null;
-
-  /**
-   * Specifies the tag version associated with the module (vX.Y.Z) or null if no tag is found.
-   */
-  latestTagVersion: string | null;
-}
-
-/**
- * Represents a changed Terraform module, which indicates that a pull request contains file changes
- * associated with a corresponding Terraform module directory.
- */
-export interface TerraformChangedModule extends TerraformModule {
-  /**
-   *
-   */
-  isChanged: true;
-
-  /**
-   * An array of commit messages associated with the module's changes.
-   */
-  commitMessages: string[];
-
-  /**
-   * The type of release (e.g., major, minor, patch) to be applied to the module.
-   */
-  releaseType: ReleaseType;
-
-  /**
-   * The tag that will be applied to the module for the next release.
-   * This should follow the pattern of 'module-name/vX.Y.Z'.
-   */
-  nextTag: string;
-
-  /**
-   * The version string of the next tag, which is formatted as 'vX.Y.Z'.
-   */
-  nextTagVersion: string;
+export function isChangedModule(module: TerraformModule | TerraformChangedModule): module is TerraformChangedModule {
+  return 'isChanged' in module && module.isChanged === true;
 }
 
 /**
@@ -87,16 +32,6 @@ export function getTerraformChangedModules(
   return modules.filter((module): module is TerraformChangedModule => {
     return (module as TerraformChangedModule).isChanged === true;
   });
-}
-
-/**
- * Checks if a directory contains any Terraform (.tf) files.
- *
- * @param {string} dirPath - The path of the directory to check.
- * @returns {boolean} True if the directory contains at least one .tf file, otherwise false.
- */
-function isTerraformDirectory(dirPath: string): boolean {
-  return existsSync(dirPath) && readdirSync(dirPath).some((file) => extname(file) === '.tf');
 }
 
 /**
@@ -115,19 +50,6 @@ function isTerraformDirectory(dirPath: string): boolean {
  * @returns {string} A valid Terraform module name based on the provided directory path.
  */
 function getTerraformModuleNameFromRelativePath(terraformDirectory: string): string {
-  // Use a loop to remove trailing dots without regex. Instead of using regex, this code iteratively
-  // checks each character from the end of the string. It decreases the endIndex until it finds a
-  // non-dot character. This approach runs in O(n) time, where n is the length of the string.
-  // It avoids the backtracking issues associated with regex patterns, making it more robust against
-  // potential DoS attacks.
-  const removeTrailingDots = (input: string) => {
-    let endIndex = input.length;
-    while (endIndex > 0 && input[endIndex - 1] === '.') {
-      endIndex--;
-    }
-    return input.slice(0, endIndex);
-  };
-
   const cleanedDirectory = terraformDirectory
     .trim() // Remove leading/trailing whitespace
     .replace(/[^a-zA-Z0-9/_-]+/g, '-') // Remove invalid characters, allowing a-z, A-Z, 0-9, /, _, -
@@ -304,12 +226,14 @@ export function getAllTerraformModules(
 
       const module = terraformModulesMap[moduleName];
 
+      /* c8 ignore start */
       if (!module) {
         // Module not found in the map, this should not happen
         throw new Error(
           `Found changed file "${relativeFilePath}" associated with a terraform module "${moduleName}"; however, associated module does not exist`,
         );
       }
+      /* c8 ignore stop */
 
       // Update the module with the TerraformChangedModule properties
       const releaseType = determineReleaseType(message, (module as TerraformChangedModule)?.releaseType);

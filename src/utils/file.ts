@@ -1,7 +1,17 @@
 import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { extname, join, relative } from 'node:path';
 import { info } from '@actions/core';
 import { minimatch } from 'minimatch';
+
+/**
+ * Checks if a directory contains any Terraform (.tf) files.
+ *
+ * @param {string} dirPath - The path of the directory to check.
+ * @returns {boolean} True if the directory contains at least one .tf file, otherwise false.
+ */
+export function isTerraformDirectory(dirPath: string): boolean {
+  return existsSync(dirPath) && readdirSync(dirPath).some((file) => extname(file) === '.tf');
+}
 
 /**
  * Checks if a file should be excluded from matching based on the defined exclude patterns

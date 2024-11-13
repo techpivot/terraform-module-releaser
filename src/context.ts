@@ -1,81 +1,12 @@
 import * as fs from 'node:fs';
 import { config } from '@/config';
+import type { Context } from '@/types';
 import { endGroup, info, startGroup } from '@actions/core';
 import { Octokit } from '@octokit/core';
 import { paginateRest } from '@octokit/plugin-paginate-rest';
 import { restEndpointMethods } from '@octokit/plugin-rest-endpoint-methods';
 import type { PullRequestEvent } from '@octokit/webhooks-types';
 import { homepage, version } from '../package.json';
-
-// Extend Octokit with REST API methods and pagination support using the plugins
-const OctokitRestApi = Octokit.plugin(restEndpointMethods, paginateRest);
-
-/**
- * Interface representing the repository structure of a GitHub repo in the form of the owner and name.
- */
-export interface Repo {
-  /**
-   * The owner of the repository, typically a GitHub user or an organization.
-   */
-  owner: string;
-
-  /**
-   * The name of the repository.
-   */
-  repo: string;
-}
-
-/**
- * Interface representing the context required by this GitHub Action.
- * It contains the necessary GitHub API client, repository details, and pull request information.
- */
-export interface Context {
-  /**
-   * The repository details (owner and name).
-   */
-  repo: Repo;
-
-  /**
-   * The URL of the repository. (e.g. https://github.com/techpivot/terraform-module-releaser)
-   */
-  repoUrl: string;
-
-  /**
-   * An instance of the Octokit class with REST API and pagination plugins enabled.
-   * This instance is authenticated using a GitHub token and is used to interact with GitHub's API.
-   */
-  octokit: InstanceType<typeof OctokitRestApi>;
-
-  /**
-   * The pull request number associated with the workflow run.
-   */
-  prNumber: number;
-
-  /**
-   * The title of the pull request.
-   */
-  prTitle: string;
-
-  /**
-   * The body of the pull request.
-   */
-  prBody: string;
-
-  /**
-   * The GitHub API issue number associated with the pull request.
-   */
-  issueNumber: number;
-
-  /**
-   * The workspace directory where the repository is checked out during the workflow run.
-   */
-  workspaceDir: string;
-
-  /**
-   * Flag to indicate if the current event is a pull request merge event.
-   */
-  isPrMergeEvent: boolean;
-}
 
 // The context object will be initialized lazily
 let contextInstance: Context | null = null;
@@ -186,12 +117,12 @@ function initializeContext(): Context {
     }
 
     // Extend Octokit with REST API methods and pagination support using the plugins
-    const OctokitExtended = Octokit.plugin(restEndpointMethods, paginateRest);
+    const OctokitRestApi = Octokit.plugin(restEndpointMethods, paginateRest);
 
     contextInstance = {
       repo: { owner, repo },
       repoUrl: `${serverUrl}/${owner}/${repo}`,
-      octokit: new OctokitExtended({
+      octokit: new OctokitRestApi({
         auth: `token ${config.githubToken}`,
         userAgent: `[octokit] terraform-module-releaser/${version} (${homepage})`,
       }),

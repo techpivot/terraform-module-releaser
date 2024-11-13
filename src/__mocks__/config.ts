@@ -1,16 +1,9 @@
-import type { Config } from '@/config';
-import { merge } from 'ts-deepmerge';
-
-// Extend the original Config type with mock methods
-export interface MockConfig extends Config {
-  resetDefaults: () => void;
-  set: (overrides?: Partial<Config>) => void;
-}
+import type { Config } from '@/types';
 
 /**
  * Configuration interface with added utility methods
  */
-export interface ConfigWithMethods extends Config {
+interface ConfigWithMethods extends Config {
   set: (overrides: Partial<Config>) => void;
   resetDefaults: () => void;
 }
@@ -81,7 +74,8 @@ const configProxyHandler: ProxyHandler<ConfigWithMethods> = {
     if (typeof prop === 'string') {
       if (prop === 'set') {
         return (overrides: Partial<Config> = {}) => {
-          currentConfig = merge(currentConfig, overrides) as Config;
+          // Note: No need for deep merge
+          currentConfig = { ...currentConfig, ...overrides } as Config;
         };
       }
       if (prop === 'resetDefaults') {
@@ -89,6 +83,7 @@ const configProxyHandler: ProxyHandler<ConfigWithMethods> = {
           currentConfig = { ...defaultConfig };
         };
       }
+
       return currentConfig[prop as keyof Config];
     }
     return undefined;
