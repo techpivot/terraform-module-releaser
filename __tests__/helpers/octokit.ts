@@ -1,3 +1,4 @@
+import type { OctokitRestApi } from '@/types';
 import { trimSlashes } from '@/utils/string';
 import { paginateRest } from '@octokit/plugin-paginate-rest';
 import { restEndpointMethods } from '@octokit/plugin-rest-endpoint-methods';
@@ -276,7 +277,7 @@ function createPaginatedMockImplementation<K extends keyof EndpointNames, M exte
  *
  * @returns Mock Octokit instance
  */
-export function createDefaultOctokitMock() {
+export function createDefaultOctokitMock(): OctokitRestApi {
   resetMockStore();
 
   const mockOctokit = {
@@ -325,7 +326,8 @@ export function createDefaultOctokitMock() {
     },
   };
 
-  return mockOctokit;
+  // For now, we just emulate and return a Partial OctokitRestApi since this is a mocked version
+  return mockOctokit as unknown as OctokitRestApi;
 }
 
 /**
@@ -333,7 +335,7 @@ export function createDefaultOctokitMock() {
  *
  * @returns Promise containing configured Octokit instance
  */
-export async function createRealOctokit() {
+export async function createRealOctokit(): Promise<OctokitRestApi> {
   const realOctokit = (await vi.importActual('@octokit/core')) as typeof import('@octokit/core');
   const OctokitWithPaginateAndRest = realOctokit.Octokit.plugin(restEndpointMethods, paginateRest);
 

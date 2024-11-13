@@ -1,9 +1,8 @@
 import { config } from '@/mocks/config';
 import { context } from '@/mocks/context';
 import { addPostReleaseComment, addReleasePlanComment, getPullRequestCommits, hasReleaseComment } from '@/pull-request';
-import type { GitHubRelease } from '@/releases';
-import type { TerraformChangedModule } from '@/terraform-module';
 import { stubOctokitImplementation, stubOctokitReturnData } from '@/tests/helpers/octokit';
+import type { GitHubRelease, TerraformChangedModule } from '@/types';
 import { BRANDING_COMMENT, GITHUB_ACTIONS_BOT_USER_ID, PR_RELEASE_MARKER, PR_SUMMARY_MARKER } from '@/utils/constants';
 import { WikiStatus } from '@/wiki';
 import { debug, endGroup, info, startGroup } from '@actions/core';

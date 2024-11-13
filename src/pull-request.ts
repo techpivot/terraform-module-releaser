@@ -1,34 +1,15 @@
 import { getPullRequestChangelog } from '@/changelog';
 import { config } from '@/config';
 import { context } from '@/context';
-import type { GitHubRelease } from '@/releases';
-import type { TerraformChangedModule } from '@/terraform-module';
+import type { CommitDetails, GitHubRelease, TerraformChangedModule } from '@/types';
 import { BRANDING_COMMENT, GITHUB_ACTIONS_BOT_USER_ID, PR_RELEASE_MARKER, PR_SUMMARY_MARKER } from '@/utils/constants';
 import { WikiStatus, getWikiLink } from '@/wiki';
 import { debug, endGroup, info, startGroup } from '@actions/core';
 import { RequestError } from '@octokit/request-error';
 
-export interface CommitDetails {
-  /**
-   * The commit message.
-   */
-  message: string;
-
-  /**
-   * The SHA-1 hash of the commit.
-   */
-  sha: string;
-
-  /**
-   * An array of relative file paths associated with the commit.
-   */
-  files: string[];
-}
-
 /**
  * Checks whether the pull request already has a comment containing the release marker.
  *
- * @param {string} releaseMarker - The release marker to look for in the comments (e.g., PR_RELEASE_MARKER).
  * @returns {Promise<boolean>} - Returns true if a comment with the release marker is found, false otherwise.
  */
 export async function hasReleaseComment(): Promise<boolean> {

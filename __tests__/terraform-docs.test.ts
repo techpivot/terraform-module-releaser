@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { context } from '@/mocks/context';
 import { ensureTerraformDocsConfigDoesNotExist, generateTerraformDocs, installTerraformDocs } from '@/terraform-docs';
-import type { TerraformModule } from '@/terraform-module';
+import type { TerraformModule } from '@/types';
 import { info } from '@actions/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import which from 'which';

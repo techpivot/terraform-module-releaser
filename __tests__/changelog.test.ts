@@ -1,13 +1,13 @@
 import { getModuleChangelog, getModuleReleaseChangelog, getPullRequestChangelog } from '@/changelog';
 import { context } from '@/mocks/context';
-import type { TerraformChangedModule, TerraformModule } from '@/terraform-module';
+import type { TerraformChangedModule, TerraformModule } from '@/types';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 describe('changelog', () => {
   const mockDate = new Date('2024-11-05');
 
   beforeEach(() => {
-    vi.useFakeTimers();
+    //vi.useFakeTimers();
     vi.setSystemTime(mockDate);
 
     // Reset context mock before each test

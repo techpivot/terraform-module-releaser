@@ -1,4 +1,4 @@
-import { trimSlashes } from '@/utils/string';
+import { removeTrailingDots, trimSlashes } from '@/utils/string';
 import { describe, expect, it } from 'vitest';
 
 describe('utils/string', () => {
@@ -31,6 +31,26 @@ describe('utils/string', () => {
 
     it('should preserve internal multiple slashes', () => {
       expect(trimSlashes('/path//with///internal////slashes/')).toBe('path//with///internal////slashes');
+    });
+  });
+
+  describe('removeTrailingDots', () => {
+    it('should remove all trailing dots from a string', () => {
+      expect(removeTrailingDots('hello...')).toBe('hello');
+      expect(removeTrailingDots('module-name..')).toBe('module-name');
+      expect(removeTrailingDots('test.....')).toBe('test');
+    });
+
+    it('should preserve internal dots', () => {
+      expect(removeTrailingDots('hello.world')).toBe('hello.world');
+      expect(removeTrailingDots('module.name.test')).toBe('module.name.test');
+    });
+
+    it('should handle edge cases', () => {
+      expect(removeTrailingDots('')).toBe('');
+      expect(removeTrailingDots('...')).toBe('');
+      expect(removeTrailingDots('.')).toBe('');
+      expect(removeTrailingDots('hello')).toBe('hello');
     });
   });
 });

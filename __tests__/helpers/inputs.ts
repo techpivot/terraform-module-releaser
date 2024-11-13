@@ -1,4 +1,4 @@
-import type { Config } from '@/config';
+import type { Config } from '@/types';
 import { vi } from 'vitest';
 
 const INPUT_KEY = 'INPUT_';

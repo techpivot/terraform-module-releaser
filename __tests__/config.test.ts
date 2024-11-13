@@ -1,8 +1,7 @@
 import { clearConfigForTesting, config, getConfig } from '@/config';
+import { booleanConfigKeys, booleanInputs, requiredInputs, stubInputEnv } from '@/tests/helpers/inputs';
 import { endGroup, getBooleanInput, getInput, info, startGroup } from '@actions/core';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { booleanConfigKeys, booleanInputs, requiredInputs, stubInputEnv } from '@/tests/helpers/inputs';
 
 describe('config', () => {
   beforeAll(() => {

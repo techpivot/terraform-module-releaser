@@ -7,6 +7,10 @@ vi.mock('@actions/core');
 vi.mock('@/config');
 vi.mock('@/context');
 
+// Mock console time/timeEnd to be a no-op
+vi.spyOn(console, 'time').mockImplementation(() => {});
+vi.spyOn(console, 'timeEnd').mockImplementation(() => {});
+
 const defaultEnvironmentVariables = {
   GITHUB_EVENT_NAME: 'pull_request',
   GITHUB_REPOSITORY: 'techpivot/terraform-module-releaser',
