@@ -145,7 +145,7 @@ export function installTerraformDocs(terraformDocsVersion: string): void {
   startGroup(`Installing terraform-docs ${terraformDocsVersion}`);
 
   const cwd = process.cwd();
-  let tempDir = null;
+  let tmpDir = null;
 
   try {
     validateTerraformDocsVersion(terraformDocsVersion);
@@ -156,8 +156,8 @@ export function installTerraformDocs(terraformDocsVersion: string): void {
 
     // Create a temp directory to handle the extraction so this doesn't clobber our
     // current working directory.
-    tempDir = mkdtempSync(join(tmpdir(), 'terraform-docs-'));
-    process.chdir(tempDir);
+    tmpDir = mkdtempSync(join(tmpdir(), 'terraform-docs-'));
+    process.chdir(tmpDir);
 
     if (goPlatform === 'windows') {
       const powershellPath = which.sync('powershell');
@@ -206,9 +206,9 @@ export function installTerraformDocs(terraformDocsVersion: string): void {
       execFileSync('/usr/local/bin/terraform-docs', ['--version'], { stdio: 'inherit' });
     }
   } finally {
-    if (tempDir !== null) {
-      info(`Removing temp dir ${tempDir}`);
-      rmSync(tempDir, { recursive: true });
+    if (tmpDir !== null) {
+      info(`Removing temp dir ${tmpDir}`);
+      rmSync(tmpDir, { recursive: true });
     }
     process.chdir(cwd);
     console.timeEnd('Elapsed time installing terraform-docs');

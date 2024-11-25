@@ -147,6 +147,23 @@ describe('context', () => {
       expect(getContext().prTitle).toEqual(prTitle.trim());
     });
 
+    it('should initialize and output only summary of long pull request body', () => {
+      const prBody = 'Test PR with long long title that extends past the 57 character mark';
+      mockReadFileSync.mockImplementation(() => {
+        return JSON.stringify(
+          createPullRequestMock({
+            action: 'test',
+            pull_request: {
+              body: prBody,
+            },
+          }),
+        );
+      });
+
+      getContext();
+      expect(info).toHaveBeenCalledWith(`Pull Request Body: ${prBody.slice(0, 57)}...`);
+    });
+
     it('should initialize with null pull request body', () => {
       mockReadFileSync.mockImplementation(() => {
         return JSON.stringify(

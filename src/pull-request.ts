@@ -1,7 +1,7 @@
 import { getPullRequestChangelog } from '@/changelog';
 import { config } from '@/config';
 import { context } from '@/context';
-import type { CommitDetails, GitHubRelease, TerraformChangedModule } from '@/types';
+import type { CommitDetails, GitHubRelease, ReleasePlanCommentOptions, TerraformChangedModule } from '@/types';
 import { BRANDING_COMMENT, GITHUB_ACTIONS_BOT_USER_ID, PR_RELEASE_MARKER, PR_SUMMARY_MARKER } from '@/utils/constants';
 import { WikiStatus, getWikiLink } from '@/wiki';
 import { debug, endGroup, info, startGroup } from '@actions/core';
@@ -205,7 +205,7 @@ export async function getPullRequestCommits(): Promise<CommitDetails[]> {
 export async function addReleasePlanComment(
   terraformChangedModules: TerraformChangedModule[],
   terraformModuleNamesToRemove: string[],
-  wikiStatus: { status: WikiStatus; errorMessage?: string },
+  wikiStatus: ReleasePlanCommentOptions,
 ): Promise<void> {
   console.time('Elapsed time commenting on pull request');
   startGroup('Adding pull request release plan comment');
