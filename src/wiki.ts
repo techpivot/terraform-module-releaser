@@ -8,7 +8,7 @@ import { getModuleReleaseChangelog } from '@/changelog';
 import { config } from '@/config';
 import { context } from '@/context';
 import { generateTerraformDocs } from '@/terraform-docs';
-import type { TerraformModule } from '@/types';
+import type { ExecSyncError, TerraformModule } from '@/types';
 import {
   BRANDING_WIKI,
   GITHUB_ACTIONS_BOT_EMAIL,
@@ -56,6 +56,7 @@ export function checkoutWiki(): void {
   execFileSync(gitPath, ['config', '--global', '--add', 'safe.directory', wikiDirectory], { stdio: 'inherit' });
 
   info('Initializing the repository');
+
   if (!existsSync(wikiDirectory)) {
     mkdirSync(wikiDirectory);
   }
@@ -71,8 +72,15 @@ export function checkoutWiki(): void {
   try {
     execFileSync(gitPath, ['config', '--local', '--unset-all', 'http.https://github.com/.extraheader'], execWikiOpts);
   } catch (error) {
-    // This returns exit code 5 if not set. Not a problem. Let's ignore.
+    // Type guard to ensure we're handling the correct error type
+    if (error instanceof Error) {
+      // Only ignore specific status code if needed
+      if ((error as unknown as ExecSyncError).status !== 5) {
+        throw error;
+      }
+    }
   }
+
   execFileSync(
     gitPath,
     ['config', '--local', 'http.https://github.com/.extraheader', `Authorization: Basic ${basicCredential}`],
@@ -195,40 +203,35 @@ export function getWikiLink(moduleName: string, relative = true): string {
 async function generateWikiModule(terraformModule: TerraformModule): Promise<string> {
   const { moduleName, latestTag } = terraformModule;
 
-  try {
-    const wikiSlugFile = `${getWikiSlug(moduleName)}.md`;
-    const wikiFile = join(context.workspaceDir, WIKI_SUBDIRECTORY_NAME, wikiSlugFile);
+  const wikiSlugFile = `${getWikiSlug(moduleName)}.md`;
+  const wikiFile = join(context.workspaceDir, WIKI_SUBDIRECTORY_NAME, wikiSlugFile);
 
-    // Generate a module changelog
-    const changelog = getModuleReleaseChangelog(terraformModule);
-    const tfDocs = await generateTerraformDocs(terraformModule);
-    const wikiContent = [
-      '# Usage\n',
-      'To use this module in your Terraform, refer to the below module example:\n',
-      '```hcl',
-      `module "${moduleName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()}" {`,
-      `  source = "git::${context.repoUrl}.git?ref=${latestTag}"`,
-      '\n  # See inputs below for additional required parameters',
-      '}',
-      '```',
-      '\n# Attributes\n',
-      '<!-- BEGIN_TF_DOCS -->',
-      tfDocs,
-      '<!-- END_TF_DOCS -->',
-      '\n# Changelog\n',
-      changelog,
-    ].join('\n');
+  // Generate a module changelog
+  const changelog = getModuleReleaseChangelog(terraformModule);
+  const tfDocs = await generateTerraformDocs(terraformModule);
+  const wikiContent = [
+    '# Usage\n',
+    'To use this module in your Terraform, refer to the below module example:\n',
+    '```hcl',
+    `module "${moduleName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()}" {`,
+    `  source = "git::${context.repoUrl}.git?ref=${latestTag}"`,
+    '\n  # See inputs below for additional required parameters',
+    '}',
+    '```',
+    '\n# Attributes\n',
+    '<!-- BEGIN_TF_DOCS -->',
+    tfDocs,
+    '<!-- END_TF_DOCS -->',
+    '\n# Changelog\n',
+    changelog,
+  ].join('\n');
 
-    // Write the markdown content to the wiki file, overwriting if it exists
-    await fsp.writeFile(wikiFile, wikiContent, 'utf8');
+  // Write the markdown content to the wiki file, overwriting if it exists
+  await fsp.writeFile(wikiFile, wikiContent, 'utf8');
 
-    info(`Generated: ${wikiSlugFile}`);
+  info(`Generated: ${wikiSlugFile}`);
 
-    return wikiFile;
-  } catch (error) {
-    console.error(`Error writing wiki file for module: ${moduleName}`, error);
-    throw error;
-  }
+  return wikiFile;
 }
 
 /**
@@ -366,15 +369,9 @@ async function generateWikiFooter(): Promise<string | undefined> {
   }
 
   const footerFile = join(context.workspaceDir, WIKI_SUBDIRECTORY_NAME, '_Footer.md');
-
-  try {
-    // If the file doesn't exist, create and write content to it
-    await fsp.writeFile(footerFile, BRANDING_WIKI, 'utf8');
-    info('Generated: _Footer.md');
-    return footerFile;
-  } catch (error) {
-    console.error(`Error updating _Footer.md: ${error instanceof Error ? error.message : String(error)}`);
-  }
+  await fsp.writeFile(footerFile, BRANDING_WIKI, 'utf8');
+  info('Generated: _Footer.md');
+  return footerFile;
 }
 
 /**

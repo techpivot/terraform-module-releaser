@@ -1,6 +1,7 @@
 import { readdirSync, statSync } from 'node:fs';
-import { dirname, join, relative, resolve } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { config } from '@/config';
+import { context } from '@/context';
 import type { CommitDetails, GitHubRelease, TerraformChangedModule, TerraformModule } from '@/types';
 import { isTerraformDirectory, shouldExcludeFile } from '@/utils/file';
 import { determineReleaseType, getNextTagVersion } from '@/utils/semver';
@@ -75,14 +76,14 @@ function getTerraformModuleNameFromRelativePath(terraformDirectory: string): str
  *                          if no directory is found.
  */
 function getTerraformModuleDirectoryRelativePath(filePath: string): string | null {
-  let directory = resolve(dirname(filePath)); // Convert to absolute path
-  const cwd = process.cwd();
-  const rootDir = resolve(cwd); // Get absolute path to current working directory
+  const rootDir = resolve(context.workspaceDir);
+  const absoluteFilePath = isAbsolute(filePath) ? filePath : resolve(context.workspaceDir, filePath); // Handle relative/absolute
+  let directory = dirname(absoluteFilePath);
 
   // Traverse upward until the current working directory (rootDir) is reached
   while (directory !== rootDir && directory !== resolve(directory, '..')) {
     if (isTerraformDirectory(directory)) {
-      return relative(cwd, directory);
+      return relative(rootDir, directory);
     }
 
     directory = resolve(directory, '..'); // Move up a directory
@@ -153,7 +154,6 @@ function getReleasesForModule(moduleName: string, allReleases: GitHubRelease[]):
  * Retrieves all Terraform modules within the specified workspace directory and any changes based on commits.
  * Analyzes the directory structure to identify modules and checks commit history for changes.
  *
- * @param {string} workspaceDir - The root directory of the workspace containing Terraform modules.
  * @param {CommitDetails[]} commits - Array of commit details to analyze for changes.
  * @param {string[]} allTags - List of all tags associated with the modules.
  * @param {GitHubRelease[]} allReleases - GitHub releases for the modules.
@@ -163,7 +163,6 @@ function getReleasesForModule(moduleName: string, allReleases: GitHubRelease[]):
  */
 
 export function getAllTerraformModules(
-  workspaceDir: string,
   commits: CommitDetails[],
   allTags: string[],
   allReleases: GitHubRelease[],
@@ -172,6 +171,7 @@ export function getAllTerraformModules(
   console.time('Elapsed time finding terraform modules'); // Start timing
 
   const terraformModulesMap: Record<string, TerraformModule | TerraformChangedModule> = {};
+  const workspaceDir = context.workspaceDir;
 
   // Helper function to recursively search for Terraform modules
   const searchDirectory = (dir: string) => {

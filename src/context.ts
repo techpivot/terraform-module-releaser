@@ -134,12 +134,15 @@ function initializeContext(): Context {
       isPrMergeEvent: payload.action === 'closed' && payload.pull_request.merged === true,
     };
 
+    const truncatedBody =
+      contextInstance.prBody?.length > 60 ? `${contextInstance.prBody.slice(0, 57)}...` : contextInstance.prBody;
+
     info(`Event Name: ${eventName}`);
     info(`Repository: ${contextInstance.repo.owner}/${contextInstance.repo.repo}`);
     info(`Repository URL: ${contextInstance.repoUrl}`);
     info(`Pull Request Number: ${contextInstance.prNumber}`);
     info(`Pull Request Title: ${contextInstance.prTitle}`);
-    info(`Pull Request Body: ${contextInstance.prBody}`);
+    info(`Pull Request Body: ${truncatedBody}`);
     info(`Issue Number: ${contextInstance.issueNumber}`);
     info(`Workspace Directory: ${contextInstance.workspaceDir}`);
     info(`Is Pull Request Merge Event: ${contextInstance.isPrMergeEvent}`);
