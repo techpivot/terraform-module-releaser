@@ -11,6 +11,7 @@ on:
 permissions:
   contents: read
   packages: read
+  statuses: write # To report GitHub Actions status checks
 
 jobs:
   lint:
@@ -45,7 +46,7 @@ jobs:
         env:
           DEFAULT_BRANCH: main
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          FILTER_REGEX_EXCLUDE: dist/**/*
+          FILTER_REGEX_EXCLUDE: (dist/**/*)|(__tests__/fixtures/**/*)
           FIX_TYPESCRIPT_PRETTIER: false # Using biome
           FIX_JAVASCRIPT_PRETTIER: false # Using biome
           VALIDATE_ALL_CODEBASE: true

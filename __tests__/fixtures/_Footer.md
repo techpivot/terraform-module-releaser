@@ -1,0 +1,1 @@
+<h4 align="center">Powered by <img src="https://raw.githubusercontent.com/techpivot/terraform-module-releaser/refs/heads/main/assets/github-mark-12x14.png" height="14" width="12" align="top" /> <a href="https://github.com/techpivot/terraform-module-releaser">techpivot/terraform-module-releaser</a></h4>

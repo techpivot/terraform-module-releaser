@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { config } from '@/mocks/config';
+import { context } from '@/mocks/context';
 import {
   getAllTerraformModules,
   getTerraformChangedModules,
@@ -84,17 +85,15 @@ describe('terraform-module', () => {
   });
 
   describe('getAllTerraformModules() - with temporary directory', () => {
-    let tempDir: string;
+    let tmpDir: string;
     let moduleDir: string;
-
-    const origCwd = process.cwd();
 
     beforeEach(() => {
       // Create a temporary directory with a random suffix
-      tempDir = mkdtempSync(join(tmpdir(), 'terraform-test-'));
+      tmpDir = mkdtempSync(join(tmpdir(), 'terraform-test-'));
 
       // Create the module directory structure
-      moduleDir = join(tempDir, 'tf-modules', 'test-module');
+      moduleDir = join(tmpDir, 'tf-modules', 'test-module');
       mkdirSync(moduleDir, { recursive: true });
 
       // Create a main.tf file in the module directory
@@ -105,13 +104,14 @@ describe('terraform-module', () => {
       `;
       writeFileSync(join(moduleDir, 'variables.tf'), mainTfContent);
 
-      process.chdir(tempDir);
+      context.set({
+        workspaceDir: tmpDir,
+      });
     });
 
     afterEach(() => {
       // Clean up the temporary directory and all its contents
-      rmSync(tempDir, { recursive: true, force: true });
-      process.chdir(origCwd);
+      rmSync(tmpDir, { recursive: true, force: true });
     });
 
     it('should handle single module with no changes', () => {
@@ -119,7 +119,7 @@ describe('terraform-module', () => {
         {
           message: 'docs: variables update',
           sha: 'xyz789',
-          files: [`${moduleDir}/variables.tf`],
+          files: [`${moduleDir}/variables.tf`], // testing with absolute path which works also
         },
       ];
       const mockTags: string[] = ['tf-modules/test-module/v1.0.0'];
@@ -127,7 +127,7 @@ describe('terraform-module', () => {
 
       config.set({ moduleChangeExcludePatterns: ['*.md'] });
 
-      const modules = getAllTerraformModules(tempDir, mockCommits, mockTags, mockReleases);
+      const modules = getAllTerraformModules(mockCommits, mockTags, mockReleases);
 
       expect(modules).toHaveLength(1);
       expect(modules[0].moduleName).toBe('tf-modules/test-module');
@@ -144,7 +144,6 @@ describe('terraform-module', () => {
   });
 
   describe('getAllTerraformModules', () => {
-    // Test Constants
     const workspaceDir = process.cwd();
 
     // Type-safe mock data
@@ -172,8 +171,14 @@ describe('terraform-module', () => {
       },
     ];
 
+    beforeEach(() => {
+      context.set({
+        workspaceDir,
+      });
+    });
+
     it('should identify terraform modules and track their changes', () => {
-      const modules = getAllTerraformModules(workspaceDir, mockCommits, mockTags, mockReleases);
+      const modules = getAllTerraformModules(mockCommits, mockTags, mockReleases);
 
       expect(modules).toHaveLength(2); // Length of our mock modules
       expect(startGroup).toHaveBeenCalledWith('Finding all Terraform modules with corresponding changes');
@@ -214,7 +219,7 @@ describe('terraform-module', () => {
 
     it('should handle modules with no changes', () => {
       const noChangeCommits: CommitDetails[] = [];
-      const modules = getAllTerraformModules(workspaceDir, noChangeCommits, mockTags, mockReleases);
+      const modules = getAllTerraformModules(noChangeCommits, mockTags, mockReleases);
       expect(modules).toHaveLength(2);
       for (const module of modules) {
         expect('isChanged' in module).toBe(false);
@@ -232,7 +237,7 @@ describe('terraform-module', () => {
         },
       ];
       config.set({ moduleChangeExcludePatterns: ['*.md'] });
-      const modules = getAllTerraformModules(workspaceDir, commitsWithExcludedFiles, mockTags, mockReleases);
+      const modules = getAllTerraformModules(commitsWithExcludedFiles, mockTags, mockReleases);
       expect(modules).toHaveLength(2);
       for (const module of modules) {
         if (module.moduleName === 'tf-modules/vpc-endpoint') {
@@ -266,7 +271,7 @@ describe('terraform-module', () => {
         },
       ];
       config.set({ moduleChangeExcludePatterns: ['*.md'] });
-      const modules = getAllTerraformModules(workspaceDir, commitsWithExcludedFiles, mockTags, mockReleases);
+      const modules = getAllTerraformModules(commitsWithExcludedFiles, mockTags, mockReleases);
       expect(modules).toHaveLength(2);
       for (const module of modules) {
         if (module.moduleName === 'tf-modules/vpc-endpoint') {
@@ -317,7 +322,7 @@ describe('terraform-module', () => {
         },
       ];
 
-      const modules = getAllTerraformModules(workspaceDir, mockCommits, mockTags, mockReleases);
+      const modules = getAllTerraformModules(mockCommits, mockTags, mockReleases);
 
       // Find the vpc-endpoint module
       const vpcModule = modules.find((module) => module.moduleName === 'tf-modules/vpc-endpoint');
@@ -338,7 +343,7 @@ describe('terraform-module', () => {
           files: ['main.tf'],
         },
       ];
-      getAllTerraformModules(workspaceDir, commits, mockTags, mockReleases);
+      getAllTerraformModules(commits, mockTags, mockReleases);
       expect(info).toHaveBeenCalledWith('Analyzing file: main.tf');
     });
 
@@ -352,7 +357,7 @@ describe('terraform-module', () => {
         },
       ];
 
-      const modules = getAllTerraformModules(workspaceDir, nestedModuleCommit, mockTags, mockReleases);
+      const modules = getAllTerraformModules(nestedModuleCommit, mockTags, mockReleases);
 
       for (const module of modules) {
         if (module.moduleName === 'tf-modules/s3-bucket-object') {
@@ -414,7 +419,7 @@ describe('terraform-module', () => {
           },
         ];
 
-        const modules = getAllTerraformModules(workspaceDir, commits, tags, releases);
+        const modules = getAllTerraformModules(commits, tags, releases);
         const testModule = modules.find((m) => m.moduleName === moduleName);
 
         expect(testModule).toBeDefined();

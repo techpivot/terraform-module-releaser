@@ -48,7 +48,7 @@ export async function run(): Promise<void> {
     const allReleases = await getAllReleases();
 
     // Get all Terraform modules in this repository including changed metadata
-    const terraformModules = getAllTerraformModules(context.workspaceDir, commits, allTags, allReleases);
+    const terraformModules = getAllTerraformModules(commits, allTags, allReleases);
 
     // Create a new array of only changed Terraform modules
     const terraformChangedModules = getTerraformChangedModules(terraformModules);
