@@ -55,9 +55,7 @@ export const error: MockedFunction<(message: string | Error, properties?: Annota
  * @param message - The error message or object.
  * @throws An error with the specified message.
  */
-export const setFailed: MockedFunction<(message: string | Error) => void> = vi.fn((message: string | Error) => {
-  actual.setFailed(message);
-});
+export const setFailed: MockedFunction<(message: string | Error) => void> = vi.fn((message: string | Error) => {});
 
 /**
  * Begins a new output group. Output until the next `endGroup` will be foldable in this group.

@@ -1,3 +1,5 @@
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { config } from '@/mocks/config';
 import { context } from '@/mocks/context';
 import { createTaggedRelease, deleteLegacyReleases, getAllReleases } from '@/releases';
@@ -13,7 +15,9 @@ vi.mock('node:child_process', () => ({
 vi.mock('node:fs', () => ({
   existsSync: vi.fn(),
   copyFileSync: vi.fn(),
-  mkdirSync: vi.fn(),
+  mkdtempSync: vi.fn().mockImplementation(() => {
+    return join(tmpdir(), (Math.random() + 1).toString(36).substring(7));
+  }),
   cpSync: vi.fn(),
   readdirSync: vi.fn().mockImplementation(() => []),
 }));
@@ -321,6 +325,8 @@ describe('releases', () => {
         },
       });
       const result = await createTaggedRelease([mockTerraformModule]);
+
+      console.log(result);
 
       expect(result).toHaveLength(1);
       expect(result[0].moduleName).toBe('test-module');

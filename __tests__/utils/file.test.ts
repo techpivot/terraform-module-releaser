@@ -5,27 +5,27 @@ import { copyModuleContents, isTerraformDirectory, removeDirectoryContents, shou
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 describe('utils/file', () => {
-  let tempDir: string;
+  let tmpDir: string;
 
   beforeEach(() => {
     // Create a temporary directory before each test
-    tempDir = mkdtempSync(join(tmpdir(), 'test-dir-'));
+    tmpDir = mkdtempSync(join(tmpdir(), 'test-dir-'));
   });
 
   afterEach(() => {
     // Remove temporary directory
-    rmSync(tempDir, { recursive: true });
+    rmSync(tmpDir, { recursive: true });
   });
 
   describe('isTerraformDirectory()', () => {
     it('should return true for a directory that has .tf files', () => {
-      writeFileSync(join(tempDir, 'main.tf'), '# terraform code');
-      expect(isTerraformDirectory(tempDir)).toBe(true);
+      writeFileSync(join(tmpDir, 'main.tf'), '# terraform code');
+      expect(isTerraformDirectory(tmpDir)).toBe(true);
     });
 
     it('should return false for a directory that has .tf files', () => {
-      writeFileSync(join(tempDir, 'README.md'), '# README');
-      expect(isTerraformDirectory(tempDir)).toBe(false);
+      writeFileSync(join(tmpDir, 'README.md'), '# README');
+      expect(isTerraformDirectory(tmpDir)).toBe(false);
     });
 
     it('should return false for invalid directory', () => {
@@ -35,33 +35,33 @@ describe('utils/file', () => {
 
   describe('shouldExcludeFile()', () => {
     it('should exclude file when pattern matches', () => {
-      const baseDirectory = tempDir;
-      const filePath = join(tempDir, 'file.txt');
+      const baseDirectory = tmpDir;
+      const filePath = join(tmpDir, 'file.txt');
       const excludePatterns = ['*.txt'];
 
       expect(shouldExcludeFile(baseDirectory, filePath, excludePatterns)).toBe(true);
     });
 
     it('should not exclude file when pattern does not match', () => {
-      const baseDirectory = tempDir;
-      const filePath = join(tempDir, 'file.txt');
+      const baseDirectory = tmpDir;
+      const filePath = join(tmpDir, 'file.txt');
       const excludePatterns = ['*.js'];
 
       expect(shouldExcludeFile(baseDirectory, filePath, excludePatterns)).toBe(false);
     });
 
     it('should handle relative paths correctly', () => {
-      const baseDirectory = tempDir;
-      const filePath = join(tempDir, 'subdir', 'file.txt');
+      const baseDirectory = tmpDir;
+      const filePath = join(tmpDir, 'subdir', 'file.txt');
       const excludePatterns = ['subdir/*.txt'];
 
       expect(shouldExcludeFile(baseDirectory, filePath, excludePatterns)).toBe(true);
     });
 
     it('should handle exclusion pattern: *.md', () => {
-      const baseDirectory = tempDir;
-      const filePath1 = join(tempDir, 'README.md');
-      const filePath2 = join(tempDir, 'nested', 'README.md');
+      const baseDirectory = tmpDir;
+      const filePath1 = join(tmpDir, 'README.md');
+      const filePath2 = join(tmpDir, 'nested', 'README.md');
       const excludePatterns = ['*.md'];
 
       expect(shouldExcludeFile(baseDirectory, filePath1, excludePatterns)).toBe(true);
@@ -69,9 +69,9 @@ describe('utils/file', () => {
     });
 
     it('should handle exclusion pattern: **/*.md', () => {
-      const baseDirectory = tempDir;
-      const filePath1 = join(tempDir, 'README.md');
-      const filePath2 = join(tempDir, 'nested', 'README.md');
+      const baseDirectory = tmpDir;
+      const filePath1 = join(tmpDir, 'README.md');
+      const filePath2 = join(tmpDir, 'nested', 'README.md');
       const excludePatterns = ['**/*.md'];
 
       expect(shouldExcludeFile(baseDirectory, filePath1, excludePatterns)).toBe(true);
@@ -79,10 +79,10 @@ describe('utils/file', () => {
     });
 
     it('should handle exclusion pattern: tests/**', () => {
-      const baseDirectory = tempDir;
-      const filePath1 = join(tempDir, 'tests/config.test.ts');
-      const filePath2 = join(tempDir, 'tests2/config.test.ts');
-      const filePath3 = join(tempDir, 'tests2/tests/config.test.ts');
+      const baseDirectory = tmpDir;
+      const filePath1 = join(tmpDir, 'tests/config.test.ts');
+      const filePath2 = join(tmpDir, 'tests2/config.test.ts');
+      const filePath3 = join(tmpDir, 'tests2/tests/config.test.ts');
       const excludePatterns = ['tests/**'];
 
       expect(shouldExcludeFile(baseDirectory, filePath1, excludePatterns)).toBe(true);
@@ -91,10 +91,10 @@ describe('utils/file', () => {
     });
 
     it('should handle exclusion pattern: **/tests/**', () => {
-      const baseDirectory = tempDir;
-      const filePath1 = join(tempDir, 'tests/config.test.ts');
-      const filePath2 = join(tempDir, 'tests2/config.test.ts');
-      const filePath3 = join(tempDir, 'tests2/tests/config.test.ts');
+      const baseDirectory = tmpDir;
+      const filePath1 = join(tmpDir, 'tests/config.test.ts');
+      const filePath2 = join(tmpDir, 'tests2/config.test.ts');
+      const filePath3 = join(tmpDir, 'tests2/tests/config.test.ts');
       const excludePatterns = ['**/tests/**'];
 
       expect(shouldExcludeFile(baseDirectory, filePath1, excludePatterns)).toBe(true);
@@ -106,13 +106,13 @@ describe('utils/file', () => {
   describe('copyModuleContents()', () => {
     beforeEach(() => {
       // Create src and dest directories for every test in this suite
-      mkdirSync(join(tempDir, 'src'), { recursive: true });
-      mkdirSync(join(tempDir, 'dest'), { recursive: true });
+      mkdirSync(join(tmpDir, 'src'), { recursive: true });
+      mkdirSync(join(tmpDir, 'dest'), { recursive: true });
     });
 
     it('should copy directory contents excluding files that match patterns', () => {
-      const srcDirectory = join(tempDir, 'src');
-      const destDirectory = join(tempDir, 'dest');
+      const srcDirectory = join(tmpDir, 'src');
+      const destDirectory = join(tmpDir, 'dest');
       const excludePatterns = ['*.txt'];
 
       // Create files in src directory
@@ -128,8 +128,8 @@ describe('utils/file', () => {
     });
 
     it('should handle recursive directory copying', () => {
-      const srcDirectory = join(tempDir, 'src');
-      const destDirectory = join(tempDir, 'dest');
+      const srcDirectory = join(tmpDir, 'src');
+      const destDirectory = join(tmpDir, 'dest');
       const excludePatterns: string[] = [];
 
       // Create source structure
@@ -146,8 +146,8 @@ describe('utils/file', () => {
     });
 
     it('should copy files excluding multiple patterns', () => {
-      const srcDirectory = join(tempDir, 'src');
-      const destDirectory = join(tempDir, 'dest');
+      const srcDirectory = join(tmpDir, 'src');
+      const destDirectory = join(tmpDir, 'dest');
       const excludePatterns = ['*.txt', '*.js'];
 
       writeFileSync(join(srcDirectory, 'file.txt'), 'Hello World!');
@@ -162,8 +162,8 @@ describe('utils/file', () => {
     });
 
     it('should handle copying from an empty directory', () => {
-      const srcDirectory = join(tempDir, 'src');
-      const destDirectory = join(tempDir, 'dest');
+      const srcDirectory = join(tmpDir, 'src');
+      const destDirectory = join(tmpDir, 'dest');
       const excludePatterns = ['*.txt'];
 
       copyModuleContents(srcDirectory, destDirectory, excludePatterns);
@@ -173,8 +173,8 @@ describe('utils/file', () => {
     });
 
     it('should throw an error if the source directory does not exist', () => {
-      const nonExistentSrcDirectory = join(tempDir, 'non-existent-src');
-      const destDirectory = join(tempDir, 'dest');
+      const nonExistentSrcDirectory = join(tmpDir, 'non-existent-src');
+      const destDirectory = join(tmpDir, 'dest');
       const excludePatterns = ['*.txt'];
 
       expect(() => {
@@ -183,8 +183,8 @@ describe('utils/file', () => {
     });
 
     it('should copy files that do not match any exclusion patterns', () => {
-      const srcDirectory = join(tempDir, 'src');
-      const destDirectory = join(tempDir, 'dest');
+      const srcDirectory = join(tmpDir, 'src');
+      const destDirectory = join(tmpDir, 'dest');
       const excludePatterns = ['*.js'];
 
       writeFileSync(join(srcDirectory, 'file.txt'), 'Hello World!');
@@ -197,8 +197,8 @@ describe('utils/file', () => {
     });
 
     it('should overwrite files in the destination if they have the same name and do not match exclusion patterns', () => {
-      const srcDirectory = join(tempDir, 'src');
-      const destDirectory = join(tempDir, 'dest');
+      const srcDirectory = join(tmpDir, 'src');
+      const destDirectory = join(tmpDir, 'dest');
       const excludePatterns: string[] = [];
 
       writeFileSync(join(srcDirectory, 'file.txt'), 'Hello World from source!');
@@ -213,7 +213,7 @@ describe('utils/file', () => {
 
   describe('removeDirectoryContents()', () => {
     it('should remove directory contents except for specified exceptions', () => {
-      const directory = join(tempDir, 'dir');
+      const directory = join(tmpDir, 'dir');
       const exceptions = ['file.txt'];
 
       mkdirSync(directory);
@@ -227,7 +227,7 @@ describe('utils/file', () => {
     });
 
     it('should handle recursive directory removal', () => {
-      const directory = join(tempDir, 'dir');
+      const directory = join(tmpDir, 'dir');
       const exceptions: string[] = [];
 
       mkdirSync(directory);
@@ -242,7 +242,7 @@ describe('utils/file', () => {
     });
 
     it('should handle exceptions correctly', () => {
-      const directory = join(tempDir, 'dir');
+      const directory = join(tmpDir, 'dir');
       const exceptions = ['file.txt', 'subdir'];
 
       mkdirSync(directory);
@@ -259,7 +259,7 @@ describe('utils/file', () => {
     });
 
     it('should handle an empty directory', () => {
-      const directory = join(tempDir, 'dir');
+      const directory = join(tmpDir, 'dir');
       const exceptions: string[] = [];
 
       mkdirSync(directory); // Create an empty directory
@@ -270,7 +270,7 @@ describe('utils/file', () => {
     });
 
     it('should not remove if only exceptions are present', () => {
-      const directory = join(tempDir, 'dir');
+      const directory = join(tmpDir, 'dir');
       const exceptions = ['file.txt'];
 
       mkdirSync(directory);
@@ -283,7 +283,7 @@ describe('utils/file', () => {
     });
 
     it('should handle nested exceptions correctly', () => {
-      const directory = join(tempDir, 'dir');
+      const directory = join(tmpDir, 'dir');
       const exceptions = ['subdir'];
 
       mkdirSync(directory);
@@ -299,7 +299,7 @@ describe('utils/file', () => {
     });
 
     it('should not throw an error if the directory does not exist', () => {
-      const nonExistentDirectory = join(tempDir, 'non-existent-dir');
+      const nonExistentDirectory = join(tmpDir, 'non-existent-dir');
       const exceptions = ['file.txt'];
 
       expect(() => {
@@ -308,7 +308,7 @@ describe('utils/file', () => {
     });
 
     it('should handle exceptions that do not exist in the directory', () => {
-      const directory = join(tempDir, 'dir');
+      const directory = join(tmpDir, 'dir');
       const exceptions = ['file.txt'];
 
       mkdirSync(directory);
@@ -320,7 +320,7 @@ describe('utils/file', () => {
     });
 
     it('should remove directory contents when no exceptions specified', () => {
-      const directory = join(tempDir, 'dir');
+      const directory = join(tmpDir, 'dir');
 
       mkdirSync(directory);
       writeFileSync(join(directory, 'file.txt'), 'Hello World!');

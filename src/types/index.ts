@@ -1,3 +1,4 @@
+import type { WikiStatus } from '@/wiki';
 import type { PaginateInterface } from '@octokit/plugin-paginate-rest';
 import type { Api } from '@octokit/plugin-rest-endpoint-methods';
 
@@ -289,4 +290,9 @@ export interface ExecSyncError extends Error {
    * The error object if the child process failed or timed out.
    */
   error: Error;
+}
+
+export interface ReleasePlanCommentOptions {
+  status: WikiStatus;
+  errorMessage?: string;
 }

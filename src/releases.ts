@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import type { ExecSyncOptions } from 'node:child_process';
-import { cpSync, mkdirSync } from 'node:fs';
+import { cpSync, mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getModuleChangelog } from '@/changelog';
 import { config } from '@/config';
@@ -115,14 +116,13 @@ export async function createTaggedRelease(
   try {
     for (const module of terraformChangedModules) {
       const { moduleName, directory, releaseType, nextTag, nextTagVersion } = module;
-      const tmpDir = join(process.env.RUNNER_TEMP ?? '', 'tmp', moduleName);
 
       info(`Release type: ${releaseType}`);
       info(`Next tag version: ${nextTag}`);
 
       // Create a temporary working directory
-      mkdirSync(tmpDir, { recursive: true });
-      info(`Creating temp directory: ${tmpDir}`);
+      const tmpDir = mkdtempSync(join(tmpdir(), moduleName));
+      info(`Created temp directory: ${tmpDir}`);
 
       // Copy the module's contents to the temporary directory, excluding specified patterns
       copyModuleContents(directory, tmpDir, config.moduleAssetExcludePatterns);
