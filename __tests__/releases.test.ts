@@ -326,8 +326,6 @@ describe('releases', () => {
       });
       const result = await createTaggedRelease([mockTerraformModule]);
 
-      console.log(result);
-
       expect(result).toHaveLength(1);
       expect(result[0].moduleName).toBe('test-module');
       expect(result[0].release.title).toBe('test-module/v1.0.1');
