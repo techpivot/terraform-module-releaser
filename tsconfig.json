@@ -19,7 +19,7 @@
     "newLine": "lf",
     "paths": {
       "@/*": ["./src/*"],
-      "@/mocks/*": ["./src/__mocks__/*"],
+      "@/mocks/*": ["./__mocks__/*"],
       "@/tests/*": ["./__tests__/*"]
     }
   },

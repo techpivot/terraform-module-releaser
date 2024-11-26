@@ -4,8 +4,8 @@ import { afterEach, beforeEach, vi } from 'vitest';
 vi.mock('@actions/core');
 
 // Mocked internal modules
-vi.mock('@/config');
-vi.mock('@/context');
+vi.mock('@/config', () => import('@/mocks/config'));
+vi.mock('@/context', () => import('@/mocks/context'));
 
 // Mock console time/timeEnd to be a no-op
 vi.spyOn(console, 'time').mockImplementation(() => {});
@@ -24,6 +24,9 @@ beforeEach(() => {
   for (const [key, value] of Object.entries(defaultEnvironmentVariables)) {
     vi.stubEnv(key, value);
   }
+
+  // Clear all mocked functions usage data and state
+  vi.clearAllMocks();
 });
 
 afterEach(() => {
