@@ -49,9 +49,6 @@ describe('wiki', async () => {
   );
 
   beforeEach(() => {
-    // Reset mocks and context
-    vi.clearAllMocks();
-
     tmpDir = mkdtempSync(join(tmpdir(), 'wiki-test-'));
     wikiDir = join(tmpDir, '.wiki');
     mkdirSync(wikiDir);
@@ -62,6 +59,7 @@ describe('wiki', async () => {
       workspaceDir: tmpDir,
       prBody: 'Test PR body',
       prNumber: 123,
+      issueNumber: 123,
       prTitle: 'Test PR title',
     });
   });
@@ -181,6 +179,7 @@ describe('wiki', async () => {
     });
 
     it('should generate all required wiki files', async () => {
+      vi.clearAllMocks();
       const files = await generateWikiFiles(terraformModules);
 
       // Get all expected file basenames from fixtures
