@@ -49,7 +49,7 @@
     "@octokit/core": "^6.1.2",
     "@octokit/plugin-paginate-rest": "^11.3.6",
     "@octokit/plugin-rest-endpoint-methods": "^13.2.6",
-    "@octokit/request-error": "^6.1.5",
+    "@octokit/request-error": "^6.1.6",
     "minimatch": "^10.0.1",
     "p-limit": "^6.1.0",
     "which": "^5.0.0"
