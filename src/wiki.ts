@@ -214,7 +214,7 @@ async function generateWikiModule(terraformModule: TerraformModule): Promise<str
     'To use this module in your Terraform, refer to the below module example:\n',
     '```hcl',
     `module "${moduleName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()}" {`,
-    `  source = "git::${context.repoUrl}.git?ref=${latestTag}"`,
+    `  source = "git::${context.repoUrl}.git//${moduleName}?ref=${latestTag}"`,
     '\n  # See inputs below for additional required parameters',
     '}',
     '```',
