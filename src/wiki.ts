@@ -209,12 +209,18 @@ async function generateWikiModule(terraformModule: TerraformModule): Promise<str
   // Generate a module changelog
   const changelog = getModuleReleaseChangelog(terraformModule);
   const tfDocs = await generateTerraformDocs(terraformModule);
+  let sourceUrl = `git::${context.repoUrl}.git?ref=${latestTag}`
+  
+  if (config.useSSHSourceFormat) {
+    sourceUrl = sourceUrl.replace('::https://github.com/', '@github.com:');
+  }
+
   const wikiContent = [
     '# Usage\n',
     'To use this module in your Terraform, refer to the below module example:\n',
     '```hcl',
     `module "${moduleName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()}" {`,
-    `  source = "git::${context.repoUrl}.git?ref=${latestTag}"`,
+    `  source = "${sourceUrl}"`,
     '\n  # See inputs below for additional required parameters',
     '}',
     '```',

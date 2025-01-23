@@ -71,6 +71,7 @@ function initializeConfig(): Config {
       githubToken: getInput('github_token', { required: true }),
       moduleChangeExcludePatterns: getArrayInput('module-change-exclude-patterns'),
       moduleAssetExcludePatterns: getArrayInput('module-asset-exclude-patterns'),
+      useSSHSourceFormat: getBooleanInput('source_format', { required: true }),
     };
 
     // Validate that *.tf is not in excludePatterns
@@ -96,6 +97,7 @@ function initializeConfig(): Config {
     info(`Wiki Sidebar Changelog Max: ${configInstance.wikiSidebarChangelogMax}`);
     info(`Module Change Exclude Patterns: ${configInstance.moduleChangeExcludePatterns.join(', ')}`);
     info(`Module Asset Exclude Patterns: ${configInstance.moduleAssetExcludePatterns.join(', ')}`);
+    info(`Terraform Source Format: ${configInstance.sourceFormat}`);
 
     return configInstance;
   } finally {
