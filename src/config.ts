@@ -97,7 +97,7 @@ function initializeConfig(): Config {
     info(`Wiki Sidebar Changelog Max: ${configInstance.wikiSidebarChangelogMax}`);
     info(`Module Change Exclude Patterns: ${configInstance.moduleChangeExcludePatterns.join(', ')}`);
     info(`Module Asset Exclude Patterns: ${configInstance.moduleAssetExcludePatterns.join(', ')}`);
-    info(`Terraform Source Format: ${configInstance.sourceFormat}`);
+    info(`Use SSH Source Format: ${configInstance.useSSHSourceFormat}`);
 
     return configInstance;
   } finally {
