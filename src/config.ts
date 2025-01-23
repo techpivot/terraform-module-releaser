@@ -71,7 +71,7 @@ function initializeConfig(): Config {
       githubToken: getInput('github_token', { required: true }),
       moduleChangeExcludePatterns: getArrayInput('module-change-exclude-patterns'),
       moduleAssetExcludePatterns: getArrayInput('module-asset-exclude-patterns'),
-      useSSHSourceFormat: getBooleanInput('source_format', { required: true }),
+      useSSHSourceFormat: getBooleanInput('use-ssh-source-format', { required: true }),
     };
 
     // Validate that *.tf is not in excludePatterns
