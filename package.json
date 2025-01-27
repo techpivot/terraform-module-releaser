@@ -68,6 +68,6 @@
     "textlint-rule-terminology": "^5.2.12",
     "ts-deepmerge": "^7.0.1",
     "typescript": "^5.7.3",
-    "vitest": "^2.1.4"
+    "vitest": "^3.0.4"
   }
 }
