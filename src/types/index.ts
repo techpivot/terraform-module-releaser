@@ -194,6 +194,10 @@ export interface Config {
    * tests and other non-functional files as needed.
    */
   moduleAssetExcludePatterns: string[];
+  /**
+   * Whether to format the source in the wiki as SSH rather than HTTPS.
+   */
+  useSSHSourceFormat: boolean;
 }
 
 /**
