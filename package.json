@@ -56,9 +56,9 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.2",
-    "@octokit/types": "^13.7.0",
+    "@octokit/types": "^13.8.0",
     "@octokit/webhooks-types": "^7.6.1",
-    "@types/node": "^22.10.10",
+    "@types/node": "^22.13.0",
     "@types/which": "^3.0.4",
     "@vercel/ncc": "^0.38.3",
     "@vitest/coverage-v8": "^2.1.8",
