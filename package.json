@@ -61,7 +61,7 @@
     "@types/node": "^22.13.0",
     "@types/which": "^3.0.4",
     "@vercel/ncc": "^0.38.3",
-    "@vitest/coverage-v8": "^2.1.8",
+    "@vitest/coverage-v8": "^3.0.5",
     "make-coverage-badge": "^1.2.0",
     "textlint": "^14.4.2",
     "textlint-filter-rule-comments": "^1.2.2",
