@@ -117,10 +117,11 @@ describe('config', () => {
       expect(config.githubToken).toBe('ghp_test_token_2c6912E7710c838347Ae178B4');
       expect(config.moduleChangeExcludePatterns).toEqual(['.gitignore', '*.md']);
       expect(config.moduleAssetExcludePatterns).toEqual(['tests/**', 'examples/**']);
+      expect(config.useSSHSourceFormat).toBe(false);
       expect(startGroup).toHaveBeenCalledWith('Initializing Config');
       expect(startGroup).toHaveBeenCalledTimes(1);
       expect(endGroup).toHaveBeenCalledTimes(1);
-      expect(info).toHaveBeenCalledTimes(10);
+      expect(info).toHaveBeenCalledTimes(11);
       expect(vi.mocked(info).mock.calls).toEqual([
         ['Major Keywords: MAJOR CHANGE, BREAKING CHANGE, !'],
         ['Minor Keywords: feat, feature'],
@@ -132,8 +133,8 @@ describe('config', () => {
         ['Wiki Sidebar Changelog Max: 10'],
         ['Module Change Exclude Patterns: .gitignore, *.md'],
         ['Module Asset Exclude Patterns: tests/**, examples/**'],
+        ['Use SSH Source Format: false'],
       ]);
-      expect(info).toHaveBeenCalledTimes(10);
     });
   });
 

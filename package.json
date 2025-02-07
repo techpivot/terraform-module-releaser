@@ -13,13 +13,7 @@
   "bugs": {
     "url": "https://github.com/techpivot/terraform-module-releaser/issues"
   },
-  "keywords": [
-    "terraform",
-    "module",
-    "releaser",
-    "github-action",
-    "monorepo"
-  ],
+  "keywords": ["terraform", "module", "releaser", "github-action", "monorepo"],
   "license": "MIT",
   "exports": {
     ".": "./dist/index.js"

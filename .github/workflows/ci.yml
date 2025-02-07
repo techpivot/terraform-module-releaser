@@ -51,3 +51,4 @@ jobs:
           delete-legacy-tags: false # Note: We don't want to delete tags in this repository
           module-change-exclude-patterns: .gitignore,*.md,*.tftest.hcl,tests/**
           module-asset-exclude-patterns: .gitignore,*.md,*.tftest.hcl,tests/**
+          use-ssh-source-format: true
