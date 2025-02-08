@@ -184,7 +184,7 @@ describe('terraform-docs', async () => {
       expect(() => installTerraformDocs(terraformDocsVersion)).toThrow('not found: invalid-non-existent-binary');
     });
 
-    afterAll(()  => {
+    afterAll(() => {
       mockWhichSync.mockRestore();
     });
   });
