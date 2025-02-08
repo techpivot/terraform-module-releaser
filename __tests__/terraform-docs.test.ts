@@ -218,8 +218,10 @@ describe('terraform-docs', async () => {
       'terraform-docs',
       'terraform-docs.tar.gz',
       'terraform-docs.zip',
-      join('/usr/local/bin', 'terraform-docs'),
-      join('C:\\Windows\\System32', 'terraform-docs.exe'),
+      // It appears that removing the actual installed binary causes isssues with other async tests
+      // resulting in errors. Thus, we leave the actual installed binaries on the system.
+      // join('/usr/local/bin', 'terraform-docs'),
+      // join('C:\\Windows\\System32', 'terraform-docs.exe'),
     ];
 
     beforeAll(async () => {
