@@ -194,6 +194,18 @@ export interface Config {
    * tests and other non-functional files as needed.
    */
   moduleAssetExcludePatterns: string[];
+
+  /**
+   * If true, the wiki will use the SSH format for the source URL of the repository.
+   * This changes the format of the source URL in the generated wiki documentation to use the SSH format.
+   *
+   * Example:
+   * - SSH format: git::ssh://git@github.com/techpivot/terraform-module-releaser.git
+   * - HTTPS format: git::https://github.com/techpivot/terraform-module-releaser.git
+   *
+   * When set to true, the SSH standard format (non scp variation) will be used. Otherwise, the HTTPS format will be used.
+   */
+  useSSHSourceFormat: boolean;
 }
 
 /**

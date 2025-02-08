@@ -21,9 +21,10 @@ export const defaultInputs = {
   'module-change-exclude-patterns': '.gitignore,*.md',
   'module-asset-exclude-patterns': 'tests/**,examples/**',
   github_token: 'ghp_test_token_2c6912E7710c838347Ae178B4',
+  'use-ssh-source-format': 'false',
 };
 export const requiredInputs = Object.keys(defaultInputs);
-export const booleanInputs = ['delete-legacy-tags', 'disable-wiki', 'disable-branding'];
+export const booleanInputs = ['delete-legacy-tags', 'disable-wiki', 'disable-branding', 'use-ssh-source-format'];
 export const booleanConfigKeys: BooleanConfigKeys[] = ['deleteLegacyTags', 'disableWiki', 'disableBranding'];
 
 /**

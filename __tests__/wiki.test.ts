@@ -316,4 +316,51 @@ describe('wiki', async () => {
       expect(commitCall?.[1]).toEqual(['commit', '-m', 'PR #456 - Complex PR title\n\nLine 1\nLine 2\nLine 3']);
     });
   });
+
+  describe('formatModuleSource()', () => {
+    beforeEach(() => {
+      context.set({
+        repo: { owner: 'techpivot', repo: 'terraform-module-releaser' },
+        repoUrl: 'https://github.com/techpivot/terraform-module-releaser',
+      });
+    });
+
+    it('should format source URL as HTTPS when useSSHSourceFormat is false', async () => {
+      config.set({ useSSHSourceFormat: false });
+      const files = await generateWikiFiles(terraformModules);
+
+      // Read each generated .md file and verify it contains HTTPS format
+      for (const file of files) {
+        if (file.endsWith('.md')) {
+          const content = readFileSync(file, 'utf8');
+          if (content.includes('source =')) {
+            expect(content).toContain('source = "git::https://github.com/techpivot/terraform-module-releaser.git?ref=');
+            expect(content).not.toContain(
+              'source = "git::ssh://git@github.com/techpivot/terraform-module-releaser.git?ref=',
+            );
+          }
+        }
+      }
+    });
+
+    it('should format source URL as SSH when useSSHSourceFormat is true', async () => {
+      config.set({ useSSHSourceFormat: true });
+      const files = await generateWikiFiles(terraformModules);
+
+      // Read each generated .md file and verify it contains SSH format
+      for (const file of files) {
+        if (file.endsWith('.md')) {
+          const content = readFileSync(file, 'utf8');
+          if (content.includes('source =')) {
+            expect(content).toContain(
+              'source = "git::ssh://git@github.com/techpivot/terraform-module-releaser.git?ref=',
+            );
+            expect(content).not.toContain(
+              'source = "git::https://github.com/techpivot/terraform-module-releaser.git?ref=',
+            );
+          }
+        }
+      }
+    });
+  });
 });

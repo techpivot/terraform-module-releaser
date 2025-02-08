@@ -191,6 +191,23 @@ export function getWikiLink(moduleName: string, relative = true): string {
 }
 
 /**
+ * Formats the module source URL based on configuration settings.
+ *
+ * @param repoUrl - The repository URL
+ * @param useSSH - Whether to use SSH format
+ * @returns The formatted source URL for the module
+ */
+function formatModuleSource(repoUrl: string, useSSH: boolean): string {
+  if (useSSH) {
+    // Convert HTTPS URL to SSH format
+    // From: https://github.com/owner/repo
+    // To:   ssh://git@github.com/owner/repo
+    return `ssh://${repoUrl.replace(/^https:\/\/github\.com/, 'git@github.com')}.git`;
+  }
+  return `${repoUrl}.git`;
+}
+
+/**
  * Generates the wiki file associated with the specified Terraform module.
  * Ensures that the directory structure is created if it doesn't exist and handles overwriting
  * the existing wiki file.
@@ -209,12 +226,13 @@ async function generateWikiModule(terraformModule: TerraformModule): Promise<str
   // Generate a module changelog
   const changelog = getModuleReleaseChangelog(terraformModule);
   const tfDocs = await generateTerraformDocs(terraformModule);
+  const moduleSource = formatModuleSource(context.repoUrl, config.useSSHSourceFormat);
   const wikiContent = [
     '# Usage\n',
     'To use this module in your Terraform, refer to the below module example:\n',
     '```hcl',
     `module "${moduleName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()}" {`,
-    `  source = "git::${context.repoUrl}.git?ref=${latestTag}"`,
+    `  source = "git::${moduleSource}?ref=${latestTag}"`,
     '\n  # See inputs below for additional required parameters',
     '}',
     '```',

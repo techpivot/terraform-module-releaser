@@ -7,7 +7,7 @@ import { context } from '@/mocks/context';
 import { ensureTerraformDocsConfigDoesNotExist, generateTerraformDocs, installTerraformDocs } from '@/terraform-docs';
 import type { TerraformModule } from '@/types';
 import { info } from '@actions/core';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import which from 'which';
 
 const execFilePromisified = promisify(execFile);
@@ -50,7 +50,6 @@ describe('terraform-docs', async () => {
   afterEach(() => {
     Object.defineProperty(process, 'platform', { value: realPlatform });
     Object.defineProperty(process, 'arch', { value: realArch });
-    vi.resetAllMocks();
   });
 
   describe('install terraform-docs (linux, darwin, freebsd)', () => {
@@ -184,6 +183,10 @@ describe('terraform-docs', async () => {
 
       expect(() => installTerraformDocs(terraformDocsVersion)).toThrow('not found: invalid-non-existent-binary');
     });
+
+    afterAll(()  => {
+      mockWhichSync.mockRestore();
+    });
   });
 
   describe('terraform-docs version validation', () => {
@@ -219,7 +222,7 @@ describe('terraform-docs', async () => {
       join('C:\\Windows\\System32', 'terraform-docs.exe'),
     ];
 
-    beforeEach(async () => {
+    beforeAll(async () => {
       // Get real implementations
       const realChildProcess = (await vi.importActual('node:child_process')) as typeof import('node:child_process');
       const realFs = (await vi.importActual('node:fs')) as typeof import('node:fs');
@@ -232,6 +235,14 @@ describe('terraform-docs', async () => {
       mockWhichSync.mockImplementation(realWhich.sync);
     });
 
+    afterAll(() => {
+      // Restore original mock implementations
+      mockExecFileSync.mockRestore();
+      fsExistsSyncMock.mockRestore();
+      mockFsUnlinkSync.mockRestore();
+      mockWhichSync.mockRestore();
+    });
+
     afterEach(() => {
       // Cleanup downloaded/installed files
       for (const file of cleanupFiles) {
@@ -241,8 +252,6 @@ describe('terraform-docs', async () => {
           // Ignore cleanup errors
         }
       }
-
-      // Restore original mock implementations (handled via global resetAllMocks())
     });
 
     it(`should install terraform-docs on the real system ${process.arch}/${process.platform}`, () => {

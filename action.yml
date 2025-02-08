@@ -83,6 +83,10 @@ inputs:
       The minimatch syntax is used for pattern matching. Files matching these patterns will be excluded from the bundled output.
     required: true
     default: ".gitignore,*.md,*.tftest.hcl,tests/**"
+  use-ssh-source-format:
+    description: If enabled, all links to source code in generated Wiki documentation will use SSH format instead of HTTPS format
+    required: true
+    default: "false"
   github_token:
     description: |
       Required for retrieving pull request metadata, tags, releases, updating PR comments, wiki, and creating tags/releases.

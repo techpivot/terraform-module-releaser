@@ -182,6 +182,7 @@ configuring the following optional input parameters as needed.
 | `disable-branding`               | Controls whether a small branding link to the action's repository is added to PR comments. Recommended to leave enabled to support OSS.                                                                                                                                                                                                                                                              | `false`                                    |
 | `module-change-exclude-patterns` | A comma-separated list of file patterns to exclude from triggering version changes in Terraform modules. Patterns follow glob syntax (e.g., `.gitignore,_.md`) and are relative to each Terraform module directory. Files matching these patterns will not affect version changes. **WARNING**: Avoid excluding '`_.tf`' files, as they are essential for module detection and versioning processes. | `.gitignore, *.md, *.tftest.hcl, tests/**` |
 | `module-asset-exclude-patterns`  | A comma-separated list of file patterns to exclude when bundling a Terraform module for tag/release. Patterns follow glob syntax (e.g., `tests/\*\*`) and are relative to each Terraform module directory. Files matching these patterns will be excluded from the bundled output.                                                                                                                   | `.gitignore, *.md, *.tftest.hcl, tests/**` |
+| `use-ssh-source-format`          | If enabled, all links to source code in generated Wiki documentation will use SSH standard format (e.g., `git::ssh://git@github.com/owner/repo.git`) instead of HTTPS format (`git::https://github.com/owner/repo.git`)                                                                                                                                                                              | `false`                                    |
 
 ### Example Usage with Inputs
 
@@ -217,6 +218,7 @@ jobs:
           wiki-sidebar-changelog-max: 10
           module-change-exclude-patterns: .gitignore,*.md,*.tftest.hcl,tests/**
           module-asset-exclude-patterns: .gitignore,*.md,*.tftest.hcl,tests/**
+          use-ssh-source-format: false
 ```
 
 ## Inspiration
