@@ -1,11 +1,10 @@
-import { beforeEach } from 'node:test';
 import { config } from '@/mocks/config';
 import { context } from '@/mocks/context';
 import { deleteLegacyTags, getAllTags } from '@/tags';
 import { stubOctokitReturnData } from '@/tests/helpers/octokit';
 import { debug, endGroup, info, startGroup } from '@actions/core';
 import { RequestError } from '@octokit/request-error';
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 describe('tags', () => {
   const url = 'https://api.github.com/repos/techpivot/terraform-module-releaser/tags';
