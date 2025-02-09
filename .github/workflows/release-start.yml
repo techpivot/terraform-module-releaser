@@ -53,6 +53,11 @@ jobs:
       - name: Update Coverage Badge
         run: npm run coverage
 
+      # Ensure that the package.json is formatted correctly as result of the npm version command sorting keys
+      # differently from biome.continue-on-error:
+      - name: Format Fix
+        run: npm run check:fix
+
       - name: Generate Changelog
         uses: actions/github-script@v7
         id: changelog
