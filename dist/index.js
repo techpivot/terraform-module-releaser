@@ -11770,6 +11770,14 @@ const { isUint8Array, isArrayBuffer } = __nccwpck_require__(8253)
 const { File: UndiciFile } = __nccwpck_require__(3041)
 const { parseMIMEType, serializeAMimeType } = __nccwpck_require__(4322)
 
+let random
+try {
+  const crypto = __nccwpck_require__(7598)
+  random = (max) => crypto.randomInt(0, max)
+} catch {
+  random = (max) => Math.floor(Math.random(max))
+}
+
 let ReadableStream = globalThis.ReadableStream
 
 /** @type {globalThis['File']} */
@@ -11855,7 +11863,7 @@ function extractBody (object, keepalive = false) {
     // Set source to a copy of the bytes held by object.
     source = new Uint8Array(object.buffer.slice(object.byteOffset, object.byteOffset + object.byteLength))
   } else if (util.isFormDataLike(object)) {
-    const boundary = `----formdata-undici-0${`${Math.floor(Math.random() * 1e11)}`.padStart(11, '0')}`
+    const boundary = `----formdata-undici-0${`${random(1e11)}`.padStart(11, '0')}`
     const prefix = `--${boundary}\r\nContent-Disposition: form-data`
 
     /*! formdata-polyfill. MIT License. Jimmy Wärting <https://jimmy.warting.se/opensource> */
@@ -26042,6 +26050,13 @@ module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("net");
 
 /***/ }),
 
+/***/ 7598:
+/***/ ((module) => {
+
+module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:crypto");
+
+/***/ }),
+
 /***/ 8474:
 /***/ ((module) => {
 
@@ -27774,6 +27789,183 @@ module.exports = parseParams
 
 /***/ }),
 
+/***/ 1120:
+/***/ ((module) => {
+
+var __webpack_unused_export__;
+
+
+const NullObject = function NullObject () { }
+NullObject.prototype = Object.create(null)
+
+/**
+ * RegExp to match *( ";" parameter ) in RFC 7231 sec 3.1.1.1
+ *
+ * parameter     = token "=" ( token / quoted-string )
+ * token         = 1*tchar
+ * tchar         = "!" / "#" / "$" / "%" / "&" / "'" / "*"
+ *               / "+" / "-" / "." / "^" / "_" / "`" / "|" / "~"
+ *               / DIGIT / ALPHA
+ *               ; any VCHAR, except delimiters
+ * quoted-string = DQUOTE *( qdtext / quoted-pair ) DQUOTE
+ * qdtext        = HTAB / SP / %x21 / %x23-5B / %x5D-7E / obs-text
+ * obs-text      = %x80-FF
+ * quoted-pair   = "\" ( HTAB / SP / VCHAR / obs-text )
+ */
+const paramRE = /; *([!#$%&'*+.^\w`|~-]+)=("(?:[\v\u0020\u0021\u0023-\u005b\u005d-\u007e\u0080-\u00ff]|\\[\v\u0020-\u00ff])*"|[!#$%&'*+.^\w`|~-]+) */gu
+
+/**
+ * RegExp to match quoted-pair in RFC 7230 sec 3.2.6
+ *
+ * quoted-pair = "\" ( HTAB / SP / VCHAR / obs-text )
+ * obs-text    = %x80-FF
+ */
+const quotedPairRE = /\\([\v\u0020-\u00ff])/gu
+
+/**
+ * RegExp to match type in RFC 7231 sec 3.1.1.1
+ *
+ * media-type = type "/" subtype
+ * type       = token
+ * subtype    = token
+ */
+const mediaTypeRE = /^[!#$%&'*+.^\w|~-]+\/[!#$%&'*+.^\w|~-]+$/u
+
+// default ContentType to prevent repeated object creation
+const defaultContentType = { type: '', parameters: new NullObject() }
+Object.freeze(defaultContentType.parameters)
+Object.freeze(defaultContentType)
+
+/**
+ * Parse media type to object.
+ *
+ * @param {string|object} header
+ * @return {Object}
+ * @public
+ */
+
+function parse (header) {
+  if (typeof header !== 'string') {
+    throw new TypeError('argument header is required and must be a string')
+  }
+
+  let index = header.indexOf(';')
+  const type = index !== -1
+    ? header.slice(0, index).trim()
+    : header.trim()
+
+  if (mediaTypeRE.test(type) === false) {
+    throw new TypeError('invalid media type')
+  }
+
+  const result = {
+    type: type.toLowerCase(),
+    parameters: new NullObject()
+  }
+
+  // parse parameters
+  if (index === -1) {
+    return result
+  }
+
+  let key
+  let match
+  let value
+
+  paramRE.lastIndex = index
+
+  while ((match = paramRE.exec(header))) {
+    if (match.index !== index) {
+      throw new TypeError('invalid parameter format')
+    }
+
+    index += match[0].length
+    key = match[1].toLowerCase()
+    value = match[2]
+
+    if (value[0] === '"') {
+      // remove quotes and escapes
+      value = value
+        .slice(1, value.length - 1)
+
+      quotedPairRE.test(value) && (value = value.replace(quotedPairRE, '$1'))
+    }
+
+    result.parameters[key] = value
+  }
+
+  if (index !== header.length) {
+    throw new TypeError('invalid parameter format')
+  }
+
+  return result
+}
+
+function safeParse (header) {
+  if (typeof header !== 'string') {
+    return defaultContentType
+  }
+
+  let index = header.indexOf(';')
+  const type = index !== -1
+    ? header.slice(0, index).trim()
+    : header.trim()
+
+  if (mediaTypeRE.test(type) === false) {
+    return defaultContentType
+  }
+
+  const result = {
+    type: type.toLowerCase(),
+    parameters: new NullObject()
+  }
+
+  // parse parameters
+  if (index === -1) {
+    return result
+  }
+
+  let key
+  let match
+  let value
+
+  paramRE.lastIndex = index
+
+  while ((match = paramRE.exec(header))) {
+    if (match.index !== index) {
+      return defaultContentType
+    }
+
+    index += match[0].length
+    key = match[1].toLowerCase()
+    value = match[2]
+
+    if (value[0] === '"') {
+      // remove quotes and escapes
+      value = value
+        .slice(1, value.length - 1)
+
+      quotedPairRE.test(value) && (value = value.replace(quotedPairRE, '$1'))
+    }
+
+    result.parameters[key] = value
+  }
+
+  if (index !== header.length) {
+    return defaultContentType
+  }
+
+  return result
+}
+
+__webpack_unused_export__ = { parse, safeParse }
+__webpack_unused_export__ = parse
+module.exports.xL = safeParse
+__webpack_unused_export__ = defaultContentType
+
+
+/***/ }),
+
 /***/ 4585:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
@@ -28102,13 +28294,14 @@ function initializeConfig() {
             patchKeywords: getArrayInput('patch-keywords'),
             defaultFirstTag: (0,core.getInput)('default-first-tag', { required: true }),
             terraformDocsVersion: (0,core.getInput)('terraform-docs-version', { required: true }),
-            deleteLegacyTags: (0,core.getBooleanInput)('delete-legacy-tags'),
-            disableWiki: (0,core.getBooleanInput)('disable-wiki'),
+            deleteLegacyTags: (0,core.getBooleanInput)('delete-legacy-tags', { required: true }),
+            disableWiki: (0,core.getBooleanInput)('disable-wiki', { required: true }),
             wikiSidebarChangelogMax: Number.parseInt((0,core.getInput)('wiki-sidebar-changelog-max', { required: true }), 10),
-            disableBranding: (0,core.getBooleanInput)('disable-branding'),
+            disableBranding: (0,core.getBooleanInput)('disable-branding', { required: true }),
             githubToken: (0,core.getInput)('github_token', { required: true }),
             moduleChangeExcludePatterns: getArrayInput('module-change-exclude-patterns'),
             moduleAssetExcludePatterns: getArrayInput('module-asset-exclude-patterns'),
+            useSSHSourceFormat: (0,core.getBooleanInput)('use-ssh-source-format', { required: true }),
         };
         // Validate that *.tf is not in excludePatterns
         if (configInstance.moduleChangeExcludePatterns.some((pattern) => pattern === '*.tf')) {
@@ -28131,6 +28324,7 @@ function initializeConfig() {
         (0,core.info)(`Wiki Sidebar Changelog Max: ${configInstance.wikiSidebarChangelogMax}`);
         (0,core.info)(`Module Change Exclude Patterns: ${configInstance.moduleChangeExcludePatterns.join(', ')}`);
         (0,core.info)(`Module Asset Exclude Patterns: ${configInstance.moduleAssetExcludePatterns.join(', ')}`);
+        (0,core.info)(`Use SSH Source Format: ${configInstance.useSSHSourceFormat}`);
         return configInstance;
     }
     finally {
@@ -28138,9 +28332,9 @@ function initializeConfig() {
     }
 }
 // Create a getter for the config that initializes on first use
-const getConfig = () => {
+function getConfig() {
     return initializeConfig();
-};
+}
 // For backward compatibility and existing usage
 const config = new Proxy({}, {
     get(target, prop) {
@@ -28150,7 +28344,6 @@ const config = new Proxy({}, {
 
 ;// CONCATENATED MODULE: external "node:fs"
 const external_node_fs_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:fs");
-var external_node_fs_default = /*#__PURE__*/__nccwpck_require__.n(external_node_fs_namespaceObject);
 ;// CONCATENATED MODULE: ./node_modules/universal-user-agent/index.js
 function getUserAgent() {
   if (typeof navigator === "object" && "userAgent" in navigator) {
@@ -28345,13 +28538,10 @@ function lowercaseKeys(object) {
 
 // pkg/dist-src/util/is-plain-object.js
 function isPlainObject(value) {
-  if (typeof value !== "object" || value === null)
-    return false;
-  if (Object.prototype.toString.call(value) !== "[object Object]")
-    return false;
+  if (typeof value !== "object" || value === null) return false;
+  if (Object.prototype.toString.call(value) !== "[object Object]") return false;
   const proto = Object.getPrototypeOf(value);
-  if (proto === null)
-    return true;
+  if (proto === null) return true;
   const Ctor = Object.prototype.hasOwnProperty.call(proto, "constructor") && proto.constructor;
   return typeof Ctor === "function" && Ctor instanceof Ctor && Function.prototype.call(Ctor) === Function.prototype.call(value);
 }
@@ -28361,10 +28551,8 @@ function mergeDeep(defaults, options) {
   const result = Object.assign({}, defaults);
   Object.keys(options).forEach((key) => {
     if (isPlainObject(options[key])) {
-      if (!(key in defaults))
-        Object.assign(result, { [key]: options[key] });
-      else
-        result[key] = mergeDeep(defaults[key], options[key]);
+      if (!(key in defaults)) Object.assign(result, { [key]: options[key] });
+      else result[key] = mergeDeep(defaults[key], options[key]);
     } else {
       Object.assign(result, { [key]: options[key] });
     }
@@ -28662,6 +28850,8 @@ function withDefaults(oldDefaults, newDefaults) {
 var endpoint = withDefaults(null, DEFAULTS);
 
 
+// EXTERNAL MODULE: ./node_modules/fast-content-type-parse/index.js
+var fast_content_type_parse = __nccwpck_require__(1120);
 ;// CONCATENATED MODULE: ./node_modules/@octokit/request-error/dist-src/index.js
 class RequestError extends Error {
   name;
@@ -28718,6 +28908,9 @@ var defaults_default = {
     "user-agent": `octokit-request.js/${dist_bundle_VERSION} ${getUserAgent()}`
   }
 };
+
+// pkg/dist-src/fetch-wrapper.js
+
 
 // pkg/dist-src/is-plain-object.js
 function dist_bundle_isPlainObject(value) {
@@ -28831,13 +29024,23 @@ async function fetchWrapper(requestOptions) {
 }
 async function getResponseData(response) {
   const contentType = response.headers.get("content-type");
-  if (/application\/json/.test(contentType)) {
-    return response.json().catch(() => response.text()).catch(() => "");
+  if (!contentType) {
+    return response.text().catch(() => "");
   }
-  if (!contentType || /^text\/|charset=utf-8$/.test(contentType)) {
-    return response.text();
+  const mimetype = (0,fast_content_type_parse/* safeParse */.xL)(contentType);
+  if (mimetype.type === "application/json") {
+    let text = "";
+    try {
+      text = await response.text();
+      return JSON.parse(text);
+    } catch (err) {
+      return text;
+    }
+  } else if (mimetype.type.startsWith("text/") || mimetype.parameters.charset?.toLowerCase() === "utf-8") {
+    return response.text().catch(() => "");
+  } else {
+    return response.arrayBuffer().catch(() => new ArrayBuffer(0));
   }
-  return response.arrayBuffer();
 }
 function toErrorMessage(data) {
   if (typeof data === "string") {
@@ -28938,8 +29141,7 @@ function graphql(request2, query, options) {
       );
     }
     for (const key in options) {
-      if (!FORBIDDEN_VARIABLE_OPTIONS.includes(key))
-        continue;
+      if (!FORBIDDEN_VARIABLE_OPTIONS.includes(key)) continue;
       return Promise.reject(
         new Error(
           `[@octokit/graphql] "${key}" cannot be used as variable name`
@@ -29062,7 +29264,7 @@ var createTokenAuth = function createTokenAuth2(token) {
 
 
 ;// CONCATENATED MODULE: ./node_modules/@octokit/core/dist-src/version.js
-const version_VERSION = "6.1.2";
+const version_VERSION = "6.1.3";
 
 
 ;// CONCATENATED MODULE: ./node_modules/@octokit/core/dist-src/index.js
@@ -29312,7 +29514,8 @@ var paginatingEndpoints = (/* unused pure expression or super */ null && ([
   "GET /assignments/{assignment_id}/accepted_assignments",
   "GET /classrooms",
   "GET /classrooms/{classroom_id}/assignments",
-  "GET /enterprises/{enterprise}/copilot/usage",
+  "GET /enterprises/{enterprise}/code-security/configurations",
+  "GET /enterprises/{enterprise}/code-security/configurations/{configuration_id}/repositories",
   "GET /enterprises/{enterprise}/dependabot/alerts",
   "GET /enterprises/{enterprise}/secret-scanning/alerts",
   "GET /events",
@@ -29334,17 +29537,24 @@ var paginatingEndpoints = (/* unused pure expression or super */ null && ([
   "GET /organizations",
   "GET /orgs/{org}/actions/cache/usage-by-repository",
   "GET /orgs/{org}/actions/permissions/repositories",
+  "GET /orgs/{org}/actions/runner-groups",
+  "GET /orgs/{org}/actions/runner-groups/{runner_group_id}/repositories",
+  "GET /orgs/{org}/actions/runner-groups/{runner_group_id}/runners",
   "GET /orgs/{org}/actions/runners",
   "GET /orgs/{org}/actions/secrets",
   "GET /orgs/{org}/actions/secrets/{secret_name}/repositories",
   "GET /orgs/{org}/actions/variables",
   "GET /orgs/{org}/actions/variables/{name}/repositories",
+  "GET /orgs/{org}/attestations/{subject_digest}",
   "GET /orgs/{org}/blocks",
   "GET /orgs/{org}/code-scanning/alerts",
+  "GET /orgs/{org}/code-security/configurations",
+  "GET /orgs/{org}/code-security/configurations/{configuration_id}/repositories",
   "GET /orgs/{org}/codespaces",
   "GET /orgs/{org}/codespaces/secrets",
   "GET /orgs/{org}/codespaces/secrets/{secret_name}/repositories",
   "GET /orgs/{org}/copilot/billing/seats",
+  "GET /orgs/{org}/copilot/metrics",
   "GET /orgs/{org}/copilot/usage",
   "GET /orgs/{org}/dependabot/alerts",
   "GET /orgs/{org}/dependabot/secrets",
@@ -29353,6 +29563,9 @@ var paginatingEndpoints = (/* unused pure expression or super */ null && ([
   "GET /orgs/{org}/failed_invitations",
   "GET /orgs/{org}/hooks",
   "GET /orgs/{org}/hooks/{hook_id}/deliveries",
+  "GET /orgs/{org}/insights/api/route-stats/{actor_type}/{actor_id}",
+  "GET /orgs/{org}/insights/api/subject-stats",
+  "GET /orgs/{org}/insights/api/user-stats/{user_id}",
   "GET /orgs/{org}/installations",
   "GET /orgs/{org}/invitations",
   "GET /orgs/{org}/invitations/{invitation_id}/teams",
@@ -29370,6 +29583,7 @@ var paginatingEndpoints = (/* unused pure expression or super */ null && ([
   "GET /orgs/{org}/personal-access-token-requests/{pat_request_id}/repositories",
   "GET /orgs/{org}/personal-access-tokens",
   "GET /orgs/{org}/personal-access-tokens/{pat_id}/repositories",
+  "GET /orgs/{org}/private-registries",
   "GET /orgs/{org}/projects",
   "GET /orgs/{org}/properties/values",
   "GET /orgs/{org}/public_members",
@@ -29378,6 +29592,7 @@ var paginatingEndpoints = (/* unused pure expression or super */ null && ([
   "GET /orgs/{org}/rulesets/rule-suites",
   "GET /orgs/{org}/secret-scanning/alerts",
   "GET /orgs/{org}/security-advisories",
+  "GET /orgs/{org}/team/{team_slug}/copilot/metrics",
   "GET /orgs/{org}/team/{team_slug}/copilot/usage",
   "GET /orgs/{org}/teams",
   "GET /orgs/{org}/teams/{team_slug}/discussions",
@@ -29407,6 +29622,7 @@ var paginatingEndpoints = (/* unused pure expression or super */ null && ([
   "GET /repos/{owner}/{repo}/actions/workflows/{workflow_id}/runs",
   "GET /repos/{owner}/{repo}/activity",
   "GET /repos/{owner}/{repo}/assignees",
+  "GET /repos/{owner}/{repo}/attestations/{subject_digest}",
   "GET /repos/{owner}/{repo}/branches",
   "GET /repos/{owner}/{repo}/check-runs/{check_run_id}/annotations",
   "GET /repos/{owner}/{repo}/check-suites/{check_suite_id}/check-runs",
@@ -29449,6 +29665,7 @@ var paginatingEndpoints = (/* unused pure expression or super */ null && ([
   "GET /repos/{owner}/{repo}/issues/{issue_number}/events",
   "GET /repos/{owner}/{repo}/issues/{issue_number}/labels",
   "GET /repos/{owner}/{repo}/issues/{issue_number}/reactions",
+  "GET /repos/{owner}/{repo}/issues/{issue_number}/sub_issues",
   "GET /repos/{owner}/{repo}/issues/{issue_number}/timeline",
   "GET /repos/{owner}/{repo}/keys",
   "GET /repos/{owner}/{repo}/labels",
@@ -29524,6 +29741,7 @@ var paginatingEndpoints = (/* unused pure expression or super */ null && ([
   "GET /user/subscriptions",
   "GET /user/teams",
   "GET /users",
+  "GET /users/{username}/attestations/{subject_digest}",
   "GET /users/{username}/events",
   "GET /users/{username}/events/orgs/{org}",
   "GET /users/{username}/events/public",
@@ -29565,7 +29783,7 @@ paginateRest.VERSION = plugin_paginate_rest_dist_bundle_VERSION;
 
 
 ;// CONCATENATED MODULE: ./node_modules/@octokit/plugin-rest-endpoint-methods/dist-src/version.js
-const dist_src_version_VERSION = "13.2.6";
+const dist_src_version_VERSION = "13.3.0";
 
 //# sourceMappingURL=version.js.map
 
@@ -29577,6 +29795,9 @@ const Endpoints = {
     ],
     addCustomLabelsToSelfHostedRunnerForRepo: [
       "POST /repos/{owner}/{repo}/actions/runners/{runner_id}/labels"
+    ],
+    addRepoAccessToSelfHostedRunnerGroupInOrg: [
+      "PUT /orgs/{org}/actions/runner-groups/{runner_group_id}/repositories/{repository_id}"
     ],
     addSelectedRepoToOrgSecret: [
       "PUT /orgs/{org}/actions/secrets/{secret_name}/repositories/{repository_id}"
@@ -30006,6 +30227,9 @@ const Endpoints = {
     getGithubActionsBillingUser: [
       "GET /users/{username}/settings/billing/actions"
     ],
+    getGithubBillingUsageReportOrg: [
+      "GET /organizations/{org}/settings/billing/usage"
+    ],
     getGithubPackagesBillingOrg: ["GET /orgs/{org}/settings/billing/packages"],
     getGithubPackagesBillingUser: [
       "GET /users/{username}/settings/billing/packages"
@@ -30042,8 +30266,20 @@ const Endpoints = {
     update: ["PATCH /repos/{owner}/{repo}/check-runs/{check_run_id}"]
   },
   codeScanning: {
+    commitAutofix: [
+      "POST /repos/{owner}/{repo}/code-scanning/alerts/{alert_number}/autofix/commits"
+    ],
+    createAutofix: [
+      "POST /repos/{owner}/{repo}/code-scanning/alerts/{alert_number}/autofix"
+    ],
+    createVariantAnalysis: [
+      "POST /repos/{owner}/{repo}/code-scanning/codeql/variant-analyses"
+    ],
     deleteAnalysis: [
       "DELETE /repos/{owner}/{repo}/code-scanning/analyses/{analysis_id}{?confirm_delete}"
+    ],
+    deleteCodeqlDatabase: [
+      "DELETE /repos/{owner}/{repo}/code-scanning/codeql/databases/{language}"
     ],
     getAlert: [
       "GET /repos/{owner}/{repo}/code-scanning/alerts/{alert_number}",
@@ -30053,11 +30289,20 @@ const Endpoints = {
     getAnalysis: [
       "GET /repos/{owner}/{repo}/code-scanning/analyses/{analysis_id}"
     ],
+    getAutofix: [
+      "GET /repos/{owner}/{repo}/code-scanning/alerts/{alert_number}/autofix"
+    ],
     getCodeqlDatabase: [
       "GET /repos/{owner}/{repo}/code-scanning/codeql/databases/{language}"
     ],
     getDefaultSetup: ["GET /repos/{owner}/{repo}/code-scanning/default-setup"],
     getSarif: ["GET /repos/{owner}/{repo}/code-scanning/sarifs/{sarif_id}"],
+    getVariantAnalysis: [
+      "GET /repos/{owner}/{repo}/code-scanning/codeql/variant-analyses/{codeql_variant_analysis_id}"
+    ],
+    getVariantAnalysisRepoTask: [
+      "GET /repos/{owner}/{repo}/code-scanning/codeql/variant-analyses/{codeql_variant_analysis_id}/repos/{repo_owner}/{repo_name}"
+    ],
     listAlertInstances: [
       "GET /repos/{owner}/{repo}/code-scanning/alerts/{alert_number}/instances"
     ],
@@ -30079,6 +30324,64 @@ const Endpoints = {
       "PATCH /repos/{owner}/{repo}/code-scanning/default-setup"
     ],
     uploadSarif: ["POST /repos/{owner}/{repo}/code-scanning/sarifs"]
+  },
+  codeSecurity: {
+    attachConfiguration: [
+      "POST /orgs/{org}/code-security/configurations/{configuration_id}/attach"
+    ],
+    attachEnterpriseConfiguration: [
+      "POST /enterprises/{enterprise}/code-security/configurations/{configuration_id}/attach"
+    ],
+    createConfiguration: ["POST /orgs/{org}/code-security/configurations"],
+    createConfigurationForEnterprise: [
+      "POST /enterprises/{enterprise}/code-security/configurations"
+    ],
+    deleteConfiguration: [
+      "DELETE /orgs/{org}/code-security/configurations/{configuration_id}"
+    ],
+    deleteConfigurationForEnterprise: [
+      "DELETE /enterprises/{enterprise}/code-security/configurations/{configuration_id}"
+    ],
+    detachConfiguration: [
+      "DELETE /orgs/{org}/code-security/configurations/detach"
+    ],
+    getConfiguration: [
+      "GET /orgs/{org}/code-security/configurations/{configuration_id}"
+    ],
+    getConfigurationForRepository: [
+      "GET /repos/{owner}/{repo}/code-security-configuration"
+    ],
+    getConfigurationsForEnterprise: [
+      "GET /enterprises/{enterprise}/code-security/configurations"
+    ],
+    getConfigurationsForOrg: ["GET /orgs/{org}/code-security/configurations"],
+    getDefaultConfigurations: [
+      "GET /orgs/{org}/code-security/configurations/defaults"
+    ],
+    getDefaultConfigurationsForEnterprise: [
+      "GET /enterprises/{enterprise}/code-security/configurations/defaults"
+    ],
+    getRepositoriesForConfiguration: [
+      "GET /orgs/{org}/code-security/configurations/{configuration_id}/repositories"
+    ],
+    getRepositoriesForEnterpriseConfiguration: [
+      "GET /enterprises/{enterprise}/code-security/configurations/{configuration_id}/repositories"
+    ],
+    getSingleConfigurationForEnterprise: [
+      "GET /enterprises/{enterprise}/code-security/configurations/{configuration_id}"
+    ],
+    setConfigurationAsDefault: [
+      "PUT /orgs/{org}/code-security/configurations/{configuration_id}/defaults"
+    ],
+    setConfigurationAsDefaultForEnterprise: [
+      "PUT /enterprises/{enterprise}/code-security/configurations/{configuration_id}/defaults"
+    ],
+    updateConfiguration: [
+      "PATCH /orgs/{org}/code-security/configurations/{configuration_id}"
+    ],
+    updateEnterpriseConfiguration: [
+      "PATCH /enterprises/{enterprise}/code-security/configurations/{configuration_id}"
+    ]
   },
   codesOfConduct: {
     getAllCodesOfConduct: ["GET /codes_of_conduct"],
@@ -30210,12 +30513,13 @@ const Endpoints = {
     cancelCopilotSeatAssignmentForUsers: [
       "DELETE /orgs/{org}/copilot/billing/selected_users"
     ],
+    copilotMetricsForOrganization: ["GET /orgs/{org}/copilot/metrics"],
+    copilotMetricsForTeam: ["GET /orgs/{org}/team/{team_slug}/copilot/metrics"],
     getCopilotOrganizationDetails: ["GET /orgs/{org}/copilot/billing"],
     getCopilotSeatDetailsForUser: [
       "GET /orgs/{org}/members/{username}/copilot"
     ],
     listCopilotSeats: ["GET /orgs/{org}/copilot/billing/seats"],
-    usageMetricsForEnterprise: ["GET /enterprises/{enterprise}/copilot/usage"],
     usageMetricsForOrg: ["GET /orgs/{org}/copilot/usage"],
     usageMetricsForTeam: ["GET /orgs/{org}/team/{team_slug}/copilot/usage"]
   },
@@ -30346,6 +30650,9 @@ const Endpoints = {
       "POST /repos/{owner}/{repo}/issues/{issue_number}/assignees"
     ],
     addLabels: ["POST /repos/{owner}/{repo}/issues/{issue_number}/labels"],
+    addSubIssue: [
+      "POST /repos/{owner}/{repo}/issues/{issue_number}/sub_issues"
+    ],
     checkUserCanBeAssigned: ["GET /repos/{owner}/{repo}/assignees/{assignee}"],
     checkUserCanBeAssignedToIssue: [
       "GET /repos/{owner}/{repo}/issues/{issue_number}/assignees/{assignee}"
@@ -30388,6 +30695,9 @@ const Endpoints = {
       "GET /repos/{owner}/{repo}/issues/{issue_number}/labels"
     ],
     listMilestones: ["GET /repos/{owner}/{repo}/milestones"],
+    listSubIssues: [
+      "GET /repos/{owner}/{repo}/issues/{issue_number}/sub_issues"
+    ],
     lock: ["PUT /repos/{owner}/{repo}/issues/{issue_number}/lock"],
     removeAllLabels: [
       "DELETE /repos/{owner}/{repo}/issues/{issue_number}/labels"
@@ -30397,6 +30707,12 @@ const Endpoints = {
     ],
     removeLabel: [
       "DELETE /repos/{owner}/{repo}/issues/{issue_number}/labels/{name}"
+    ],
+    removeSubIssue: [
+      "DELETE /repos/{owner}/{repo}/issues/{issue_number}/sub_issue"
+    ],
+    reprioritizeSubIssue: [
+      "PATCH /repos/{owner}/{repo}/issues/{issue_number}/sub_issues/priority"
     ],
     setLabels: ["PUT /repos/{owner}/{repo}/issues/{issue_number}/labels"],
     unlock: ["DELETE /repos/{owner}/{repo}/issues/{issue_number}/lock"],
@@ -30471,7 +30787,11 @@ const Endpoints = {
   },
   orgs: {
     addSecurityManagerTeam: [
-      "PUT /orgs/{org}/security-managers/teams/{team_slug}"
+      "PUT /orgs/{org}/security-managers/teams/{team_slug}",
+      {},
+      {
+        deprecated: "octokit.rest.orgs.addSecurityManagerTeam() is deprecated, see https://docs.github.com/rest/orgs/security-managers#add-a-security-manager-team"
+      }
     ],
     assignTeamToOrgRole: [
       "PUT /orgs/{org}/organization-roles/teams/{team_slug}/{role_id}"
@@ -30487,7 +30807,6 @@ const Endpoints = {
     convertMemberToOutsideCollaborator: [
       "PUT /orgs/{org}/outside_collaborators/{username}"
     ],
-    createCustomOrganizationRole: ["POST /orgs/{org}/organization-roles"],
     createInvitation: ["POST /orgs/{org}/invitations"],
     createOrUpdateCustomProperties: ["PATCH /orgs/{org}/properties/schema"],
     createOrUpdateCustomPropertiesValuesForRepos: [
@@ -30498,12 +30817,13 @@ const Endpoints = {
     ],
     createWebhook: ["POST /orgs/{org}/hooks"],
     delete: ["DELETE /orgs/{org}"],
-    deleteCustomOrganizationRole: [
-      "DELETE /orgs/{org}/organization-roles/{role_id}"
-    ],
     deleteWebhook: ["DELETE /orgs/{org}/hooks/{hook_id}"],
     enableOrDisableSecurityProductOnAllOrgRepos: [
-      "POST /orgs/{org}/{security_product}/{enablement}"
+      "POST /orgs/{org}/{security_product}/{enablement}",
+      {},
+      {
+        deprecated: "octokit.rest.orgs.enableOrDisableSecurityProductOnAllOrgRepos() is deprecated, see https://docs.github.com/rest/orgs/orgs#enable-or-disable-a-security-feature-for-an-organization"
+      }
     ],
     get: ["GET /orgs/{org}"],
     getAllCustomProperties: ["GET /orgs/{org}/properties/schema"],
@@ -30520,6 +30840,7 @@ const Endpoints = {
     ],
     list: ["GET /organizations"],
     listAppInstallations: ["GET /orgs/{org}/installations"],
+    listAttestations: ["GET /orgs/{org}/attestations/{subject_digest}"],
     listBlockedUsers: ["GET /orgs/{org}/blocks"],
     listCustomPropertiesValuesForRepos: ["GET /orgs/{org}/properties/values"],
     listFailedInvitations: ["GET /orgs/{org}/failed_invitations"],
@@ -30545,12 +30866,15 @@ const Endpoints = {
     listPatGrants: ["GET /orgs/{org}/personal-access-tokens"],
     listPendingInvitations: ["GET /orgs/{org}/invitations"],
     listPublicMembers: ["GET /orgs/{org}/public_members"],
-    listSecurityManagerTeams: ["GET /orgs/{org}/security-managers"],
+    listSecurityManagerTeams: [
+      "GET /orgs/{org}/security-managers",
+      {},
+      {
+        deprecated: "octokit.rest.orgs.listSecurityManagerTeams() is deprecated, see https://docs.github.com/rest/orgs/security-managers#list-security-manager-teams"
+      }
+    ],
     listWebhookDeliveries: ["GET /orgs/{org}/hooks/{hook_id}/deliveries"],
     listWebhooks: ["GET /orgs/{org}/hooks"],
-    patchCustomOrganizationRole: [
-      "PATCH /orgs/{org}/organization-roles/{role_id}"
-    ],
     pingWebhook: ["POST /orgs/{org}/hooks/{hook_id}/pings"],
     redeliverWebhookDelivery: [
       "POST /orgs/{org}/hooks/{hook_id}/deliveries/{delivery_id}/attempts"
@@ -30567,7 +30891,11 @@ const Endpoints = {
       "DELETE /orgs/{org}/public_members/{username}"
     ],
     removeSecurityManagerTeam: [
-      "DELETE /orgs/{org}/security-managers/teams/{team_slug}"
+      "DELETE /orgs/{org}/security-managers/teams/{team_slug}",
+      {},
+      {
+        deprecated: "octokit.rest.orgs.removeSecurityManagerTeam() is deprecated, see https://docs.github.com/rest/orgs/security-managers#remove-a-security-manager-team"
+      }
     ],
     reviewPatGrantRequest: [
       "POST /orgs/{org}/personal-access-token-requests/{pat_request_id}"
@@ -30691,6 +31019,18 @@ const Endpoints = {
     ],
     restorePackageVersionForUser: [
       "POST /users/{username}/packages/{package_type}/{package_name}/versions/{package_version_id}/restore"
+    ]
+  },
+  privateRegistries: {
+    createOrgPrivateRegistry: ["POST /orgs/{org}/private-registries"],
+    deleteOrgPrivateRegistry: [
+      "DELETE /orgs/{org}/private-registries/{secret_name}"
+    ],
+    getOrgPrivateRegistry: ["GET /orgs/{org}/private-registries/{secret_name}"],
+    getOrgPublicKey: ["GET /orgs/{org}/private-registries/public-key"],
+    listOrgPrivateRegistries: ["GET /orgs/{org}/private-registries"],
+    updateOrgPrivateRegistry: [
+      "PATCH /orgs/{org}/private-registries/{secret_name}"
     ]
   },
   projects: {
@@ -30895,6 +31235,7 @@ const Endpoints = {
     compareCommitsWithBasehead: [
       "GET /repos/{owner}/{repo}/compare/{basehead}"
     ],
+    createAttestation: ["POST /repos/{owner}/{repo}/attestations"],
     createAutolink: ["POST /repos/{owner}/{repo}/autolinks"],
     createCommitComment: [
       "POST /repos/{owner}/{repo}/commits/{commit_sha}/comments"
@@ -30930,7 +31271,6 @@ const Endpoints = {
     createPagesSite: ["POST /repos/{owner}/{repo}/pages"],
     createRelease: ["POST /repos/{owner}/{repo}/releases"],
     createRepoRuleset: ["POST /repos/{owner}/{repo}/rulesets"],
-    createTagProtection: ["POST /repos/{owner}/{repo}/tags/protection"],
     createUsingTemplate: [
       "POST /repos/{template_owner}/{template_repo}/generate"
     ],
@@ -30982,9 +31322,6 @@ const Endpoints = {
       "DELETE /repos/{owner}/{repo}/releases/assets/{asset_id}"
     ],
     deleteRepoRuleset: ["DELETE /repos/{owner}/{repo}/rulesets/{ruleset_id}"],
-    deleteTagProtection: [
-      "DELETE /repos/{owner}/{repo}/tags/protection/{tag_protection_id}"
-    ],
     deleteWebhook: ["DELETE /repos/{owner}/{repo}/hooks/{hook_id}"],
     disableAutomatedSecurityFixes: [
       "DELETE /repos/{owner}/{repo}/automated-security-fixes"
@@ -31119,6 +31456,9 @@ const Endpoints = {
       "GET /repos/{owner}/{repo}/hooks/{hook_id}/deliveries/{delivery_id}"
     ],
     listActivities: ["GET /repos/{owner}/{repo}/activity"],
+    listAttestations: [
+      "GET /repos/{owner}/{repo}/attestations/{subject_digest}"
+    ],
     listAutolinks: ["GET /repos/{owner}/{repo}/autolinks"],
     listBranches: ["GET /repos/{owner}/{repo}/branches"],
     listBranchesForHeadCommit: [
@@ -31161,7 +31501,6 @@ const Endpoints = {
       "GET /repos/{owner}/{repo}/releases/{release_id}/assets"
     ],
     listReleases: ["GET /repos/{owner}/{repo}/releases"],
-    listTagProtection: ["GET /repos/{owner}/{repo}/tags/protection"],
     listTags: ["GET /repos/{owner}/{repo}/tags"],
     listTeams: ["GET /repos/{owner}/{repo}/teams"],
     listWebhookDeliveries: [
@@ -31276,9 +31615,13 @@ const Endpoints = {
     users: ["GET /search/users"]
   },
   secretScanning: {
+    createPushProtectionBypass: [
+      "POST /repos/{owner}/{repo}/secret-scanning/push-protection-bypasses"
+    ],
     getAlert: [
       "GET /repos/{owner}/{repo}/secret-scanning/alerts/{alert_number}"
     ],
+    getScanHistory: ["GET /repos/{owner}/{repo}/secret-scanning/scan-history"],
     listAlertsForEnterprise: [
       "GET /enterprises/{enterprise}/secret-scanning/alerts"
     ],
@@ -31432,6 +31775,7 @@ const Endpoints = {
     ],
     follow: ["PUT /user/following/{username}"],
     getAuthenticated: ["GET /user"],
+    getById: ["GET /user/{account_id}"],
     getByUsername: ["GET /users/{username}"],
     getContextForUser: ["GET /users/{username}/hovercard"],
     getGpgKeyForAuthenticated: [
@@ -31450,6 +31794,7 @@ const Endpoints = {
       "GET /user/ssh_signing_keys/{ssh_signing_key_id}"
     ],
     list: ["GET /users"],
+    listAttestations: ["GET /users/{username}/attestations/{subject_digest}"],
     listBlockedByAuthenticated: [
       "GET /user/blocks",
       {},
@@ -31660,7 +32005,7 @@ legacyRestEndpointMethods.VERSION = dist_src_version_VERSION;
 //# sourceMappingURL=index.js.map
 
 ;// CONCATENATED MODULE: ./package.json
-const package_namespaceObject = /*#__PURE__*/JSON.parse('{"rE":"1.3.1","TB":"https://github.com/techpivot/terraform-module-releaser"}');
+const package_namespaceObject = /*#__PURE__*/JSON.parse('{"rE":"1.4.0","TB":"https://github.com/techpivot/terraform-module-releaser"}');
 ;// CONCATENATED MODULE: ./src/context.ts
 
 
@@ -31669,8 +32014,6 @@ const package_namespaceObject = /*#__PURE__*/JSON.parse('{"rE":"1.3.1","TB":"htt
 
 
 
-// Extend Octokit with REST API methods and pagination support using the plugins
-const OctokitRestApi = Octokit.plugin(restEndpointMethods, paginateRest);
 // The context object will be initialized lazily
 let contextInstance = null;
 /**
@@ -31685,9 +32028,7 @@ let contextInstance = null;
 function getRequiredEnvironmentVar(name) {
     const value = process.env[name];
     if (!value || typeof value !== 'string') {
-        const errorMessage = `The ${name} environment variable is missing or invalid. This variable should be automatically set by GitHub for each workflow run. If this variable is missing or not correctly set, it indicates a serious issue with the GitHub Actions environment, potentially affecting the execution of subsequent steps in the workflow. Please review the workflow setup or consult the documentation for proper configuration.`;
-        (0,core.setFailed)(errorMessage);
-        throw new Error(errorMessage);
+        throw new Error(`The ${name} environment variable is missing or invalid. This variable should be automatically set by GitHub for each workflow run. If this variable is missing or not correctly set, it indicates a serious issue with the GitHub Actions environment, potentially affecting the execution of subsequent steps in the workflow. Please review the workflow setup or consult the documentation for proper configuration.`);
     }
     return value;
 }
@@ -31763,6 +32104,8 @@ function initializeContext() {
         if (isPullRequestEvent(payload) === false) {
             throw new Error('Event payload did not match expected pull_request event payload');
         }
+        // Extend Octokit with REST API methods and pagination support using the plugins
+        const OctokitRestApi = Octokit.plugin(restEndpointMethods, paginateRest);
         contextInstance = {
             repo: { owner, repo },
             repoUrl: `${serverUrl}/${owner}/${repo}`,
@@ -31772,17 +32115,18 @@ function initializeContext() {
             }),
             prNumber: payload.pull_request.number,
             prTitle: payload.pull_request.title.trim(),
-            prBody: payload.pull_request.body || '',
+            prBody: payload.pull_request.body ?? '',
             issueNumber: payload.pull_request.number,
             workspaceDir,
             isPrMergeEvent: payload.action === 'closed' && payload.pull_request.merged === true,
         };
+        const truncatedBody = contextInstance.prBody?.length > 60 ? `${contextInstance.prBody.slice(0, 57)}...` : contextInstance.prBody;
         (0,core.info)(`Event Name: ${eventName}`);
         (0,core.info)(`Repository: ${contextInstance.repo.owner}/${contextInstance.repo.repo}`);
         (0,core.info)(`Repository URL: ${contextInstance.repoUrl}`);
         (0,core.info)(`Pull Request Number: ${contextInstance.prNumber}`);
         (0,core.info)(`Pull Request Title: ${contextInstance.prTitle}`);
-        (0,core.info)(`Pull Request Body: ${contextInstance.prBody}`);
+        (0,core.info)(`Pull Request Body: ${truncatedBody}`);
         (0,core.info)(`Issue Number: ${contextInstance.issueNumber}`);
         (0,core.info)(`Workspace Directory: ${contextInstance.workspaceDir}`);
         (0,core.info)(`Is Pull Request Merge Event: ${contextInstance.isPrMergeEvent}`);
@@ -31880,7 +32224,8 @@ function getModuleReleaseChangelog(terraformModule) {
     return terraformModule.releases.map((release) => `${release.body}`).join('\n\n');
 }
 
-;// CONCATENATED MODULE: ./src/constants.ts
+;// CONCATENATED MODULE: ./src/utils/constants.ts
+const GITHUB_ACTIONS_BOT_USER_ID = 41898282;
 const GITHUB_ACTIONS_BOT_NAME = 'GitHub Actions';
 const GITHUB_ACTIONS_BOT_EMAIL = '41898282+github-actions[bot]@users.noreply.github.com';
 const PR_SUMMARY_MARKER = '<!-- techpivot/terraform-module-releaser — pr-summary-marker -->';
@@ -31931,192 +32276,222 @@ const external_node_child_process_namespaceObject = __WEBPACK_EXTERNAL_createReq
 const promises_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:fs/promises");
 ;// CONCATENATED MODULE: external "node:os"
 const external_node_os_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:os");
-var external_node_os_default = /*#__PURE__*/__nccwpck_require__.n(external_node_os_namespaceObject);
 ;// CONCATENATED MODULE: external "node:path"
 const external_node_path_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:path");
-var external_node_path_default = /*#__PURE__*/__nccwpck_require__.n(external_node_path_namespaceObject);
-;// CONCATENATED MODULE: ./node_modules/yocto-queue/index.js
-/*
-How it works:
-`this.#head` is an instance of `Node` which keeps track of its current value and nests another instance of `Node` that keeps the value that comes after it. When a value is provided to `.enqueue()`, the code needs to iterate through `this.#head`, going deeper and deeper to find the last value. However, iterating through every single item is slow. This problem is solved by saving a reference to the last value as `this.#tail` so that it can reference it to add a new value.
-*/
-
-class Node {
-	value;
-	next;
-
-	constructor(value) {
-		this.value = value;
-	}
-}
-
-class Queue {
-	#head;
-	#tail;
-	#size;
-
-	constructor() {
-		this.clear();
-	}
-
-	enqueue(value) {
-		const node = new Node(value);
-
-		if (this.#head) {
-			this.#tail.next = node;
-			this.#tail = node;
-		} else {
-			this.#head = node;
-			this.#tail = node;
-		}
-
-		this.#size++;
-	}
-
-	dequeue() {
-		const current = this.#head;
-		if (!current) {
-			return;
-		}
-
-		this.#head = this.#head.next;
-		this.#size--;
-		return current.value;
-	}
-
-	peek() {
-		if (!this.#head) {
-			return;
-		}
-
-		return this.#head.value;
-
-		// TODO: Node.js 18.
-		// return this.#head?.value;
-	}
-
-	clear() {
-		this.#head = undefined;
-		this.#tail = undefined;
-		this.#size = 0;
-	}
-
-	get size() {
-		return this.#size;
-	}
-
-	* [Symbol.iterator]() {
-		let current = this.#head;
-
-		while (current) {
-			yield current.value;
-			current = current.next;
-		}
-	}
-}
-
-;// CONCATENATED MODULE: ./node_modules/p-limit/index.js
-
-
-function pLimit(concurrency) {
-	validateConcurrency(concurrency);
-
-	const queue = new Queue();
-	let activeCount = 0;
-
-	const resumeNext = () => {
-		if (activeCount < concurrency && queue.size > 0) {
-			queue.dequeue()();
-			// Since `pendingCount` has been decreased by one, increase `activeCount` by one.
-			activeCount++;
-		}
-	};
-
-	const next = () => {
-		activeCount--;
-
-		resumeNext();
-	};
-
-	const run = async (function_, resolve, arguments_) => {
-		const result = (async () => function_(...arguments_))();
-
-		resolve(result);
-
-		try {
-			await result;
-		} catch {}
-
-		next();
-	};
-
-	const enqueue = (function_, resolve, arguments_) => {
-		// Queue `internalResolve` instead of the `run` function
-		// to preserve asynchronous context.
-		new Promise(internalResolve => {
-			queue.enqueue(internalResolve);
-		}).then(
-			run.bind(undefined, function_, resolve, arguments_),
-		);
-
-		(async () => {
-			// This function needs to wait until the next microtask before comparing
-			// `activeCount` to `concurrency`, because `activeCount` is updated asynchronously
-			// after the `internalResolve` function is dequeued and called. The comparison in the if-statement
-			// needs to happen asynchronously as well to get an up-to-date value for `activeCount`.
-			await Promise.resolve();
-
-			if (activeCount < concurrency) {
-				resumeNext();
-			}
-		})();
-	};
-
-	const generator = (function_, ...arguments_) => new Promise(resolve => {
-		enqueue(function_, resolve, arguments_);
-	});
-
-	Object.defineProperties(generator, {
-		activeCount: {
-			get: () => activeCount,
-		},
-		pendingCount: {
-			get: () => queue.size,
-		},
-		clearQueue: {
-			value() {
-				queue.clear();
-			},
-		},
-		concurrency: {
-			get: () => concurrency,
-
-			set(newConcurrency) {
-				validateConcurrency(newConcurrency);
-				concurrency = newConcurrency;
-
-				queueMicrotask(() => {
-					// eslint-disable-next-line no-unmodified-loop-condition
-					while (activeCount < concurrency && queue.size > 0) {
-						resumeNext();
-					}
-				});
-			},
-		},
-	});
-
-	return generator;
-}
-
-function validateConcurrency(concurrency) {
-	if (!((Number.isInteger(concurrency) || concurrency === Number.POSITIVE_INFINITY) && concurrency > 0)) {
-		throw new TypeError('Expected `concurrency` to be a number from 1 and up');
-	}
-}
-
+// EXTERNAL MODULE: external "node:util"
+var external_node_util_ = __nccwpck_require__(7975);
 // EXTERNAL MODULE: ./node_modules/which/lib/index.js
 var lib = __nccwpck_require__(1189);
 var lib_default = /*#__PURE__*/__nccwpck_require__.n(lib);
+;// CONCATENATED MODULE: ./src/terraform-docs.ts
+
+
+
+
+
+
+
+
+const execFilePromisified = (0,external_node_util_.promisify)(external_node_child_process_namespaceObject.execFile);
+const platformConfigs = {
+    darwin: {
+        platform: 'darwin',
+        supportedArch: ['amd64', 'arm64'],
+        extension: '.tar.gz',
+    },
+    linux: {
+        platform: 'linux',
+        supportedArch: ['amd64', 'arm', 'arm64'],
+        extension: '.tar.gz',
+    },
+    freebsd: {
+        platform: 'freebsd',
+        supportedArch: ['amd64', 'arm', 'arm64'],
+        extension: '.tar.gz',
+    },
+    win32: {
+        platform: 'windows',
+        supportedArch: ['amd64', 'arm64'],
+        extension: '.zip',
+    },
+};
+const nodeArchToGoArch = {
+    x64: 'amd64',
+    arm: 'arm',
+    arm64: 'arm64',
+};
+/**
+ * Type guard for NodePlatform
+ */
+function isNodePlatform(platform) {
+    return Object.keys(platformConfigs).includes(platform);
+}
+/**
+ * Type guard for NodeArch
+ */
+function isNodeArch(arch) {
+    return Object.keys(nodeArchToGoArch).includes(arch);
+}
+/**
+ * Converts Node platform to Go platform
+ */
+function getGoPlatform(nodePlatform) {
+    return platformConfigs[nodePlatform].platform;
+}
+/**
+ * Validates and returns the platform configuration for terraform-docs
+ *
+ * @param nodePlatform - The Node.js platform
+ * @param nodeArch - The Node.js architecture
+ * @returns The validated platform configuration and Go architecture
+ * @throws {Error} If the platform or architecture combination is not supported
+ */
+function getValidatedPlatformConfig(nodePlatform, nodeArch) {
+    // Validate platform
+    if (!isNodePlatform(nodePlatform)) {
+        throw new Error(`Unsupported platform: ${nodePlatform}. Supported platforms are: ${Object.keys(platformConfigs).join(', ')}`);
+    }
+    // Validate architecture
+    if (!isNodeArch(nodeArch)) {
+        throw new Error(`Unsupported architecture: ${nodeArch}. Supported architectures are: ${Object.keys(nodeArchToGoArch).join(', ')}`);
+    }
+    const platformConfig = platformConfigs[nodePlatform];
+    const goPlatform = getGoPlatform(nodePlatform);
+    const goArch = nodeArchToGoArch[nodeArch];
+    // Validate platform-architecture combination
+    if (!platformConfig.supportedArch.includes(goArch)) {
+        throw new Error(`Architecture ${goArch} is not supported for platform ${goPlatform}. ` +
+            `Supported architectures for ${goPlatform} are: ${platformConfig.supportedArch.join(', ')}`);
+    }
+    return {
+        goPlatform,
+        goArch,
+        extension: platformConfig.extension,
+    };
+}
+/**
+ * Validates that the terraform-docs version string matches the expected format (v#.#.#)
+ * @param version - Version string to validate
+ * @throws {Error} If the version string is invalid
+ */
+function validateTerraformDocsVersion(version) {
+    const versionPattern = /^v\d+\.\d+\.\d+$/;
+    if (!versionPattern.test(version)) {
+        throw new Error(`Invalid terraform-docs version format: ${version}. Version must match the format v#.#.# (e.g., v0.19.0)`);
+    }
+}
+/**
+ * Installs the specified version of terraform-docs.
+ *
+ * @param {string} terraformDocsVersion - The version of terraform-docs to install.
+ * @throws {Error} If the platform or architecture combination is not supported
+ */
+function installTerraformDocs(terraformDocsVersion) {
+    console.time('Elapsed time installing terraform-docs');
+    (0,core.startGroup)(`Installing terraform-docs ${terraformDocsVersion}`);
+    const cwd = process.cwd();
+    let tmpDir = null;
+    try {
+        validateTerraformDocsVersion(terraformDocsVersion);
+        const { goPlatform, goArch, extension } = getValidatedPlatformConfig(process.platform, process.arch);
+        const downloadFilename = `terraform-docs-${terraformDocsVersion}-${goPlatform}-${goArch}${extension}`;
+        const downloadUrl = `https://terraform-docs.io/dl/${terraformDocsVersion}/${downloadFilename}`;
+        // Create a temp directory to handle the extraction so this doesn't clobber our
+        // current working directory.
+        tmpDir = (0,external_node_fs_namespaceObject.mkdtempSync)((0,external_node_path_namespaceObject.join)((0,external_node_os_namespaceObject.tmpdir)(), 'terraform-docs-'));
+        process.chdir(tmpDir);
+        if (goPlatform === 'windows') {
+            const powershellPath = lib_default().sync('powershell');
+            (0,core.info)('Downloading terraform-docs...');
+            (0,external_node_child_process_namespaceObject.execFileSync)(powershellPath, [
+                '-Command',
+                `Invoke-WebRequest -Uri "${downloadUrl}" -OutFile "./terraform-docs.zip"`,
+            ]);
+            (0,core.info)('Unzipping terraform-docs...');
+            (0,external_node_child_process_namespaceObject.execFileSync)(powershellPath, [
+                '-Command',
+                `Expand-Archive -Path "./terraform-docs.zip" -DestinationPath "./terraform-docs" -Force`,
+            ]);
+            (0,core.info)('Getting Windows system dir...');
+            const systemDir = (0,external_node_child_process_namespaceObject.execFileSync)(powershellPath, [
+                '-Command',
+                `Write-Output ([System.IO.Path]::GetFullPath([System.Environment]::GetFolderPath('System')))`,
+            ])
+                .toString()
+                .trim();
+            (0,core.info)(`Copying executable to system dir (${systemDir})...`);
+            (0,external_node_child_process_namespaceObject.execFileSync)(powershellPath, [
+                '-Command',
+                `Move-Item -Path "./terraform-docs/terraform-docs.exe" -Destination "${systemDir}\\terraform-docs.exe"`,
+            ]);
+            // terraform-docs version v0.19.0 af31cc6 windows/amd64
+            (0,external_node_child_process_namespaceObject.execFileSync)(`${systemDir}\\terraform-docs.exe`, ['--version'], { stdio: 'inherit' });
+        }
+        else {
+            const commands = ['curl', 'tar', 'chmod', 'sudo'];
+            const paths = {};
+            for (const command of commands) {
+                paths[command] = lib_default().sync(command);
+                (0,core.info)(`Found ${command} at: ${paths[command]}`);
+            }
+            (0,external_node_child_process_namespaceObject.execFileSync)(paths.curl, ['-sSLfo', './terraform-docs.tar.gz', downloadUrl]);
+            (0,external_node_child_process_namespaceObject.execFileSync)(paths.tar, ['-xzf', './terraform-docs.tar.gz']);
+            (0,external_node_child_process_namespaceObject.execFileSync)(paths.chmod, ['+x', 'terraform-docs']);
+            (0,external_node_child_process_namespaceObject.execFileSync)(paths.sudo, ['mv', 'terraform-docs', '/usr/local/bin/terraform-docs']);
+            // terraform-docs version v0.19.0 af31cc6 linux/amd64
+            (0,external_node_child_process_namespaceObject.execFileSync)('/usr/local/bin/terraform-docs', ['--version'], { stdio: 'inherit' });
+        }
+    }
+    finally {
+        if (tmpDir !== null) {
+            (0,core.info)(`Removing temp dir ${tmpDir}`);
+            (0,external_node_fs_namespaceObject.rmSync)(tmpDir, { recursive: true });
+        }
+        process.chdir(cwd);
+        console.timeEnd('Elapsed time installing terraform-docs');
+        (0,core.endGroup)();
+    }
+}
+/**
+ * Ensures that the .terraform-docs.yml configuration file does not exist in the workspace directory.
+ * If the file exists, it will be removed to prevent conflicts during Terraform documentation generation.
+ *
+ * @returns {void} This function does not return a value.
+ */
+function ensureTerraformDocsConfigDoesNotExist() {
+    (0,core.info)('Ensuring .terraform-docs.yml does not exist');
+    const terraformDocsFile = (0,external_node_path_namespaceObject.join)(context.workspaceDir, '.terraform-docs.yml');
+    if ((0,external_node_fs_namespaceObject.existsSync)(terraformDocsFile)) {
+        (0,core.info)('Found .terraform-docs.yml file, removing.');
+        (0,external_node_fs_namespaceObject.unlinkSync)(terraformDocsFile);
+    }
+    else {
+        (0,core.info)('No .terraform-docs.yml found.');
+    }
+}
+/**
+ * Generates Terraform documentation for a given module.
+ *
+ * This function runs the `terraform-docs` CLI tool to generate a Markdown table format of the Terraform documentation
+ * for the specified module. It will sort the output by required fields.
+ *
+ * @param {TerraformModule} terraformModule - An object containing the module details, including:
+ *   - `moduleName`: The name of the Terraform module.
+ *   - `directory`: The directory path where the Terraform module is located.
+ * @returns {Promise<string>} A promise that resolves with the generated Terraform documentation in Markdown format.
+ * @throws {Error} Throws an error if the `terraform-docs` command fails or produces an error in the `stderr` output.
+ */
+async function generateTerraformDocs({ moduleName, directory }) {
+    (0,core.info)(`Generating tf-docs for: ${moduleName}`);
+    const terraformDocsPath = lib_default().sync('terraform-docs');
+    const { stdout, stderr } = await execFilePromisified(terraformDocsPath, ['markdown', 'table', '--sort-by', 'required', directory], { encoding: 'utf-8' });
+    if (stderr) {
+        throw new Error(`Terraform-docs generation failed for module: ${moduleName}\n${stderr}`);
+    }
+    (0,core.info)(`Finished tf-docs for: ${moduleName}`);
+    return stdout;
+}
+
 // EXTERNAL MODULE: ./node_modules/brace-expansion/index.js
 var brace_expansion = __nccwpck_require__(4691);
 ;// CONCATENATED MODULE: ./node_modules/minimatch/dist/esm/assert-valid-pattern.js
@@ -33910,11 +34285,20 @@ minimatch.Minimatch = Minimatch;
 minimatch.escape = escape_escape;
 minimatch.unescape = unescape_unescape;
 //# sourceMappingURL=index.js.map
-;// CONCATENATED MODULE: ./src/file-util.ts
+;// CONCATENATED MODULE: ./src/utils/file.ts
 
 
 
 
+/**
+ * Checks if a directory contains any Terraform (.tf) files.
+ *
+ * @param {string} dirPath - The path of the directory to check.
+ * @returns {boolean} True if the directory contains at least one .tf file, otherwise false.
+ */
+function isTerraformDirectory(dirPath) {
+    return (0,external_node_fs_namespaceObject.existsSync)(dirPath) && (0,external_node_fs_namespaceObject.readdirSync)(dirPath).some((file) => (0,external_node_path_namespaceObject.extname)(file) === '.tf');
+}
 /**
  * Checks if a file should be excluded from matching based on the defined exclude patterns
  * and relative paths from the base directory.
@@ -33925,7 +34309,7 @@ minimatch.unescape = unescape_unescape;
  * @returns {boolean} True if the file should be excluded, false otherwise.
  */
 function shouldExcludeFile(baseDirectory, filePath, excludePatterns) {
-    const relativePath = external_node_path_namespaceObject.relative(baseDirectory, filePath);
+    const relativePath = (0,external_node_path_namespaceObject.relative)(baseDirectory, filePath);
     // Expand patterns to include both directories and their contents, then remove duplicates
     const expandedPatterns = Array.from(new Set(excludePatterns.flatMap((pattern) => [
         pattern, // Original pattern
@@ -33946,21 +34330,21 @@ function shouldExcludeFile(baseDirectory, filePath, excludePatterns) {
 function copyModuleContents(directory, tmpDir, excludePatterns, baseDirectory) {
     const baseDir = baseDirectory ?? directory;
     // Read the directory contents
-    const filesToCopy = external_node_fs_namespaceObject.readdirSync(directory);
+    const filesToCopy = (0,external_node_fs_namespaceObject.readdirSync)(directory);
     (0,core.info)(`Copying "${directory}" to directory: ${tmpDir}`);
     for (const file of filesToCopy) {
-        const filePath = external_node_path_namespaceObject.join(directory, file);
-        const stats = external_node_fs_namespaceObject.statSync(filePath);
+        const filePath = (0,external_node_path_namespaceObject.join)(directory, file);
+        const stats = (0,external_node_fs_namespaceObject.statSync)(filePath);
         if (stats.isDirectory()) {
             // If the item is a directory, create the directory in tmpDir and copy its contents
-            const newDir = external_node_path_namespaceObject.join(tmpDir, file);
-            external_node_fs_namespaceObject.mkdirSync(newDir, { recursive: true });
+            const newDir = (0,external_node_path_namespaceObject.join)(tmpDir, file);
+            (0,external_node_fs_namespaceObject.mkdirSync)(newDir, { recursive: true });
             // Note: Important we pass the original base directory.
             copyModuleContents(filePath, newDir, excludePatterns, baseDir); // Recursion for directory contents
         }
         else if (!shouldExcludeFile(baseDir, filePath, excludePatterns)) {
             // Handle file copying
-            external_node_fs_namespaceObject.copyFileSync(filePath, external_node_path_namespaceObject.join(tmpDir, file));
+            (0,external_node_fs_namespaceObject.copyFileSync)(filePath, (0,external_node_path_namespaceObject.join)(tmpDir, file));
         }
         else {
             (0,core.info)(`Excluding file: ${filePath}`);
@@ -34004,229 +34388,204 @@ function copyModuleContents(directory, tmpDir, excludePatterns, baseDirectory) {
  * // and the `important-file.txt` file.
  */
 function removeDirectoryContents(directory, exceptions = []) {
-    if (!external_node_fs_namespaceObject.existsSync(directory)) {
+    if (!(0,external_node_fs_namespaceObject.existsSync)(directory)) {
         return;
     }
-    for (const item of external_node_fs_namespaceObject.readdirSync(directory)) {
-        const itemPath = external_node_path_namespaceObject.join(directory, item);
+    for (const item of (0,external_node_fs_namespaceObject.readdirSync)(directory)) {
+        const itemPath = (0,external_node_path_namespaceObject.join)(directory, item);
         // Skip removal for items listed in the exceptions array
         if (!shouldExcludeFile(directory, itemPath, exceptions)) {
             //if (!exceptions.includes(item)) {
-            external_node_fs_namespaceObject.rmSync(itemPath, { recursive: true, force: true });
+            (0,external_node_fs_namespaceObject.rmSync)(itemPath, { recursive: true, force: true });
         }
     }
     (0,core.info)(`Removed contents of directory [${directory}], preserving items: ${exceptions.join(', ')}`);
 }
 
-// EXTERNAL MODULE: external "node:util"
-var external_node_util_ = __nccwpck_require__(7975);
-;// CONCATENATED MODULE: ./src/terraform-docs.ts
+;// CONCATENATED MODULE: ./node_modules/yocto-queue/index.js
+/*
+How it works:
+`this.#head` is an instance of `Node` which keeps track of its current value and nests another instance of `Node` that keeps the value that comes after it. When a value is provided to `.enqueue()`, the code needs to iterate through `this.#head`, going deeper and deeper to find the last value. However, iterating through every single item is slow. This problem is solved by saving a reference to the last value as `this.#tail` so that it can reference it to add a new value.
+*/
 
+class Node {
+	value;
+	next;
 
-
-
-
-
-
-
-const execFilePromisified = (0,external_node_util_.promisify)(external_node_child_process_namespaceObject.execFile);
-const platformConfigs = {
-    darwin: {
-        platform: 'darwin',
-        supportedArch: ['amd64', 'arm64'],
-        extension: '.tar.gz',
-    },
-    linux: {
-        platform: 'linux',
-        supportedArch: ['amd64', 'arm', 'arm64'],
-        extension: '.tar.gz',
-    },
-    freebsd: {
-        platform: 'freebsd',
-        supportedArch: ['amd64', 'arm', 'arm64'],
-        extension: '.tar.gz',
-    },
-    win32: {
-        platform: 'windows',
-        supportedArch: ['amd64', 'arm64'],
-        extension: '.zip',
-    },
-};
-const nodeArchToGoArch = {
-    x64: 'amd64',
-    arm: 'arm',
-    arm64: 'arm64',
-};
-/**
- * Type guard for NodePlatform
- */
-function isNodePlatform(platform) {
-    return Object.keys(platformConfigs).includes(platform);
+	constructor(value) {
+		this.value = value;
+	}
 }
-/**
- * Type guard for NodeArch
- */
-function isNodeArch(arch) {
-    return Object.keys(nodeArchToGoArch).includes(arch);
+
+class Queue {
+	#head;
+	#tail;
+	#size;
+
+	constructor() {
+		this.clear();
+	}
+
+	enqueue(value) {
+		const node = new Node(value);
+
+		if (this.#head) {
+			this.#tail.next = node;
+			this.#tail = node;
+		} else {
+			this.#head = node;
+			this.#tail = node;
+		}
+
+		this.#size++;
+	}
+
+	dequeue() {
+		const current = this.#head;
+		if (!current) {
+			return;
+		}
+
+		this.#head = this.#head.next;
+		this.#size--;
+		return current.value;
+	}
+
+	peek() {
+		if (!this.#head) {
+			return;
+		}
+
+		return this.#head.value;
+
+		// TODO: Node.js 18.
+		// return this.#head?.value;
+	}
+
+	clear() {
+		this.#head = undefined;
+		this.#tail = undefined;
+		this.#size = 0;
+	}
+
+	get size() {
+		return this.#size;
+	}
+
+	* [Symbol.iterator]() {
+		let current = this.#head;
+
+		while (current) {
+			yield current.value;
+			current = current.next;
+		}
+	}
 }
-/**
- * Converts Node platform to Go platform
- */
-function getGoPlatform(nodePlatform) {
-    return platformConfigs[nodePlatform].platform;
+
+;// CONCATENATED MODULE: ./node_modules/p-limit/index.js
+
+
+function pLimit(concurrency) {
+	validateConcurrency(concurrency);
+
+	const queue = new Queue();
+	let activeCount = 0;
+
+	const resumeNext = () => {
+		if (activeCount < concurrency && queue.size > 0) {
+			queue.dequeue()();
+			// Since `pendingCount` has been decreased by one, increase `activeCount` by one.
+			activeCount++;
+		}
+	};
+
+	const next = () => {
+		activeCount--;
+
+		resumeNext();
+	};
+
+	const run = async (function_, resolve, arguments_) => {
+		const result = (async () => function_(...arguments_))();
+
+		resolve(result);
+
+		try {
+			await result;
+		} catch {}
+
+		next();
+	};
+
+	const enqueue = (function_, resolve, arguments_) => {
+		// Queue `internalResolve` instead of the `run` function
+		// to preserve asynchronous context.
+		new Promise(internalResolve => {
+			queue.enqueue(internalResolve);
+		}).then(
+			run.bind(undefined, function_, resolve, arguments_),
+		);
+
+		(async () => {
+			// This function needs to wait until the next microtask before comparing
+			// `activeCount` to `concurrency`, because `activeCount` is updated asynchronously
+			// after the `internalResolve` function is dequeued and called. The comparison in the if-statement
+			// needs to happen asynchronously as well to get an up-to-date value for `activeCount`.
+			await Promise.resolve();
+
+			if (activeCount < concurrency) {
+				resumeNext();
+			}
+		})();
+	};
+
+	const generator = (function_, ...arguments_) => new Promise(resolve => {
+		enqueue(function_, resolve, arguments_);
+	});
+
+	Object.defineProperties(generator, {
+		activeCount: {
+			get: () => activeCount,
+		},
+		pendingCount: {
+			get: () => queue.size,
+		},
+		clearQueue: {
+			value() {
+				queue.clear();
+			},
+		},
+		concurrency: {
+			get: () => concurrency,
+
+			set(newConcurrency) {
+				validateConcurrency(newConcurrency);
+				concurrency = newConcurrency;
+
+				queueMicrotask(() => {
+					// eslint-disable-next-line no-unmodified-loop-condition
+					while (activeCount < concurrency && queue.size > 0) {
+						resumeNext();
+					}
+				});
+			},
+		},
+	});
+
+	return generator;
 }
-/**
- * Validates and returns the platform configuration for terraform-docs
- *
- * @param nodePlatform - The Node.js platform
- * @param nodeArch - The Node.js architecture
- * @returns The validated platform configuration and Go architecture
- * @throws {Error} If the platform or architecture combination is not supported
- */
-function getValidatedPlatformConfig(nodePlatform, nodeArch) {
-    // Validate platform
-    if (!isNodePlatform(nodePlatform)) {
-        throw new Error(`Unsupported platform: ${nodePlatform}. Supported platforms are: ${Object.keys(platformConfigs).join(', ')}`);
-    }
-    // Validate architecture
-    if (!isNodeArch(nodeArch)) {
-        throw new Error(`Unsupported architecture: ${nodeArch}. Supported architectures are: ${Object.keys(nodeArchToGoArch).join(', ')}`);
-    }
-    const platformConfig = platformConfigs[nodePlatform];
-    const goPlatform = getGoPlatform(nodePlatform);
-    const goArch = nodeArchToGoArch[nodeArch];
-    // Validate platform-architecture combination
-    if (!platformConfig.supportedArch.includes(goArch)) {
-        throw new Error(`Architecture ${goArch} is not supported for platform ${goPlatform}. ` +
-            `Supported architectures for ${goPlatform} are: ${platformConfig.supportedArch.join(', ')}`);
-    }
-    return {
-        goPlatform,
-        goArch,
-        extension: platformConfig.extension,
-    };
+
+function limitFunction(function_, option) {
+	const {concurrency} = option;
+	const limit = pLimit(concurrency);
+
+	return (...arguments_) => limit(() => function_(...arguments_));
 }
-/**
- * Validates that the terraform-docs version string matches the expected format (v#.#.#)
- * @param version - Version string to validate
- * @throws {Error} If the version string is invalid
- */
-function validateTerraformDocsVersion(version) {
-    const versionPattern = /^v\d+\.\d+\.\d+$/;
-    if (!versionPattern.test(version)) {
-        throw new Error(`Invalid terraform-docs version format: ${version}. Version must match the format v#.#.# (e.g., v0.19.0)`);
-    }
-}
-/**
- * Installs the specified version of terraform-docs.
- *
- * @param {string} terraformDocsVersion - The version of terraform-docs to install.
- * @throws {Error} If the platform or architecture combination is not supported
- */
-function installTerraformDocs(terraformDocsVersion) {
-    console.time('Elapsed time installing terraform-docs');
-    (0,core.startGroup)(`Installing terraform-docs ${terraformDocsVersion}`);
-    const cwd = process.cwd();
-    let tempDir = null;
-    try {
-        validateTerraformDocsVersion(terraformDocsVersion);
-        const { goPlatform, goArch, extension } = getValidatedPlatformConfig(process.platform, process.arch);
-        const downloadFilename = `terraform-docs-${terraformDocsVersion}-${goPlatform}-${goArch}${extension}`;
-        const downloadUrl = `https://terraform-docs.io/dl/${terraformDocsVersion}/${downloadFilename}`;
-        // Create a temp directory to handle the extraction so this doesn't clobber our
-        // current working directory.
-        tempDir = (0,external_node_fs_namespaceObject.mkdtempSync)(external_node_path_namespaceObject.join((0,external_node_os_namespaceObject.tmpdir)(), 'terraform-docs-'));
-        process.chdir(tempDir);
-        if (goPlatform === 'windows') {
-            const powershellPath = lib_default().sync('powershell');
-            (0,core.info)('Downloading terraform-docs...');
-            (0,external_node_child_process_namespaceObject.execFileSync)(powershellPath, [
-                '-Command',
-                `Invoke-WebRequest -Uri "${downloadUrl}" -OutFile "./terraform-docs.zip"`,
-            ]);
-            (0,core.info)('Unzipping terraform-docs...');
-            (0,external_node_child_process_namespaceObject.execFileSync)(powershellPath, [
-                '-Command',
-                `Expand-Archive -Path "./terraform-docs.zip" -DestinationPath "./terraform-docs" -Force`,
-            ]);
-            (0,core.info)('Getting Windows system dir...');
-            const systemDir = (0,external_node_child_process_namespaceObject.execFileSync)(powershellPath, [
-                '-Command',
-                `Write-Output ([System.IO.Path]::GetFullPath([System.Environment]::GetFolderPath('System')))`,
-            ])
-                .toString()
-                .trim();
-            (0,core.info)(`Copying executable to system dir (${systemDir})...`);
-            (0,external_node_child_process_namespaceObject.execFileSync)(powershellPath, [
-                '-Command',
-                `Move-Item -Path "./terraform-docs/terraform-docs.exe" -Destination "${systemDir}\\terraform-docs.exe"`,
-            ]);
-            // terraform-docs version v0.19.0 af31cc6 windows/amd64
-            (0,external_node_child_process_namespaceObject.execFileSync)(`${systemDir}\\terraform-docs.exe`, ['--version'], { stdio: 'inherit' });
-        }
-        else {
-            const commands = ['curl', 'tar', 'chmod', 'sudo'];
-            const paths = {};
-            for (const command of commands) {
-                paths[command] = lib_default().sync(command);
-                (0,core.info)(`Found ${command} at: ${paths[command]}`);
-            }
-            (0,external_node_child_process_namespaceObject.execFileSync)(paths.curl, ['-sSLfo', './terraform-docs.tar.gz', downloadUrl]);
-            (0,external_node_child_process_namespaceObject.execFileSync)(paths.tar, ['-xzf', './terraform-docs.tar.gz']);
-            (0,external_node_child_process_namespaceObject.execFileSync)(paths.chmod, ['+x', 'terraform-docs']);
-            (0,external_node_child_process_namespaceObject.execFileSync)(paths.sudo, ['mv', 'terraform-docs', '/usr/local/bin/terraform-docs']);
-            // terraform-docs version v0.19.0 af31cc6 linux/amd64
-            (0,external_node_child_process_namespaceObject.execFileSync)('/usr/local/bin/terraform-docs', ['--version'], { stdio: 'inherit' });
-        }
-    }
-    finally {
-        if (tempDir !== null) {
-            (0,core.info)(`Removing temp dir ${tempDir}`);
-            (0,external_node_fs_namespaceObject.rmSync)(tempDir, { recursive: true });
-        }
-        process.chdir(cwd);
-        console.timeEnd('Elapsed time installing terraform-docs');
-        (0,core.endGroup)();
-    }
-}
-/**
- * Ensures that the .terraform-docs.yml configuration file does not exist in the workspace directory.
- * If the file exists, it will be removed to prevent conflicts during Terraform documentation generation.
- *
- * @returns {void} This function does not return a value.
- */
-function ensureTerraformDocsConfigDoesNotExist() {
-    (0,core.info)('Ensuring .terraform-docs.yml does not exist');
-    const terraformDocsFile = external_node_path_namespaceObject.join(context.workspaceDir, '.terraform-docs.yml');
-    if ((0,external_node_fs_namespaceObject.existsSync)(terraformDocsFile)) {
-        (0,core.info)('Found .terraform-docs.yml file, removing.');
-        (0,external_node_fs_namespaceObject.unlinkSync)(terraformDocsFile);
-    }
-    else {
-        (0,core.info)('No .terraform-docs.yml found.');
-    }
-}
-/**
- * Generates Terraform documentation for a given module.
- *
- * This function runs the `terraform-docs` CLI tool to generate a Markdown table format of the Terraform documentation
- * for the specified module. It will sort the output by required fields.
- *
- * @param {TerraformModule} terraformModule - An object containing the module details, including:
- *   - `moduleName`: The name of the Terraform module.
- *   - `directory`: The directory path where the Terraform module is located.
- * @returns {Promise<string>} A promise that resolves with the generated Terraform documentation in Markdown format.
- * @throws {Error} Throws an error if the `terraform-docs` command fails or produces an error in the `stderr` output.
- */
-async function generateTerraformDocs({ moduleName, directory }) {
-    (0,core.info)(`Generating tf-docs for: ${moduleName}`);
-    const terraformDocsPath = lib_default().sync('terraform-docs');
-    const { stdout, stderr } = await execFilePromisified(terraformDocsPath, ['markdown', 'table', '--sort-by', 'required', directory], { encoding: 'utf-8' });
-    if (stderr) {
-        throw new Error(`Terraform-docs generation failed for module: ${moduleName}\n${stderr}`);
-    }
-    (0,core.info)(`Finished tf-docs for: ${moduleName}`);
-    return stdout;
+
+function validateConcurrency(concurrency) {
+	if (!((Number.isInteger(concurrency) || concurrency === Number.POSITIVE_INFINITY) && concurrency > 0)) {
+		throw new TypeError('Expected `concurrency` to be a number from 1 and up');
+	}
 }
 
 ;// CONCATENATED MODULE: ./src/wiki.ts
@@ -34267,15 +34626,15 @@ const WIKI_SUBDIRECTORY_NAME = '.wiki';
  */
 function checkoutWiki() {
     const wikiHtmlUrl = `${context.repoUrl}.wiki`;
-    const wikiDirectory = external_node_path_default().resolve(context.workspaceDir, WIKI_SUBDIRECTORY_NAME);
+    const wikiDirectory = (0,external_node_path_namespaceObject.resolve)(context.workspaceDir, WIKI_SUBDIRECTORY_NAME);
     const execWikiOpts = { cwd: wikiDirectory, stdio: 'inherit' };
     (0,core.startGroup)(`Checking out wiki repository [${wikiHtmlUrl}]`);
     const gitPath = lib_default().sync('git');
     (0,core.info)('Adding repository directory to the temporary git global config as a safe directory');
     (0,external_node_child_process_namespaceObject.execFileSync)(gitPath, ['config', '--global', '--add', 'safe.directory', wikiDirectory], { stdio: 'inherit' });
     (0,core.info)('Initializing the repository');
-    if (!external_node_fs_default().existsSync(wikiDirectory)) {
-        external_node_fs_default().mkdirSync(wikiDirectory);
+    if (!(0,external_node_fs_namespaceObject.existsSync)(wikiDirectory)) {
+        (0,external_node_fs_namespaceObject.mkdirSync)(wikiDirectory);
     }
     (0,external_node_child_process_namespaceObject.execFileSync)(gitPath, ['init', '--initial-branch=master', wikiDirectory], execWikiOpts);
     (0,core.info)('Setting up origin');
@@ -34288,7 +34647,13 @@ function checkoutWiki() {
         (0,external_node_child_process_namespaceObject.execFileSync)(gitPath, ['config', '--local', '--unset-all', 'http.https://github.com/.extraheader'], execWikiOpts);
     }
     catch (error) {
-        // This returns exit code 5 if not set. Not a problem. Let's ignore.
+        // Type guard to ensure we're handling the correct error type
+        if (error instanceof Error) {
+            // Only ignore specific status code if needed
+            if (error.status !== 5) {
+                throw error;
+            }
+        }
     }
     (0,external_node_child_process_namespaceObject.execFileSync)(gitPath, ['config', '--local', 'http.https://github.com/.extraheader', `Authorization: Basic ${basicCredential}`], execWikiOpts);
     try {
@@ -34385,6 +34750,22 @@ function getWikiLink(moduleName, relative = true) {
     return `${baseUrl}/wiki/${getWikiSlug(moduleName)}`;
 }
 /**
+ * Formats the module source URL based on configuration settings.
+ *
+ * @param repoUrl - The repository URL
+ * @param useSSH - Whether to use SSH format
+ * @returns The formatted source URL for the module
+ */
+function formatModuleSource(repoUrl, useSSH) {
+    if (useSSH) {
+        // Convert HTTPS URL to SSH format
+        // From: https://github.com/owner/repo
+        // To:   ssh://git@github.com/owner/repo
+        return `ssh://${repoUrl.replace(/^https:\/\/github\.com/, 'git@github.com')}.git`;
+    }
+    return `${repoUrl}.git`;
+}
+/**
  * Generates the wiki file associated with the specified Terraform module.
  * Ensures that the directory structure is created if it doesn't exist and handles overwriting
  * the existing wiki file.
@@ -34396,37 +34777,32 @@ function getWikiLink(moduleName, relative = true) {
  */
 async function generateWikiModule(terraformModule) {
     const { moduleName, latestTag } = terraformModule;
-    try {
-        const wikiSlugFile = `${getWikiSlug(moduleName)}.md`;
-        const wikiFile = external_node_path_default().join(context.workspaceDir, WIKI_SUBDIRECTORY_NAME, wikiSlugFile);
-        // Generate a module changelog
-        const changelog = getModuleReleaseChangelog(terraformModule);
-        const tfDocs = await generateTerraformDocs(terraformModule);
-        const wikiContent = [
-            '# Usage\n',
-            'To use this module in your Terraform, refer to the below module example:\n',
-            '```hcl',
-            `module "${moduleName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()}" {`,
-            `  source = "git::${context.repoUrl}.git?ref=${latestTag}"`,
-            '\n  # See inputs below for additional required parameters',
-            '}',
-            '```',
-            '\n# Attributes\n',
-            '<!-- BEGIN_TF_DOCS -->',
-            tfDocs,
-            '<!-- END_TF_DOCS -->',
-            '\n# Changelog\n',
-            changelog,
-        ].join('\n');
-        // Write the markdown content to the wiki file, overwriting if it exists
-        await promises_namespaceObject.writeFile(wikiFile, wikiContent, 'utf8');
-        (0,core.info)(`Generated: ${wikiSlugFile}`);
-        return wikiFile;
-    }
-    catch (error) {
-        console.error(`Error writing wiki file for module: ${moduleName}`, error);
-        throw error;
-    }
+    const wikiSlugFile = `${getWikiSlug(moduleName)}.md`;
+    const wikiFile = (0,external_node_path_namespaceObject.join)(context.workspaceDir, WIKI_SUBDIRECTORY_NAME, wikiSlugFile);
+    // Generate a module changelog
+    const changelog = getModuleReleaseChangelog(terraformModule);
+    const tfDocs = await generateTerraformDocs(terraformModule);
+    const moduleSource = formatModuleSource(context.repoUrl, config.useSSHSourceFormat);
+    const wikiContent = [
+        '# Usage\n',
+        'To use this module in your Terraform, refer to the below module example:\n',
+        '```hcl',
+        `module "${moduleName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()}" {`,
+        `  source = "git::${moduleSource}?ref=${latestTag}"`,
+        '\n  # See inputs below for additional required parameters',
+        '}',
+        '```',
+        '\n# Attributes\n',
+        '<!-- BEGIN_TF_DOCS -->',
+        tfDocs,
+        '<!-- END_TF_DOCS -->',
+        '\n# Changelog\n',
+        changelog,
+    ].join('\n');
+    // Write the markdown content to the wiki file, overwriting if it exists
+    await promises_namespaceObject.writeFile(wikiFile, wikiContent, 'utf8');
+    (0,core.info)(`Generated: ${wikiSlugFile}`);
+    return wikiFile;
 }
 /**
  * Generates the Wiki sidebar with a list of Terraform modules, including changelog entries for each.
@@ -34473,7 +34849,7 @@ async function generateWikiModule(terraformModule) {
  * ```
  */
 async function generateWikiSidebar(terraformModules) {
-    const sidebarFile = external_node_path_default().join(context.workspaceDir, WIKI_SUBDIRECTORY_NAME, '_Sidebar.md');
+    const sidebarFile = (0,external_node_path_namespaceObject.join)(context.workspaceDir, WIKI_SUBDIRECTORY_NAME, '_Sidebar.md');
     const { owner, repo } = context.repo;
     const repoBaseUrl = `/${owner}/${repo}`;
     let moduleSidebarContent = '';
@@ -34543,16 +34919,10 @@ async function generateWikiFooter() {
         (0,core.info)('Skipping footer generation as branding is disabled');
         return;
     }
-    const footerFile = external_node_path_default().join(context.workspaceDir, WIKI_SUBDIRECTORY_NAME, '_Footer.md');
-    try {
-        // If the file doesn't exist, create and write content to it
-        await promises_namespaceObject.writeFile(footerFile, BRANDING_WIKI, 'utf8');
-        (0,core.info)('Generated: _Footer.md');
-        return footerFile;
-    }
-    catch (error) {
-        console.error(`Error updating _Footer.md: ${error instanceof Error ? error.message : String(error)}`);
-    }
+    const footerFile = (0,external_node_path_namespaceObject.join)(context.workspaceDir, WIKI_SUBDIRECTORY_NAME, '_Footer.md');
+    await promises_namespaceObject.writeFile(footerFile, BRANDING_WIKI, 'utf8');
+    (0,core.info)('Generated: _Footer.md');
+    return footerFile;
 }
 /**
  * Generates the Home.md file for the Terraform Modules Wiki.
@@ -34567,7 +34937,7 @@ async function generateWikiFooter() {
  * @throws {Error} Throws an error if the file writing operation fails.
  */
 async function generateWikiHome(terraformModules) {
-    const homeFile = external_node_path_default().join(context.workspaceDir, WIKI_SUBDIRECTORY_NAME, 'Home.md');
+    const homeFile = (0,external_node_path_namespaceObject.join)(context.workspaceDir, WIKI_SUBDIRECTORY_NAME, 'Home.md');
     const content = [
         '# Terraform Modules Home',
         '\nWelcome to the Terraform Modules Wiki! This page serves as an index for all the available Terraform modules,',
@@ -34620,8 +34990,8 @@ async function generateWikiFiles(terraformModules) {
     // - Ensuring the Wiki remains up-to-date without leftover or outdated files.
     // - Avoiding conflicts or unexpected results due to stale data.
     (0,core.info)('Removing existing wiki files...');
-    removeDirectoryContents(external_node_path_default().join(context.workspaceDir, WIKI_SUBDIRECTORY_NAME), ['.git']);
-    const parallelism = external_node_os_default().cpus().length + 2;
+    removeDirectoryContents((0,external_node_path_namespaceObject.join)(context.workspaceDir, WIKI_SUBDIRECTORY_NAME), ['.git']);
+    const parallelism = (0,external_node_os_namespaceObject.cpus)().length + 2;
     (0,core.info)(`Using parallelism: ${parallelism}`);
     const limit = pLimit(parallelism);
     const updatedFiles = [];
@@ -34655,7 +35025,7 @@ function commitAndPushWikiChanges() {
     try {
         const { prBody, prNumber, prTitle } = context;
         const commitMessage = `PR #${prNumber} - ${prTitle}\n\n${prBody}`.trim();
-        const wikiDirectory = external_node_path_default().resolve(context.workspaceDir, WIKI_SUBDIRECTORY_NAME);
+        const wikiDirectory = (0,external_node_path_namespaceObject.resolve)(context.workspaceDir, WIKI_SUBDIRECTORY_NAME);
         const execWikiOpts = { cwd: wikiDirectory, stdio: 'inherit' };
         const gitPath = lib_default().sync('git');
         // Check if there are any changes (otherwise add/commit/push will error)
@@ -34695,20 +35065,25 @@ function commitAndPushWikiChanges() {
 /**
  * Checks whether the pull request already has a comment containing the release marker.
  *
- * @param {string} releaseMarker - The release marker to look for in the comments (e.g., PR_RELEASE_MARKER).
  * @returns {Promise<boolean>} - Returns true if a comment with the release marker is found, false otherwise.
  */
 async function hasReleaseComment() {
     try {
         const { octokit, repo: { owner, repo }, issueNumber: issue_number, } = context;
         // Fetch all comments on the pull request
-        const { data: comments } = await octokit.rest.issues.listComments({
+        const iterator = octokit.paginate.iterator(octokit.rest.issues.listComments, {
             owner,
             repo,
             issue_number,
         });
-        // Check if any comment includes the release marker
-        return comments.some((comment) => comment.body?.includes(PR_RELEASE_MARKER));
+        for await (const { data } of iterator) {
+            for (const comment of data) {
+                if (comment.user?.id === GITHUB_ACTIONS_BOT_USER_ID && comment.body?.includes(PR_RELEASE_MARKER)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
     catch (error) {
         const requestError = error;
@@ -34731,13 +35106,14 @@ async function hasReleaseComment() {
 async function getChangedFilesInPullRequest() {
     try {
         const { octokit, repo: { owner, repo }, prNumber: pull_number, } = context;
-        const { data: files } = await octokit.rest.pulls.listFiles({
-            owner,
-            repo,
-            pull_number,
-        });
-        // Return a Set of file names
-        return new Set(files.map((file) => file.filename));
+        const iterator = octokit.paginate.iterator(octokit.rest.pulls.listFiles, { owner, repo, pull_number });
+        const changedFiles = new Set();
+        for await (const { data } of iterator) {
+            for (const file of data) {
+                changedFiles.add(file.filename);
+            }
+        }
+        return changedFiles;
     }
     catch (error) {
         const requestError = error;
@@ -34779,36 +35155,38 @@ async function getPullRequestCommits() {
         const prChangedFiles = await getChangedFilesInPullRequest();
         (0,core.info)(`Found ${prChangedFiles.size} file${prChangedFiles.size !== 1 ? 's' : ''} changed in pull request.`);
         (0,core.info)(JSON.stringify(Array.from(prChangedFiles), null, 2));
-        const listCommitsResponse = await octokit.rest.pulls.listCommits({ owner, repo, pull_number });
+        const iterator = octokit.paginate.iterator(octokit.rest.pulls.listCommits, { owner, repo, pull_number });
         // Iterate over the fetched commits to retrieve details and files
-        const commits = await Promise.all(listCommitsResponse.data.map(async (commit) => {
-            const commitDetailsResponse = await octokit.rest.repos.getCommit({
-                owner,
-                repo,
-                ref: commit.sha,
-            });
-            // Filter files to only include those that are part of prChangedFiles
-            const files = commitDetailsResponse.data.files
-                ?.map((file) => file.filename)
-                .filter((filename) => prChangedFiles.has(filename)) ?? [];
-            return {
-                message: commit.commit.message,
-                sha: commit.sha,
-                files,
-            };
-        }));
+        const commits = [];
+        for await (const { data } of iterator) {
+            for (const commit of data) {
+                const commitDetailsResponse = await octokit.rest.repos.getCommit({
+                    owner,
+                    repo,
+                    ref: commit.sha,
+                });
+                // Filter files to only include those that are part of prChangedFiles
+                const files = commitDetailsResponse.data.files
+                    ?.map((file) => file.filename)
+                    .filter((filename) => prChangedFiles.has(filename)) ?? [];
+                commits.push({
+                    message: commit.commit.message,
+                    sha: commit.sha,
+                    files,
+                });
+            }
+        }
         (0,core.info)(`Found ${commits.length} commit${commits.length !== 1 ? 's' : ''}.`);
         (0,core.debug)(JSON.stringify(commits, null, 2));
         return commits;
     }
     catch (error) {
         const requestError = error;
-        // If we got a 403 because the pull request doesn't have permissions. Let's really help wrap this error
-        // and make it clear to the consumer what actions need to be taken.
         if (requestError.status === 403) {
             throw new Error(`Unable to read and write pull requests due to insufficient permissions. Ensure the workflow permissions.pull-requests is set to "write".\n${requestError.message}`, { cause: error });
         }
         throw error;
+        /* c8 ignore next */
     }
     finally {
         console.timeEnd('Elapsed time fetching commits');
@@ -34993,34 +35371,42 @@ async function addPostReleaseComment(updatedModules) {
 
 
 
+
 /**
  * Retrieves all releases from the specified GitHub repository.
  *
  * This function fetches the list of releases for the repository specified in the configuration.
  * It returns the releases as an array of objects containing the title, body, and tag name.
  *
+ * @param {GetAllReleasesOptions} options - Optional configuration for the API request
  * @returns {Promise<GitHubRelease[]>} A promise that resolves to an array of release details.
  * @throws {RequestError} Throws an error if the request to fetch releases fails.
  */
-async function getAllReleases() {
+async function getAllReleases(options = { per_page: 100, page: 1 }) {
     console.time('Elapsed time fetching releases'); // Start timing
     (0,core.startGroup)('Fetching repository releases');
     try {
         const { octokit, repo: { owner, repo }, } = context;
         const releases = [];
-        for await (const response of octokit.paginate.iterator(octokit.rest.repos.listReleases, {
+        let totalRequests = 0;
+        const iterator = octokit.paginate.iterator(octokit.rest.repos.listReleases, {
+            ...options,
             owner,
             repo,
-        })) {
-            for (const release of response.data) {
+        });
+        for await (const { data } of iterator) {
+            totalRequests++;
+            for (const release of data) {
                 releases.push({
                     id: release.id,
                     title: release.name ?? '', // same as tag as defined in our pull request for now (no need for tag)
                     body: release.body ?? '',
+                    tagName: release.tag_name,
                 });
             }
         }
-        (0,core.info)(`Found ${releases.length} releases${releases.length !== 1 ? 's' : ''}.`);
+        (0,core.debug)(`Total page requests: ${totalRequests}`);
+        (0,core.info)(`Found ${releases.length} release${releases.length !== 1 ? 's' : ''}.`);
         (0,core.debug)(JSON.stringify(releases, null, 2));
         // Note: No need to sort currently as they by default return in indexed order with most recent first.
         return releases;
@@ -35037,6 +35423,7 @@ async function getAllReleases() {
             errorMessage = String(error).trim();
         }
         throw new Error(errorMessage, { cause: error });
+        /* c8 ignore next */
     }
     finally {
         console.timeEnd('Elapsed time fetching releases');
@@ -35064,16 +35451,15 @@ async function createTaggedRelease(terraformChangedModules) {
     try {
         for (const module of terraformChangedModules) {
             const { moduleName, directory, releaseType, nextTag, nextTagVersion } = module;
-            const tmpDir = external_node_path_namespaceObject.join(process.env.RUNNER_TEMP ?? '', 'tmp', moduleName);
             (0,core.info)(`Release type: ${releaseType}`);
             (0,core.info)(`Next tag version: ${nextTag}`);
             // Create a temporary working directory
-            external_node_fs_namespaceObject.mkdirSync(tmpDir, { recursive: true });
-            (0,core.info)(`Creating temp directory: ${tmpDir}`);
+            const tmpDir = (0,external_node_fs_namespaceObject.mkdtempSync)((0,external_node_path_namespaceObject.join)((0,external_node_os_namespaceObject.tmpdir)(), moduleName));
+            (0,core.info)(`Created temp directory: ${tmpDir}`);
             // Copy the module's contents to the temporary directory, excluding specified patterns
             copyModuleContents(directory, tmpDir, config.moduleAssetExcludePatterns);
             // Copy the module's .git directory
-            external_node_fs_namespaceObject.cpSync(external_node_path_namespaceObject.join(workspaceDir, '.git'), external_node_path_namespaceObject.join(tmpDir, '.git'), { recursive: true });
+            (0,external_node_fs_namespaceObject.cpSync)((0,external_node_path_namespaceObject.join)(workspaceDir, '.git'), (0,external_node_path_namespaceObject.join)(tmpDir, '.git'), { recursive: true });
             // Git operations: commit the changes and tag the release
             const commitMessage = `${nextTag}\n\n${prTitle}\n\n${prBody}`.trim();
             const gitPath = await lib_default()('git');
@@ -35108,6 +35494,7 @@ async function createTaggedRelease(terraformChangedModules) {
                 id: response.data.id,
                 title: nextTag,
                 body,
+                tagName: nextTag,
             };
             module.releases.unshift(release);
             updatedModules.push({ moduleName, release });
@@ -35126,6 +35513,7 @@ async function createTaggedRelease(terraformChangedModules) {
             ].join(' '), { cause: error });
         }
         throw new Error(`Failed to create tags in repository: ${errorMessage}`, { cause: error });
+        /* c8 ignore next */
     }
     finally {
         // Cleanup: remove the temp directory
@@ -35200,23 +35588,29 @@ async function deleteLegacyReleases(terraformModuleNames, allReleases) {
  *
  * This function utilizes pagination to retrieve all tags, returning them as an array of strings.
  *
+ * @param {GetAllTagsOptions} options - Optional configuration for the API request
+ * @param {number} options.perPage - Number of items per page (default: 100)
  * @returns {Promise<string[]>} A promise that resolves to an array of tag names.
  * @throws {RequestError} Throws an error if the request to fetch tags fails.
  */
-async function getAllTags() {
+async function getAllTags(options = { per_page: 100, page: 1 }) {
     console.time('Elapsed time fetching tags');
     (0,core.startGroup)('Fetching repository tags');
     try {
         const { octokit, repo: { owner, repo }, } = context;
         const tags = [];
+        let totalRequests = 0;
         for await (const response of octokit.paginate.iterator(octokit.rest.repos.listTags, {
+            ...options,
             owner,
             repo,
         })) {
+            totalRequests++;
             for (const tag of response.data) {
                 tags.push(tag.name);
             }
         }
+        (0,core.debug)(`Total page requests: ${totalRequests}`);
         (0,core.info)(`Found ${tags.length} tag${tags.length !== 1 ? 's' : ''}.`);
         (0,core.debug)(JSON.stringify(tags, null, 2));
         return tags;
@@ -35233,6 +35627,7 @@ async function getAllTags() {
             errorMessage = String(error).trim();
         }
         throw new Error(errorMessage, { cause: error });
+        /* c8 ignore next */
     }
     finally {
         console.timeEnd('Elapsed time fetching tags');
@@ -35261,6 +35656,7 @@ async function deleteLegacyTags(terraformModuleNames, allTags) {
     });
     if (tagsToDelete.length === 0) {
         (0,core.info)('No legacy tags found to delete. Skipping.');
+        (0,core.endGroup)();
         return;
     }
     (0,core.info)(`Found ${tagsToDelete.length} legacy tag${tagsToDelete.length !== 1 ? 's' : ''} to delete.`);
@@ -35298,7 +35694,7 @@ async function deleteLegacyTags(terraformModuleNames, allTags) {
     }
 }
 
-;// CONCATENATED MODULE: ./src/semver.ts
+;// CONCATENATED MODULE: ./src/utils/semver.ts
 
 /**
  * Determines the release type based on the provided commit message and previous release type.
@@ -35367,6 +35763,54 @@ function getNextTagVersion(latestTagVersion, releaseType) {
     return `v${semver.join('.')}`;
 }
 
+;// CONCATENATED MODULE: ./src/utils/string.ts
+/**
+ * Removes any leading and trailing slashes (/) from the given string.
+ *
+ * @param {string} str - The input string from which to trim slashes.
+ * @returns {string} - The string without leading or trailing slashes.
+ *
+ * @example
+ * // Returns "example/path"
+ * trimSlashes("/example/path/");
+ *
+ * @example
+ * // Returns "another/example"
+ * trimSlashes("///another/example///");
+ */
+function trimSlashes(str) {
+    let start = 0;
+    let end = str.length;
+    // Remove leading slashes by adjusting start index
+    while (start < end && str[start] === '/') {
+        start++;
+    }
+    // Remove trailing slashes by adjusting end index
+    while (end > start && str[end - 1] === '/') {
+        end--;
+    }
+    // Return the substring without leading and trailing slashes
+    return str.slice(start, end);
+}
+/**
+ * Removes trailing dots from a string without using regex.
+ *
+ * This function iteratively checks each character from the end of the string
+ * and removes any consecutive dots at the end. It uses a direct character-by-character
+ * approach instead of regex to avoid potential backtracking issues and ensure
+ * consistent O(n) performance.
+ *
+ * @param {string} input - The string to process
+ * @returns {string} The input string with all trailing dots removed
+ */
+function removeTrailingDots(input) {
+    let endIndex = input.length;
+    while (endIndex > 0 && input[endIndex - 1] === '.') {
+        endIndex--;
+    }
+    return input.slice(0, endIndex);
+}
+
 ;// CONCATENATED MODULE: ./src/terraform-module.ts
 
 
@@ -35374,6 +35818,20 @@ function getNextTagVersion(latestTagVersion, releaseType) {
 
 
 
+
+
+/**
+ * Type guard function to determine if a given module is a `TerraformChangedModule`.
+ *
+ * This function checks if the `module` object has the property `isChanged` set to `true`.
+ * It can be used to narrow down the type of the module within TypeScript's type system.
+ *
+ * @param {TerraformModule | TerraformChangedModule} module - The module to check.
+ * @returns {module is TerraformChangedModule} - Returns `true` if the module is a `TerraformChangedModule`, otherwise `false`.
+ */
+function isChangedModule(module) {
+    return 'isChanged' in module && module.isChanged === true;
+}
 /**
  * Filters an array of Terraform modules to return only those that are marked as changed.
  *
@@ -35384,15 +35842,6 @@ function getTerraformChangedModules(modules) {
     return modules.filter((module) => {
         return module.isChanged === true;
     });
-}
-/**
- * Checks if a directory contains any Terraform (.tf) files.
- *
- * @param {string} dirPath - The path of the directory to check.
- * @returns {boolean} True if the directory contains at least one .tf file, otherwise false.
- */
-function isTerraformDirectory(dirPath) {
-    return external_node_fs_default().existsSync(dirPath) && external_node_fs_default().readdirSync(dirPath).some((file) => external_node_path_default().extname(file) === '.tf');
 }
 /**
  * Generates a valid Terraform module name from the given directory path.
@@ -35410,18 +35859,6 @@ function isTerraformDirectory(dirPath) {
  * @returns {string} A valid Terraform module name based on the provided directory path.
  */
 function getTerraformModuleNameFromRelativePath(terraformDirectory) {
-    // Use a loop to remove trailing dots without regex. Instead of using regex, this code iteratively
-    // checks each character from the end of the string. It decreases the endIndex until it finds a
-    // non-dot character. This approach runs in O(n) time, where n is the length of the string.
-    // It avoids the backtracking issues associated with regex patterns, making it more robust against
-    // potential DoS attacks.
-    const removeTrailingDots = (input) => {
-        let endIndex = input.length;
-        while (endIndex > 0 && input[endIndex - 1] === '.') {
-            endIndex--;
-        }
-        return input.slice(0, endIndex);
-    };
     const cleanedDirectory = terraformDirectory
         .trim() // Remove leading/trailing whitespace
         .replace(/[^a-zA-Z0-9/_-]+/g, '-') // Remove invalid characters, allowing a-z, A-Z, 0-9, /, _, -
@@ -35445,15 +35882,15 @@ function getTerraformModuleNameFromRelativePath(terraformDirectory) {
  *                          if no directory is found.
  */
 function getTerraformModuleDirectoryRelativePath(filePath) {
-    let directory = external_node_path_default().resolve(external_node_path_default().dirname(filePath)); // Convert to absolute path
-    const cwd = process.cwd();
-    const rootDir = external_node_path_default().resolve(cwd); // Get absolute path to current working directory
+    const rootDir = (0,external_node_path_namespaceObject.resolve)(context.workspaceDir);
+    const absoluteFilePath = (0,external_node_path_namespaceObject.isAbsolute)(filePath) ? filePath : (0,external_node_path_namespaceObject.resolve)(context.workspaceDir, filePath); // Handle relative/absolute
+    let directory = (0,external_node_path_namespaceObject.dirname)(absoluteFilePath);
     // Traverse upward until the current working directory (rootDir) is reached
-    while (directory !== rootDir && directory !== external_node_path_default().resolve(directory, '..')) {
+    while (directory !== rootDir && directory !== (0,external_node_path_namespaceObject.resolve)(directory, '..')) {
         if (isTerraformDirectory(directory)) {
-            return external_node_path_default().relative(cwd, directory);
+            return (0,external_node_path_namespaceObject.relative)(rootDir, directory);
         }
-        directory = external_node_path_default().resolve(directory, '..'); // Move up a directory
+        directory = (0,external_node_path_namespaceObject.resolve)(directory, '..'); // Move up a directory
     }
     // Return null if no Terraform module directory is found
     return null;
@@ -35508,7 +35945,6 @@ function getReleasesForModule(moduleName, allReleases) {
  * Retrieves all Terraform modules within the specified workspace directory and any changes based on commits.
  * Analyzes the directory structure to identify modules and checks commit history for changes.
  *
- * @param {string} workspaceDir - The root directory of the workspace containing Terraform modules.
  * @param {CommitDetails[]} commits - Array of commit details to analyze for changes.
  * @param {string[]} allTags - List of all tags associated with the modules.
  * @param {GitHubRelease[]} allReleases - GitHub releases for the modules.
@@ -35516,20 +35952,21 @@ function getReleasesForModule(moduleName, allReleases) {
  *   change details.
  * @throws {Error} - If a module associated with a file is missing from the terraformModulesMap.
  */
-function getAllTerraformModules(workspaceDir, commits, allTags, allReleases) {
+function getAllTerraformModules(commits, allTags, allReleases) {
     (0,core.startGroup)('Finding all Terraform modules with corresponding changes');
     console.time('Elapsed time finding terraform modules'); // Start timing
     const terraformModulesMap = {};
+    const workspaceDir = context.workspaceDir;
     // Helper function to recursively search for Terraform modules
     const searchDirectory = (dir) => {
-        const files = external_node_fs_default().readdirSync(dir);
+        const files = (0,external_node_fs_namespaceObject.readdirSync)(dir);
         for (const file of files) {
-            const filePath = external_node_path_default().join(dir, file);
-            const stat = external_node_fs_default().statSync(filePath);
+            const filePath = (0,external_node_path_namespaceObject.join)(dir, file);
+            const stat = (0,external_node_fs_namespaceObject.statSync)(filePath);
             // If it's a directory, recursively search inside it
             if (stat.isDirectory()) {
                 if (isTerraformDirectory(filePath)) {
-                    const moduleName = getTerraformModuleNameFromRelativePath(external_node_path_default().relative(workspaceDir, filePath));
+                    const moduleName = getTerraformModuleNameFromRelativePath((0,external_node_path_namespaceObject.relative)(workspaceDir, filePath));
                     terraformModulesMap[moduleName] = {
                         moduleName,
                         directory: filePath,
@@ -35564,10 +36001,12 @@ function getAllTerraformModules(workspaceDir, commits, allTags, allReleases) {
                 continue;
             }
             const module = terraformModulesMap[moduleName];
+            /* c8 ignore start */
             if (!module) {
                 // Module not found in the map, this should not happen
                 throw new Error(`Found changed file "${relativeFilePath}" associated with a terraform module "${moduleName}"; however, associated module does not exist`);
             }
+            /* c8 ignore stop */
             // Update the module with the TerraformChangedModule properties
             const releaseType = determineReleaseType(message, module?.releaseType);
             const nextTagVersion = getNextTagVersion(module.latestTagVersion, releaseType);
@@ -35643,86 +36082,104 @@ function getTerraformModulesToRemove(allTags, terraformModules) {
 
 
 /**
- * Ensures both config and context are initialized in the correct order.
- * This function handles the initialization sequence and returns both objects.
+ * Initializes and returns the configuration and context objects.
+ * Config must be initialized before context due to dependency constraints.
+ *
+ * @returns {{ config: Config; context: Context }} Initialized config and context objects.
  */
 function initialize() {
-    // Force config initialization first
     const configInstance = getConfig();
-    // Then initialize context
     const contextInstance = getContext();
     return { config: configInstance, context: contextInstance };
 }
 /**
- * The main function for the action.
- * @returns {Promise<void>} Resolves when the action is complete.
+ * Handles wiki-related operations, including checkout, generating release plan comments,
+ * and error handling for failures.
+ *
+ * @param {Config} config - The configuration object containing wiki and Terraform Docs settings.
+ * @param {TerraformChangedModule[]} terraformChangedModules - List of changed Terraform modules.
+ * @param {string[]} terraformModuleNamesToRemove - List of Terraform module names to remove.
+ * @returns {Promise<void>} Resolves when wiki-related operations are completed.
+ */
+async function handleWikiOperations(config, terraformChangedModules, terraformModuleNamesToRemove) {
+    let wikiStatus = WikiStatus.DISABLED;
+    let failure;
+    let error;
+    try {
+        if (!config.disableWiki) {
+            checkoutWiki();
+            wikiStatus = WikiStatus.SUCCESS;
+        }
+    }
+    catch (err) {
+        const errorMessage = err instanceof Error ? err.message.split('\n')[0] : String(err).split('\n')[0];
+        wikiStatus = WikiStatus.FAILURE;
+        failure = errorMessage;
+        error = err;
+    }
+    finally {
+        const commentOptions = {
+            status: wikiStatus,
+            errorMessage: failure,
+        };
+        await addReleasePlanComment(terraformChangedModules, terraformModuleNamesToRemove, commentOptions);
+    }
+    if (error) {
+        throw error;
+    }
+}
+/**
+ * Handles merge-event-specific operations, including tagging new releases, deleting legacy resources,
+ * and optionally generating Terraform Docs-based wiki documentation.
+ *
+ * @param {Config} config - The configuration object.
+ * @param {TerraformChangedModule[]} terraformChangedModules - List of changed Terraform modules.
+ * @param {string[]} terraformModuleNamesToRemove - List of Terraform module names to remove.
+ * @param {TerraformModule[]} terraformModules - List of all Terraform modules in the repository.
+ * @param {GitHubRelease[]} allReleases - List of all GitHub releases in the repository.
+ * @param {string[]} allTags - List of all tags in the repository.
+ * @returns {Promise<void>} Resolves when merge-event operations are complete.
+ */
+async function handleMergeEvent(config, terraformChangedModules, terraformModuleNamesToRemove, terraformModules, allReleases, allTags) {
+    const updatedModules = await createTaggedRelease(terraformChangedModules);
+    await addPostReleaseComment(updatedModules);
+    await deleteLegacyReleases(terraformModuleNamesToRemove, allReleases);
+    await deleteLegacyTags(terraformModuleNamesToRemove, allTags);
+    if (config.disableWiki) {
+        (0,core.info)('Wiki generation is disabled.');
+    }
+    else {
+        installTerraformDocs(config.terraformDocsVersion);
+        ensureTerraformDocsConfigDoesNotExist();
+        checkoutWiki();
+        await generateWikiFiles(terraformModules);
+        commitAndPushWikiChanges();
+    }
+}
+/**
+ * Entry point for the GitHub Action. Determines the flow based on whether the event
+ * is a pull request or a merge, and executes the appropriate operations.
+ *
+ * @returns {Promise<void>} Resolves when the action completes successfully or fails.
  */
 async function run() {
     try {
-        // Initialize the config and context which will be used throughout the action
-        // caching each instance as a singleton with proxy accesors to improve performance.
         const { config, context } = initialize();
         if (await hasReleaseComment()) {
             (0,core.info)('Release comment found. Exiting.');
             return;
         }
-        // Fetch all commits along with associated files in this PR
         const commits = await getPullRequestCommits();
-        // Fetch all tags associated with this PR
         const allTags = await getAllTags();
-        // Fetch all releases associated with this PR
         const allReleases = await getAllReleases();
-        // Get all Terraform modules in this repository including changed metadata
-        const terraformModules = getAllTerraformModules(context.workspaceDir, commits, allTags, allReleases);
-        // Create a new array of only changed Terraform modules
+        const terraformModules = getAllTerraformModules(commits, allTags, allReleases);
         const terraformChangedModules = getTerraformChangedModules(terraformModules);
-        // Get an array of terraform module names to remove based on existing tags
         const terraformModuleNamesToRemove = getTerraformModulesToRemove(allTags, terraformModules);
         if (!context.isPrMergeEvent) {
-            let wikiStatus = WikiStatus.DISABLED;
-            let failure;
-            let error;
-            try {
-                if (!config.disableWiki) {
-                    checkoutWiki();
-                    wikiStatus = WikiStatus.SUCCESS;
-                }
-            }
-            catch (err) {
-                // Capture error message if the checkout fails
-                const errorMessage = err.message.split('\n')[0] || 'Unknown error during wiki checkout';
-                wikiStatus = WikiStatus.FAILURE;
-                failure = errorMessage;
-                error = err;
-            }
-            finally {
-                await addReleasePlanComment(terraformChangedModules, terraformModuleNamesToRemove, {
-                    status: wikiStatus,
-                    errorMessage: failure,
-                });
-            }
-            // If we have an error, let's throw it so that the action fails after we've successfully commented on the PR.
-            if (error !== undefined) {
-                throw error;
-            }
+            await handleWikiOperations(config, terraformChangedModules, terraformModuleNamesToRemove);
         }
         else {
-            // Create the tagged release and post a comment to the PR
-            const updatedModules = await createTaggedRelease(terraformChangedModules);
-            await addPostReleaseComment(updatedModules);
-            // Delete legacy releases and tags (Ensure we delete releases first)
-            await deleteLegacyReleases(terraformModuleNamesToRemove, allReleases);
-            await deleteLegacyTags(terraformModuleNamesToRemove, allTags);
-            if (config.disableWiki) {
-                (0,core.info)('Wiki generation is disabled.');
-            }
-            else {
-                installTerraformDocs(config.terraformDocsVersion);
-                ensureTerraformDocsConfigDoesNotExist();
-                checkoutWiki();
-                await generateWikiFiles(terraformModules);
-                commitAndPushWikiChanges();
-            }
+            await handleMergeEvent(config, terraformChangedModules, terraformModuleNamesToRemove, terraformModules, allReleases, allTags);
         }
     }
     catch (error) {
