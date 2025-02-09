@@ -52,3 +52,34 @@ jobs:
           module-change-exclude-patterns: .gitignore,*.md,*.tftest.hcl,tests/**
           module-asset-exclude-patterns: .gitignore,*.md,*.tftest.hcl,tests/**
           use-ssh-source-format: true
+
+      - name: Test Action Outputs
+        id: test-outputs
+        run: |
+          echo "Testing action outputs..."
+          
+          # Test if outputs are set
+          if [[ -n "${{ steps.test-action.outputs.changed_module_names }}" ]]; then
+            echo "✅ Changed module names: ${{ steps.test-action.outputs.changed_module_names }}"
+          else
+            echo "❌ No changed module names found"
+          fi
+          
+          if [[ -n "${{ steps.test-action.outputs.changed_module_paths }}" ]]; then
+            echo "✅ Changed module paths: ${{ steps.test-action.outputs.changed_module_paths }}"
+          else
+            echo "❌ No changed module paths found"
+          fi
+          
+          if [[ -n "${{ steps.test-action.outputs.changed_modules_map }}" ]]; then
+            echo "✅ Changed modules map:"
+            echo "${{ steps.test-action.outputs.changed_modules_map }}"
+          else
+            echo "❌ No changed modules map found"
+          fi
+          
+          # Validate JSON format of changed_modules_map
+          if ! echo "${{ steps.test-action.outputs.changed_modules_map }}" | jq '.' >/dev/null 2>&1; then
+            echo "❌ Changed modules map is not valid JSON"
+            exit 1
+          fi
