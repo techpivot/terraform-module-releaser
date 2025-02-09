@@ -94,6 +94,14 @@ inputs:
     required: true
     default: ${{ github.token }}
 
+outputs:
+  changed_module_names:
+    description: List of module names that were changed in this release
+  changed_module_paths:
+    description: List of full paths to the modules that were changed in this release
+  changed_modules_map:
+    description: JSON map of changed modules with their names as keys and full paths as values
+
 runs:
   using: node20
   main: dist/index.js
