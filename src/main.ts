@@ -14,7 +14,7 @@ import type {
   TerraformModule,
 } from '@/types';
 import { WikiStatus, checkoutWiki, commitAndPushWikiChanges, generateWikiFiles } from '@/wiki';
-import { info, setFailed } from '@actions/core';
+import { info, setFailed, setOutput } from '@actions/core';
 
 /**
  * Initializes and returns the configuration and context objects.
@@ -140,6 +140,28 @@ export async function run(): Promise<void> {
         allTags,
       );
     }
+
+    // Set the outputs for the GitHub Action
+    const changedModuleNames = terraformChangedModules.map(module => module.moduleName);
+    const changedModulePaths = terraformChangedModules.map(module => module.directory);
+    const changedModulesMap = Object.fromEntries(
+      terraformChangedModules.map(module => [module.moduleName, {
+        path: module.directory,
+        currentTag: module.latestTag,
+        nextTag: module.nextTag,
+        releaseType: module.releaseType
+      }])
+    );
+
+    // Log the changes for debugging
+    info(`Changed module names: ${JSON.stringify(changedModuleNames)}`);
+    info(`Changed module paths: ${JSON.stringify(changedModulePaths)}`);
+    info(`Changed modules map: ${JSON.stringify(changedModulesMap, null, 2)}`);
+
+
+    setOutput('changed_module_names', changedModuleNames);
+    setOutput('changed_module_paths', changedModulePaths);
+    setOutput('changed_modules_map', changedModulesMap);
   } catch (error) {
     if (error instanceof Error) {
       setFailed(error.message);
