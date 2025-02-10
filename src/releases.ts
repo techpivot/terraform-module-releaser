@@ -121,7 +121,9 @@ export async function createTaggedRelease(
       info(`Next tag version: ${nextTag}`);
 
       // Create a temporary working directory
-      const tmpDir = mkdtempSync(join(tmpdir(), moduleName));
+      // Replace '/' with '-' to create a valid directory name
+      const safeName = moduleName.replace(/\//g, '-');
+      const tmpDir = mkdtempSync(join(tmpdir(), `${safeName}-`));
       info(`Created temp directory: ${tmpDir}`);
 
       // Copy the module's contents to the temporary directory, excluding specified patterns
