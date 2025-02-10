@@ -32005,7 +32005,7 @@ legacyRestEndpointMethods.VERSION = dist_src_version_VERSION;
 //# sourceMappingURL=index.js.map
 
 ;// CONCATENATED MODULE: ./package.json
-const package_namespaceObject = /*#__PURE__*/JSON.parse('{"rE":"1.4.0","TB":"https://github.com/techpivot/terraform-module-releaser"}');
+const package_namespaceObject = /*#__PURE__*/JSON.parse('{"rE":"1.4.1","TB":"https://github.com/techpivot/terraform-module-releaser"}');
 ;// CONCATENATED MODULE: ./src/context.ts
 
 
@@ -35454,7 +35454,9 @@ async function createTaggedRelease(terraformChangedModules) {
             (0,core.info)(`Release type: ${releaseType}`);
             (0,core.info)(`Next tag version: ${nextTag}`);
             // Create a temporary working directory
-            const tmpDir = (0,external_node_fs_namespaceObject.mkdtempSync)((0,external_node_path_namespaceObject.join)((0,external_node_os_namespaceObject.tmpdir)(), moduleName));
+            // Replace '/' with '-' to create a valid directory name
+            const safeName = moduleName.replace(/\//g, '-');
+            const tmpDir = (0,external_node_fs_namespaceObject.mkdtempSync)((0,external_node_path_namespaceObject.join)((0,external_node_os_namespaceObject.tmpdir)(), `${safeName}-`));
             (0,core.info)(`Created temp directory: ${tmpDir}`);
             // Copy the module's contents to the temporary directory, excluding specified patterns
             copyModuleContents(directory, tmpDir, config.moduleAssetExcludePatterns);
