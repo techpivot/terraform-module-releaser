@@ -55,29 +55,35 @@ export function checkoutWiki(): void {
   info('Adding repository directory to the temporary git global config as a safe directory');
   execFileSync(gitPath, ['config', '--global', '--add', 'safe.directory', wikiDirectory], { stdio: 'inherit' });
 
-  info('Initializing the repository');
-
+  // Create directory if it doesn't exist
   if (!existsSync(wikiDirectory)) {
     mkdirSync(wikiDirectory);
   }
-  execFileSync(gitPath, ['init', '--initial-branch=master', wikiDirectory], execWikiOpts);
 
-  info('Setting up origin');
-  execFileSync(gitPath, ['remote', 'add', 'origin', wikiHtmlUrl], execWikiOpts);
+  // Initialize repository if needed
+  const isExistingRepo = existsSync(join(wikiDirectory, '.git'));
+  if (!isExistingRepo) {
+    info('Initializing new repository');
+    execFileSync(gitPath, ['init', '--initial-branch=master', wikiDirectory], execWikiOpts);
+  }
+
+  // Set or update the remote URL
+  info('Configuring remote URL');
+  try {
+    execFileSync(gitPath, ['remote', 'set-url', 'origin', wikiHtmlUrl], execWikiOpts);
+  } catch {
+    execFileSync(gitPath, ['remote', 'add', 'origin', wikiHtmlUrl], execWikiOpts);
+  }
 
   info('Configuring authentication');
-  // Configure Git to use the PAT for the wiki repository (emulating the behavior of GitHub Actions
-  // from the checkout@v4 action.
   const basicCredential = Buffer.from(`x-access-token:${config.githubToken}`, 'utf8').toString('base64');
   try {
     execFileSync(gitPath, ['config', '--local', '--unset-all', 'http.https://github.com/.extraheader'], execWikiOpts);
   } catch (error) {
     // Type guard to ensure we're handling the correct error type
-    if (error instanceof Error) {
-      // Only ignore specific status code if needed
-      if ((error as unknown as ExecSyncError).status !== 5) {
-        throw error;
-      }
+    // Only ignore specific status code if needed
+    if (error instanceof Error && (error as unknown as ExecSyncError).status !== 5) {
+      throw error;
     }
   }
 
