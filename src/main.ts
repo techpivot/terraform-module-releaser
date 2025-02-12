@@ -14,7 +14,7 @@ import type {
   TerraformModule,
 } from '@/types';
 import { WikiStatus, checkoutWiki, commitAndPushWikiChanges, generateWikiFiles } from '@/wiki';
-import { info, setFailed, setOutput } from '@actions/core';
+import { endGroup, info, setFailed, setOutput, startGroup } from '@actions/core';
 
 /**
  * Initializes and returns the configuration and context objects.
@@ -37,7 +37,7 @@ function initialize(): { config: Config; context: Context } {
  * @param {string[]} terraformModuleNamesToRemove - List of Terraform module names to remove.
  * @returns {Promise<void>} Resolves when wiki-related operations are completed.
  */
-async function handleWikiOperations(
+async function handleReleasePlanComment(
   config: Config,
   terraformChangedModules: TerraformChangedModule[],
   terraformModuleNamesToRemove: string[],
@@ -129,7 +129,7 @@ export async function run(): Promise<void> {
     const terraformModuleNamesToRemove = getTerraformModulesToRemove(allTags, terraformModules);
 
     if (!context.isPrMergeEvent) {
-      await handleWikiOperations(config, terraformChangedModules, terraformModuleNamesToRemove);
+      await handleReleasePlanComment(config, terraformChangedModules, terraformModuleNamesToRemove);
     } else {
       await handleMergeEvent(
         config,
@@ -142,26 +142,50 @@ export async function run(): Promise<void> {
     }
 
     // Set the outputs for the GitHub Action
-    const changedModuleNames = terraformChangedModules.map(module => module.moduleName);
-    const changedModulePaths = terraformChangedModules.map(module => module.directory);
+    const changedModuleNames = terraformChangedModules.map((module) => module.moduleName);
+    const changedModulePaths = terraformChangedModules.map((module) => module.directory);
     const changedModulesMap = Object.fromEntries(
-      terraformChangedModules.map(module => [module.moduleName, {
-        path: module.directory,
-        currentTag: module.latestTag,
-        nextTag: module.nextTag,
-        releaseType: module.releaseType
-      }])
+      terraformChangedModules.map((module) => [
+        module.moduleName,
+        {
+          path: module.directory,
+          currentTag: module.latestTag,
+          nextTag: module.nextTag,
+          releaseType: module.releaseType,
+        },
+      ]),
+    );
+
+    // Add new outputs for all modules
+    const allModuleNames = terraformModules.map((module) => module.moduleName);
+    const allModulePaths = terraformModules.map((module) => module.directory);
+    const allModulesMap = Object.fromEntries(
+      terraformModules.map((module) => [
+        module.moduleName,
+        {
+          path: module.directory,
+          latestTag: module.latestTag,
+          latestTagVersion: module.latestTagVersion,
+        },
+      ]),
     );
 
     // Log the changes for debugging
+    startGroup('Outputs');
     info(`Changed module names: ${JSON.stringify(changedModuleNames)}`);
     info(`Changed module paths: ${JSON.stringify(changedModulePaths)}`);
     info(`Changed modules map: ${JSON.stringify(changedModulesMap, null, 2)}`);
+    info(`All module names: ${JSON.stringify(allModuleNames)}`);
+    info(`All module paths: ${JSON.stringify(allModulePaths)}`);
+    info(`All modules map: ${JSON.stringify(allModulesMap, null, 2)}`);
+    endGroup();
 
-
-    setOutput('changed_module_names', changedModuleNames);
-    setOutput('changed_module_paths', changedModulePaths);
-    setOutput('changed_modules_map', changedModulesMap);
+    setOutput('changed-module-names', changedModuleNames);
+    setOutput('changed-module-paths', changedModulePaths);
+    setOutput('changed-modules-map', changedModulesMap);
+    setOutput('all-module-names', allModuleNames);
+    setOutput('all-module-paths', allModulePaths);
+    setOutput('all-modules-map', allModulesMap);
   } catch (error) {
     if (error instanceof Error) {
       setFailed(error.message);

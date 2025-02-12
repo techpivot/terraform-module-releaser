@@ -59,27 +59,70 @@ jobs:
           echo "Testing action outputs..."
           
           # Test if outputs are set
-          if [[ -n "${{ steps.test-action.outputs.changed_module_names }}" ]]; then
-            echo "✅ Changed module names: ${{ steps.test-action.outputs.changed_module_names }}"
+          if [[ -n "${{ steps.test-action.outputs.changed-module-names }}" ]]; then
+            echo "✅ Output 'changed-modules-names': ${{ steps.test-action.outputs.changed-module-names }}"
           else
             echo "❌ No changed module names found"
           fi
           
-          if [[ -n "${{ steps.test-action.outputs.changed_module_paths }}" ]]; then
-            echo "✅ Changed module paths: ${{ steps.test-action.outputs.changed_module_paths }}"
+          if [[ -n "${{ steps.test-action.outputs.changed-module-paths }}" ]]; then
+            echo "✅ Output 'changed-module-paths': ${{ steps.test-action.outputs.changed-module-paths }}"
           else
             echo "❌ No changed module paths found"
           fi
           
-          if [[ -n "${{ steps.test-action.outputs.changed_modules_map }}" ]]; then
-            echo "✅ Changed modules map:"
-            echo "${{ steps.test-action.outputs.changed_modules_map }}"
+          if [[ -n "${{ steps.test-action.outputs.changed-modules-map }}" ]]; then
+            echo "✅ Output 'changed-modules-map':"
+            echo '${{ steps.test-action.outputs.changed-modules-map }}' | jq -r '
+              "Found \(length) changed module(s):",
+              (to_entries[] | 
+                "• \(.key):",
+                "  - Path: \(.value.path)",
+                "  - Current Tag: \(.value.currentTag)",
+                "  - Next Tag: \(.value.nextTag)",
+                "  - Release Type: \(.value.releaseType)"
+              )
+            '
           else
             echo "❌ No changed modules map found"
           fi
-          
-          # Validate JSON format of changed_modules_map
-          if ! echo "${{ steps.test-action.outputs.changed_modules_map }}" | jq '.' >/dev/null 2>&1; then
-            echo "❌ Changed modules map is not valid JSON"
+
+          # Silently validate JSON structure is an object
+          echo '${{ steps.test-action.outputs.changed-modules-map }}' | jq -e 'type == "object"' > /dev/null || {
+            echo "❌ Expected object type in changed-modules-map"
             exit 1
+          }
+
+          # Test new outputs for all modules
+          if [[ -n "${{ steps.test-action.outputs.all-module-names }}" ]]; then
+            echo "✅ Output 'all-module-names': ${{ steps.test-action.outputs.all-module-names }}"
+          else
+            echo "❌ No all module names found"
           fi
+          
+          if [[ -n "${{ steps.test-action.outputs.all-module-paths }}" ]]; then
+            echo "✅ Output 'all-module-paths': ${{ steps.test-action.outputs.all-module-paths }}"
+          else
+            echo "❌ No all module paths found"
+          fi
+          
+          if [[ -n "${{ steps.test-action.outputs.all-modules-map }}" ]]; then
+            echo "✅ Output 'all-modules-map':"
+            echo '${{ steps.test-action.outputs.all-modules-map }}' | jq -r '
+              "Found \(length) total module(s):",
+              (to_entries[] | 
+                "• \(.key):",
+                "  - Path: \(.value.path)",
+                "  - Latest Tag: \(.value.latestTag)",
+                "  - Latest Tag Version: \(.value.latestTagVersion)"
+              )
+            '
+          else
+            echo "❌ No all modules map found"
+          fi
+
+          # Silently validate JSON structure is an objects
+          echo '${{ steps.test-action.outputs.all-modules-map }}' | jq -e 'type == "object"' > /dev/null || {
+            echo "❌ Expected object type in all-modules-map"
+            exit 1
+          }

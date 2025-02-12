@@ -221,6 +221,46 @@ jobs:
           use-ssh-source-format: false
 ```
 
+## Outputs
+
+The following outputs are available from this action:
+
+| Output                 | Type     | Description                                                                                                |
+| ---------------------- | -------- | ---------------------------------------------------------------------------------------------------------- |
+| `changed-module-names` | `string` | JSON array of module names that were changed in the current pull request                                   |
+| `changed-module-paths` | `string` | JSON array of file system paths to the modules that were changed                                           |
+| `changed-modules-map`  | `string` | JSON object mapping module names to their change details including current tag, next tag, and release type |
+| `all-module-names`     | `string` | JSON array of all module names found in the repository                                                     |
+| `all-module-paths`     | `string` | JSON array of file system paths to all modules in the repository                                           |
+| `all-modules-map`      | `string` | JSON object mapping all module names to their details including path, latest tag, and latest tag version   |
+
+### Example Output Structure
+
+```json
+{
+  "changed-modules-map": {
+    "aws/vpc": {
+      "path": "modules/aws/vpc",
+      "currentTag": "aws/vpc/v1.0.0",
+      "nextTag": "aws/vpc/v1.1.0",
+      "releaseType": "minor"
+    }
+  },
+  "all-modules-map": {
+    "aws/vpc": {
+      "path": "modules/aws/vpc",
+      "latestTag": "aws/vpc/v1.0.0",
+      "latestTagVersion": "v1.0.0"
+    },
+    "aws/s3": {
+      "path": "modules/aws/s3",
+      "latestTag": "aws/s3/v2.1.0",
+      "latestTagVersion": "v2.1.0"
+    }
+  }
+}
+```
+
 ## Inspiration
 
 This action was inspired by the blog post
