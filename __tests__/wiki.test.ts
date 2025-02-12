@@ -80,6 +80,7 @@ describe('wiki', async () => {
       expect(gitCalls).toEqual([
         `config --global --add safe.directory ${wikiDir}`,
         `init --initial-branch=master ${wikiDir}`,
+        'remote',
         'remote add origin https://github.com/techpivot/terraform-module-releaser.wiki',
         'config --local --unset-all http.https://github.com/.extraheader',
         expect.stringContaining('config --local http.https://github.com/.extraheader Authorization: Basic'),
@@ -152,6 +153,26 @@ describe('wiki', async () => {
       rmSync(wikiDir, { recursive: true });
       checkoutWiki();
       expect(existsSync(wikiDir)).toBe(true);
+    });
+
+    it('should update remote URL with set-url if origin already exists', () => {
+      const mockExecFileSync = vi.fn(
+        (command: string, args?: readonly string[] | undefined, options?: ExecFileSyncOptions) => {
+          // If the command is "git remote" return "origin" to simulate an existing remote
+          if (args?.length === 1 && args[0] === 'remote') {
+            return Buffer.from('origin');
+          }
+          return Buffer.from('');
+        },
+      );
+      vi.mocked(execFileSync).mockImplementation(mockExecFileSync);
+
+      checkoutWiki();
+
+      const gitCalls = mockExecFileSync.mock.calls.map((call) => call[1]?.join(' ') || '');
+      expect(gitCalls).toContain('remote set-url origin https://github.com/techpivot/terraform-module-releaser.wiki');
+
+      // ... Assertions for group start/end can be added if needed ...
     });
   });
 

@@ -94,6 +94,20 @@ inputs:
     required: true
     default: ${{ github.token }}
 
+outputs:
+  changed-module-names:
+    description: JSON array of module names that were changed in the current pull request
+  changed-module-paths:
+    description: JSON array of file system paths to the modules that were changed
+  changed-modules-map:
+    description: JSON object mapping module names to their change details including current tag, next tag, and release type
+  all-module-names:
+    description: JSON array of all module names found in the repository
+  all-module-paths:
+    description: JSON array of file system paths to all modules in the repository
+  all-modules-map:
+    description: JSON object mapping all module names to their details including path, latest tag, and latest tag version
+
 runs:
   using: node20
   main: dist/index.js
