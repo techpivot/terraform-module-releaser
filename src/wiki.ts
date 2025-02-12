@@ -69,9 +69,11 @@ export function checkoutWiki(): void {
 
   // Set or update the remote URL
   info('Configuring remote URL');
-  try {
+  const remoteOutput = execFileSync(gitPath, ['remote'], { cwd: wikiDirectory, encoding: 'utf8' }) || '';
+  const hasRemote = remoteOutput.includes('origin');
+  if (hasRemote) {
     execFileSync(gitPath, ['remote', 'set-url', 'origin', wikiHtmlUrl], execWikiOpts);
-  } catch {
+  } else {
     execFileSync(gitPath, ['remote', 'add', 'origin', wikiHtmlUrl], execWikiOpts);
   }
 

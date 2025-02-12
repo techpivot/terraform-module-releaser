@@ -57,20 +57,20 @@ jobs:
         id: test-outputs
         run: |
           echo "Testing action outputs..."
-          
+
           # Test if outputs are set
           if [[ -n "${{ steps.test-action.outputs.changed-module-names }}" ]]; then
             echo "✅ Output 'changed-modules-names': ${{ steps.test-action.outputs.changed-module-names }}"
           else
             echo "❌ No changed module names found"
           fi
-          
+
           if [[ -n "${{ steps.test-action.outputs.changed-module-paths }}" ]]; then
             echo "✅ Output 'changed-module-paths': ${{ steps.test-action.outputs.changed-module-paths }}"
           else
             echo "❌ No changed module paths found"
           fi
-          
+
           if [[ -n "${{ steps.test-action.outputs.changed-modules-map }}" ]]; then
             echo "✅ Output 'changed-modules-map':"
             echo '${{ steps.test-action.outputs.changed-modules-map }}' | jq -r '
@@ -99,13 +99,13 @@ jobs:
           else
             echo "❌ No all module names found"
           fi
-          
+
           if [[ -n "${{ steps.test-action.outputs.all-module-paths }}" ]]; then
             echo "✅ Output 'all-module-paths': ${{ steps.test-action.outputs.all-module-paths }}"
           else
             echo "❌ No all module paths found"
           fi
-          
+
           if [[ -n "${{ steps.test-action.outputs.all-modules-map }}" ]]; then
             echo "✅ Output 'all-modules-map':"
             echo '${{ steps.test-action.outputs.all-modules-map }}' | jq -r '
