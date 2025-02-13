@@ -128,7 +128,7 @@ export async function run(): Promise<void> {
     const terraformChangedModules = getTerraformChangedModules(terraformModules);
     const terraformModuleNamesToRemove = getTerraformModulesToRemove(allTags, terraformModules);
 
-    /*
+    
     if (!context.isPrMergeEvent) {
       await handleReleasePlanComment(config, terraformChangedModules, terraformModuleNamesToRemove);
     } else {
@@ -186,7 +186,7 @@ export async function run(): Promise<void> {
     setOutput('changed-modules-map', changedModulesMap);
     setOutput('all-module-names', allModuleNames);
     setOutput('all-module-paths', allModulePaths);
-    setOutput('all-modules-map', allModulesMap); */
+    setOutput('all-modules-map', allModulesMap); 
   } catch (error) {
     if (error instanceof Error) {
       setFailed(error.message);
