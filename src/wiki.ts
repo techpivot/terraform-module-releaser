@@ -515,8 +515,14 @@ export function commitAndPushWikiChanges(): void {
   startGroup('Committing and pushing changes to wiki');
 
   try {
-    const { prBody, prNumber, prTitle } = context;
-    const commitMessage = `PR #${prNumber} - ${prTitle}\n\n${prBody}`.trim();
+    const { prNumber, prTitle } = context;
+
+    // Note: We originally used the PR title and PR body to create the commit message; however, due to the way
+    // GitHub formats the commits/revision history for the Wiki it's designed to be smaller and thus we use
+    // the PR title for now.
+    // Ref: https://github.com/techpivot/terraform-modules-demo/wiki/aws%E2%88%95s3%E2%80%92bucket%E2%80%92object/_history
+    // Ref: https://github.com/techpivot/terraform-module-releaser/issues/95
+    const commitMessage = `PR #${prNumber} - ${prTitle}`.trim();
     const wikiDirectory = resolve(context.workspaceDir, WIKI_SUBDIRECTORY_NAME);
     const execWikiOpts: ExecSyncOptions = { cwd: wikiDirectory, stdio: 'inherit' };
     const gitPath = which.sync('git');

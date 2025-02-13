@@ -275,7 +275,7 @@ describe('wiki', async () => {
         'config --local user.name GitHub Actions',
         'config --local user.email 41898282+github-actions[bot]@users.noreply.github.com',
         'add .',
-        'commit -m PR #123 - Test PR title\n\nTest PR body',
+        'commit -m PR #123 - Test PR title',
         'push origin',
       ]);
 
@@ -334,7 +334,7 @@ describe('wiki', async () => {
 
       // Verify commit message format
       const commitCall = vi.mocked(execFileSync).mock.calls.find((call) => call?.[1]?.includes('commit'));
-      expect(commitCall?.[1]).toEqual(['commit', '-m', 'PR #456 - Complex PR title\n\nLine 1\nLine 2\nLine 3']);
+      expect(commitCall?.[1]).toEqual(['commit', '-m', 'PR #456 - Complex PR title']);
     });
   });
 
