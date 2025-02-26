@@ -173,6 +173,8 @@ export function getAllTerraformModules(
   const terraformModulesMap: Record<string, TerraformModule | TerraformChangedModule> = {};
   const workspaceDir = context.workspaceDir;
 
+  // Terraform only processes .tf and .tf.json files in the current working directory where you run the terraform commands. It does not automatically scan or include files from subdirectories.
+
   // Helper function to recursively search for Terraform modules
   const searchDirectory = (dir: string) => {
     const files = readdirSync(dir);
@@ -191,15 +193,24 @@ export function getAllTerraformModules(
             ...getTagsForModule(moduleName, allTags),
             releases: getReleasesForModule(moduleName, allReleases),
           };
-        } else {
-          searchDirectory(filePath); // Recurse into subdirectories
         }
+
+        // We'll always recurse into subdirectories to find terraform modules even after we've found a match.
+        // This is because we want to find all modules in the workspace and although not conventional, there are
+        // cases where a module could be completely nested within another module and be 100% separate.
+        searchDirectory(filePath); // Recurse into subdirectories
       }
     }
   };
 
   // Start the search from the workspace root directory
+  info(`Searching for Terraform modules in ${workspaceDir}`);
   searchDirectory(workspaceDir);
+  info(
+    `Found ${Object.keys(terraformModulesMap).length} Terraform module${Object.keys(terraformModulesMap).length !== 1 ? 's' : ''}`,
+  );
+  info('Terraform Modules:');
+  info(JSON.stringify(terraformModulesMap, null, 2));
 
   // Now process commits to find changed modules
   for (const { message, sha, files } of commits) {
@@ -218,9 +229,7 @@ export function getAllTerraformModules(
 
       // Skip excluded files based on provided pattern
       if (shouldExcludeFile(moduleRelativePath, relativeFilePath, config.moduleChangeExcludePatterns)) {
-        // Note: This could happen if we detect a change in a subdirectory of a terraform module
-        // but the change is in a file that we want to exclude.
-        info(`Excluding module "${moduleName}" match from "${relativeFilePath}" due to exclude pattern match.`);
+        info(`  (skipping) ➜ Matches module-change-exclude-pattern for \`${moduleName}\``);
         continue;
       }
 
