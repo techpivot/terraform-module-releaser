@@ -11,11 +11,27 @@ import type { TerraformChangedModule, TerraformModule } from '@/types';
  * @returns {string} A formatted changelog entry as a string.
  */
 function createModuleChangelogEntry(heading: string, commits: string[]): string {
+  const { prNumber, prTitle, repoUrl } = context;
   const currentDate = new Date().toISOString().split('T')[0]; // Format: YYYY-MM-DD
   const changelogContent: string[] = [`## \`${heading}\` (${currentDate})\n`];
 
-  for (const commit of commits) {
-    changelogContent.push(`- ${commit}`);
+  // Whether to hyperlink the PR number in the changelog entry. GitHub automatically
+  // links the PR in the pull request comments but not automatically in the wiki markdown. In the releases section
+  // it will automatically link just the #9 portion but not the PR part. If we link the whole section it
+  // ends up being much cleaner.
+  changelogContent.push(`- :twisted_rightwards_arrows:**[PR #${prNumber}](${repoUrl}/pull/${prNumber})** - ${prTitle}`);
+
+  // Perform some normalization
+  const normalizedCommitMessages = commits
+    // If the PR title equals the message exactly, we'll skip it
+    .filter((msg) => msg.trim() !== prTitle)
+
+    // Trim the commit message and for markdown, newlines that are part of a list format
+    // better if they use a <br> tag instead of a newline character.
+    .map((commitMessage) => commitMessage.trim().replace(/(\n)/g, '<br>'));
+
+  for (const normalizedCommit of normalizedCommitMessages) {
+    changelogContent.push(`- ${normalizedCommit}`);
   }
 
   return changelogContent.join('\n');
@@ -23,6 +39,10 @@ function createModuleChangelogEntry(heading: string, commits: string[]): string 
 
 /**
  * Retrieves the global pull request changelog.
+ *
+ * Aggregates changelog entries from all changed Terraform modules into a single view.
+ * This aggregated changelog is used explicitly as a comment in the pull request message,
+ * providing a concise summary of all module changes.
  *
  * @param {TerraformChangedModule[]} terraformChangedModules - An array of changed Terraform modules.
  * @returns {string} The content of the global pull request changelog.
@@ -32,18 +52,7 @@ export function getPullRequestChangelog(terraformChangedModules: TerraformChange
   const { prNumber, prTitle } = context;
 
   for (const { nextTag, commitMessages } of terraformChangedModules) {
-    const cleanedCommitMessages = commitMessages.map((commitMessage) => {
-      // Trim the commit message and for markdown, newlines that are part of a list format
-      // better if they use a <br> tag instead of a newline character.
-      return commitMessage.trim().replace(/(\n)/g, '<br>');
-    });
-
-    const commitMessagesWithPR = [
-      `PR #${prNumber} - ${prTitle}`,
-      ...cleanedCommitMessages.filter((msg) => msg.trim() !== prTitle),
-    ];
-
-    pullRequestChangelog.push(createModuleChangelogEntry(nextTag, commitMessagesWithPR));
+    pullRequestChangelog.push(createModuleChangelogEntry(nextTag, commitMessages));
   }
 
   return pullRequestChangelog.join('\n\n');
@@ -59,22 +68,7 @@ export function getModuleChangelog(terraformChangedModule: TerraformChangedModul
   const { prNumber, prTitle, repoUrl } = context;
   const { nextTagVersion, commitMessages } = terraformChangedModule;
 
-  const cleanedCommitMessages = commitMessages.map((commitMessage) => {
-    // Trim the commit message and for markdown, newlines that are part of a list format
-    // better if they use a <br> tag instead of a newline character.
-    return commitMessage.trim().replace(/(\n)/g, '<br>');
-  });
-
-  // Determine whether to hyperlink the PR #XX references in the Changelog since GitHub automatically does this
-  // in the Pull Request comment fields but not automatically in the wiki. In the releases, it will automatically
-  // find it with a link; however, recommend to hyperlink here.
-
-  const commitMessagesWithPR = [
-    `[PR #${prNumber}](${repoUrl}/pull/${prNumber}) - ${prTitle}`,
-    ...cleanedCommitMessages.filter((msg) => msg.trim() !== prTitle),
-  ];
-
-  return createModuleChangelogEntry(nextTagVersion, commitMessagesWithPR);
+  return createModuleChangelogEntry(nextTagVersion, commitMessages);
 }
 
 /**

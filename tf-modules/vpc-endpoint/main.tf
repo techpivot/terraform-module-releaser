@@ -1,3 +1,5 @@
+# Noop
+
 locals {
   endpoints = { for k, v in var.endpoints : k => v }
 

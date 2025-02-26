@@ -55,13 +55,13 @@ describe('changelog', () => {
       const expectedChangelog = [
         '## `module1/v1.0.0` (2024-11-05)',
         '',
-        '- PR #123 - Test PR Title',
+        '- :twisted_rightwards_arrows:**[PR #123](https://github.com/techpivot/terraform-module-releaser/pull/123)** - Test PR Title',
         '- feat: Add new feature',
         '- fix: Fix bug<br>With multiple lines',
         '',
         '## `module2/v2.0.0` (2024-11-05)',
         '',
-        '- PR #123 - Test PR Title',
+        '- :twisted_rightwards_arrows:**[PR #123](https://github.com/techpivot/terraform-module-releaser/pull/123)** - Test PR Title',
         '- Another commit',
       ].join('\n');
 
@@ -85,7 +85,11 @@ describe('changelog', () => {
         },
       ];
 
-      const expectedChangelog = ['## `module2/v2.0.0` (2024-11-05)', '', '- PR #123 - Test PR Title'].join('\n');
+      const expectedChangelog = [
+        '## `module2/v2.0.0` (2024-11-05)',
+        '',
+        '- :twisted_rightwards_arrows:**[PR #123](https://github.com/techpivot/terraform-module-releaser/pull/123)** - Test PR Title',
+      ].join('\n');
 
       expect(getPullRequestChangelog(terraformChangedModules)).toBe(expectedChangelog);
     });
@@ -114,7 +118,7 @@ describe('changelog', () => {
       const expectedChangelog = [
         '## `module1/v1.0.0` (2024-11-05)',
         '',
-        '- PR #123 - Test PR Title',
+        '- :twisted_rightwards_arrows:**[PR #123](https://github.com/techpivot/terraform-module-releaser/pull/123)** - Test PR Title',
         '- Another commit',
       ].join('\n');
 
@@ -145,7 +149,7 @@ describe('changelog', () => {
       const expectedChangelog = [
         '## `1.0.0` (2024-11-05)',
         '',
-        '- [PR #123](https://github.com/techpivot/terraform-module-releaser/pull/123) - Test PR Title',
+        '- :twisted_rightwards_arrows:**[PR #123](https://github.com/techpivot/terraform-module-releaser/pull/123)** - Test PR Title',
         '- feat: Add new feature',
         '- fix: Fix bug<br>With multiple lines',
       ].join('\n');
@@ -161,9 +165,24 @@ describe('changelog', () => {
       const expectedChangelog = [
         '## `1.0.0` (2024-11-05)',
         '',
-        '- [PR #123](https://github.com/techpivot/terraform-module-releaser/pull/123) - Test PR Title',
+        '- :twisted_rightwards_arrows:**[PR #123](https://github.com/techpivot/terraform-module-releaser/pull/123)** - Test PR Title',
         '- feat: Multiple<br>line<br>commit',
         '- fix: Another<br>Multiline',
+      ].join('\n');
+
+      expect(getModuleChangelog(terraformChangedModule)).toBe(expectedChangelog);
+    });
+
+    it('should handle trimming commit messages', () => {
+      const terraformChangedModule = Object.assign(baseTerraformChangedModule, {
+        commitMessages: ['\nfeat: message with new lines\n'],
+      });
+
+      const expectedChangelog = [
+        '## `1.0.0` (2024-11-05)',
+        '',
+        '- :twisted_rightwards_arrows:**[PR #123](https://github.com/techpivot/terraform-module-releaser/pull/123)** - Test PR Title',
+        '- feat: message with new lines',
       ].join('\n');
 
       expect(getModuleChangelog(terraformChangedModule)).toBe(expectedChangelog);

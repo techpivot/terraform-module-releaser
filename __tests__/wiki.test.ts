@@ -155,24 +155,25 @@ describe('wiki', async () => {
       expect(existsSync(wikiDir)).toBe(true);
     });
 
-    it('should update remote URL with set-url if origin already exists', () => {
-      const mockExecFileSync = vi.fn(
-        (command: string, args?: readonly string[] | undefined, options?: ExecFileSyncOptions) => {
-          // If the command is "git remote" return "origin" to simulate an existing remote
-          if (args?.length === 1 && args[0] === 'remote') {
-            return Buffer.from('origin');
-          }
-          return Buffer.from('');
-        },
-      );
-      vi.mocked(execFileSync).mockImplementation(mockExecFileSync);
-
+    it('should set origin url if origin exists', () => {
       checkoutWiki();
+      expect(existsSync(wikiDir)).toBe(true);
 
-      const gitCalls = mockExecFileSync.mock.calls.map((call) => call[1]?.join(' ') || '');
+      // Reset mocks and configure remote command to return "origin"
+      vi.clearAllMocks();
+      vi.mocked(execFileSync).mockImplementation((cmd, args = []) => {
+        if (args[0] === 'remote') {
+          return Buffer.from('origin');
+        }
+        return Buffer.from('');
+      });
+
+      // Second call should update existing repo without error
+      expect(() => checkoutWiki()).not.toThrow();
+      // Verify the remote set-url command was called correctly
+      const gitCalls = vi.mocked(execFileSync).mock.calls.map((call) => call?.[1]?.join(' ') || '');
+
       expect(gitCalls).toContain('remote set-url origin https://github.com/techpivot/terraform-module-releaser.wiki');
-
-      // ... Assertions for group start/end can be added if needed ...
     });
   });
 
@@ -275,7 +276,7 @@ describe('wiki', async () => {
         'config --local user.name GitHub Actions',
         'config --local user.email 41898282+github-actions[bot]@users.noreply.github.com',
         'add .',
-        'commit -m PR #123 - Test PR title',
+        'commit -m PR #123 - Test PR title', // Note that we don't include the PR body
         'push origin',
       ]);
 
@@ -319,12 +320,12 @@ describe('wiki', async () => {
       expect(endGroup).toHaveBeenCalled();
     });
 
-    it('should use complete PR information in commit message', () => {
+    it('should not use complete PR information in commit message', () => {
       // Set up PR context with multiline body
       context.set({
         prBody: 'Line 1\nLine 2\nLine 3',
         prNumber: 456,
-        prTitle: 'Complex PR title',
+        prTitle: 'Complex PR title\n\n',
       });
 
       // Mock git status to indicate changes exist
