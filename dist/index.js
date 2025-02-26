@@ -28609,9 +28609,9 @@ function addQueryParameters(url, parameters) {
 }
 
 // pkg/dist-src/util/extract-url-variable-names.js
-var urlVariableRegex = /\{[^}]+\}/g;
+var urlVariableRegex = /\{[^{}}]+\}/g;
 function removeNonChars(variableName) {
-  return variableName.replace(/^\W+|\W+$/g, "").split(/,/);
+  return variableName.replace(/(?:^\W+)|(?:(?<!\W)\W+$)/g, "").split(/,/);
 }
 function extractUrlVariableNames(url) {
   const matches = url.match(urlVariableRegex);
@@ -28797,7 +28797,7 @@ function parse(options) {
     }
     if (url.endsWith("/graphql")) {
       if (options.mediaType.previews?.length) {
-        const previewsFromAcceptHeader = headers.accept.match(/[\w-]+(?=-preview)/g) || [];
+        const previewsFromAcceptHeader = headers.accept.match(/(?<![\w-])[\w-]+(?=-preview)/g) || [];
         headers.accept = previewsFromAcceptHeader.concat(options.mediaType.previews).map((preview) => {
           const format = options.mediaType.format ? `.${options.mediaType.format}` : "+json";
           return `application/vnd.github.${preview}-preview${format}`;
@@ -28881,7 +28881,7 @@ class RequestError extends Error {
     if (options.request.headers.authorization) {
       requestCopy.headers = Object.assign({}, options.request.headers, {
         authorization: options.request.headers.authorization.replace(
-          / .*$/,
+          /(?<! ) .*$/,
           " [REDACTED]"
         )
       });
@@ -28987,7 +28987,7 @@ async function fetchWrapper(requestOptions) {
     data: ""
   };
   if ("deprecation" in responseHeaders) {
-    const matches = responseHeaders.link && responseHeaders.link.match(/<([^>]+)>; rel="deprecation"/);
+    const matches = responseHeaders.link && responseHeaders.link.match(/<([^<>]+)>; rel="deprecation"/);
     const deprecationLink = matches && matches.pop();
     log.warn(
       `[@octokit/request] "${requestOptions.method} ${requestOptions.url}" is deprecated. It is scheduled to be removed on ${responseHeaders.sunset}${deprecationLink ? `. See ${deprecationLink}` : ""}`
@@ -29028,7 +29028,7 @@ async function getResponseData(response) {
     return response.text().catch(() => "");
   }
   const mimetype = (0,fast_content_type_parse/* safeParse */.xL)(contentType);
-  if (mimetype.type === "application/json") {
+  if (isJSONResponse(mimetype)) {
     let text = "";
     try {
       text = await response.text();
@@ -29041,6 +29041,9 @@ async function getResponseData(response) {
   } else {
     return response.arrayBuffer().catch(() => new ArrayBuffer(0));
   }
+}
+function isJSONResponse(mimetype) {
+  return mimetype.type === "application/json" || mimetype.type === "application/scim+json";
 }
 function toErrorMessage(data) {
   if (typeof data === "string") {
@@ -29129,7 +29132,8 @@ var NON_VARIABLE_OPTIONS = [
   "headers",
   "request",
   "query",
-  "mediaType"
+  "mediaType",
+  "operationName"
 ];
 var FORBIDDEN_VARIABLE_OPTIONS = ["query", "method", "url"];
 var GHES_V3_SUFFIX_REGEX = /\/api\/v3\/?$/;
@@ -29212,14 +29216,17 @@ function withCustomRequest(customRequest) {
 
 
 ;// CONCATENATED MODULE: ./node_modules/@octokit/auth-token/dist-bundle/index.js
+// pkg/dist-src/is-jwt.js
+var b64url = "(?:[a-zA-Z0-9_-]+)";
+var sep = "\\.";
+var jwtRE = new RegExp(`^${b64url}${sep}${b64url}${sep}${b64url}$`);
+var isJWT = jwtRE.test.bind(jwtRE);
+
 // pkg/dist-src/auth.js
-var REGEX_IS_INSTALLATION_LEGACY = /^v1\./;
-var REGEX_IS_INSTALLATION = /^ghs_/;
-var REGEX_IS_USER_TO_SERVER = /^ghu_/;
 async function auth(token) {
-  const isApp = token.split(/\./).length === 3;
-  const isInstallation = REGEX_IS_INSTALLATION_LEGACY.test(token) || REGEX_IS_INSTALLATION.test(token);
-  const isUserToServer = REGEX_IS_USER_TO_SERVER.test(token);
+  const isApp = isJWT(token);
+  const isInstallation = token.startsWith("v1.") || token.startsWith("ghs_");
+  const isUserToServer = token.startsWith("ghu_");
   const tokenType = isApp ? "app" : isInstallation ? "installation" : isUserToServer ? "user-to-server" : "oauth";
   return {
     type: "token",
@@ -29264,7 +29271,7 @@ var createTokenAuth = function createTokenAuth2(token) {
 
 
 ;// CONCATENATED MODULE: ./node_modules/@octokit/core/dist-src/version.js
-const version_VERSION = "6.1.3";
+const version_VERSION = "6.1.4";
 
 
 ;// CONCATENATED MODULE: ./node_modules/@octokit/core/dist-src/index.js
@@ -29449,7 +29456,7 @@ function iterator(octokit, route, parameters) {
           const response = await requestMethod({ method, url, headers });
           const normalizedResponse = normalizePaginatedListResponse(response);
           url = ((normalizedResponse.headers.link || "").match(
-            /<([^>]+)>;\s*rel="next"/
+            /<([^<>]+)>;\s*rel="next"/
           ) || [])[1];
           return { value: normalizedResponse };
         } catch (error) {
@@ -29783,7 +29790,7 @@ paginateRest.VERSION = plugin_paginate_rest_dist_bundle_VERSION;
 
 
 ;// CONCATENATED MODULE: ./node_modules/@octokit/plugin-rest-endpoint-methods/dist-src/version.js
-const dist_src_version_VERSION = "13.3.0";
+const dist_src_version_VERSION = "13.3.1";
 
 //# sourceMappingURL=version.js.map
 
@@ -32005,7 +32012,7 @@ legacyRestEndpointMethods.VERSION = dist_src_version_VERSION;
 //# sourceMappingURL=index.js.map
 
 ;// CONCATENATED MODULE: ./package.json
-const package_namespaceObject = /*#__PURE__*/JSON.parse('{"rE":"1.4.1","TB":"https://github.com/techpivot/terraform-module-releaser"}');
+const package_namespaceObject = /*#__PURE__*/JSON.parse('{"rE":"1.4.2","TB":"https://github.com/techpivot/terraform-module-releaser"}');
 ;// CONCATENATED MODULE: ./src/context.ts
 
 
@@ -32159,15 +32166,32 @@ const context = new Proxy({}, {
  * @returns {string} A formatted changelog entry as a string.
  */
 function createModuleChangelogEntry(heading, commits) {
+    const { prNumber, prTitle, repoUrl } = context;
     const currentDate = new Date().toISOString().split('T')[0]; // Format: YYYY-MM-DD
     const changelogContent = [`## \`${heading}\` (${currentDate})\n`];
-    for (const commit of commits) {
-        changelogContent.push(`- ${commit}`);
+    // Whether to hyperlink the PR number in the changelog entry. GitHub automatically
+    // links the PR in the pull request comments but not automatically in the wiki markdown. In the releases section
+    // it will automatically link just the #9 portion but not the PR part. If we link the whole section it
+    // ends up being much cleaner.
+    changelogContent.push(`- :twisted_rightwards_arrows:**[PR #${prNumber}](${repoUrl}/pull/${prNumber})** - ${prTitle}`);
+    // Perform some normalization
+    const normalizedCommitMessages = commits
+        // If the PR title equals the message exactly, we'll skip it
+        .filter((msg) => msg.trim() !== prTitle)
+        // Trim the commit message and for markdown, newlines that are part of a list format
+        // better if they use a <br> tag instead of a newline character.
+        .map((commitMessage) => commitMessage.trim().replace(/(\n)/g, '<br>'));
+    for (const normalizedCommit of normalizedCommitMessages) {
+        changelogContent.push(`- ${normalizedCommit}`);
     }
     return changelogContent.join('\n');
 }
 /**
  * Retrieves the global pull request changelog.
+ *
+ * Aggregates changelog entries from all changed Terraform modules into a single view.
+ * This aggregated changelog is used explicitly as a comment in the pull request message,
+ * providing a concise summary of all module changes.
  *
  * @param {TerraformChangedModule[]} terraformChangedModules - An array of changed Terraform modules.
  * @returns {string} The content of the global pull request changelog.
@@ -32176,16 +32200,7 @@ function getPullRequestChangelog(terraformChangedModules) {
     const pullRequestChangelog = [];
     const { prNumber, prTitle } = context;
     for (const { nextTag, commitMessages } of terraformChangedModules) {
-        const cleanedCommitMessages = commitMessages.map((commitMessage) => {
-            // Trim the commit message and for markdown, newlines that are part of a list format
-            // better if they use a <br> tag instead of a newline character.
-            return commitMessage.trim().replace(/(\n)/g, '<br>');
-        });
-        const commitMessagesWithPR = [
-            `PR #${prNumber} - ${prTitle}`,
-            ...cleanedCommitMessages.filter((msg) => msg.trim() !== prTitle),
-        ];
-        pullRequestChangelog.push(createModuleChangelogEntry(nextTag, commitMessagesWithPR));
+        pullRequestChangelog.push(createModuleChangelogEntry(nextTag, commitMessages));
     }
     return pullRequestChangelog.join('\n\n');
 }
@@ -32198,19 +32213,7 @@ function getPullRequestChangelog(terraformChangedModules) {
 function getModuleChangelog(terraformChangedModule) {
     const { prNumber, prTitle, repoUrl } = context;
     const { nextTagVersion, commitMessages } = terraformChangedModule;
-    const cleanedCommitMessages = commitMessages.map((commitMessage) => {
-        // Trim the commit message and for markdown, newlines that are part of a list format
-        // better if they use a <br> tag instead of a newline character.
-        return commitMessage.trim().replace(/(\n)/g, '<br>');
-    });
-    // Determine whether to hyperlink the PR #XX references in the Changelog since GitHub automatically does this
-    // in the Pull Request comment fields but not automatically in the wiki. In the releases, it will automatically
-    // find it with a link; however, recommend to hyperlink here.
-    const commitMessagesWithPR = [
-        `[PR #${prNumber}](${repoUrl}/pull/${prNumber}) - ${prTitle}`,
-        ...cleanedCommitMessages.filter((msg) => msg.trim() !== prTitle),
-    ];
-    return createModuleChangelogEntry(nextTagVersion, commitMessagesWithPR);
+    return createModuleChangelogEntry(nextTagVersion, commitMessages);
 }
 /**
  * Generates a changelog for a given Terraform module by concatenating the body
@@ -33360,8 +33363,8 @@ const path = {
     posix: { sep: '/' },
 };
 /* c8 ignore stop */
-const sep = defaultPlatform === 'win32' ? path.win32.sep : path.posix.sep;
-minimatch.sep = sep;
+const esm_sep = defaultPlatform === 'win32' ? path.win32.sep : path.posix.sep;
+minimatch.sep = esm_sep;
 const GLOBSTAR = Symbol('globstar **');
 minimatch.GLOBSTAR = GLOBSTAR;
 // any single thing other than /
@@ -34632,27 +34635,36 @@ function checkoutWiki() {
     const gitPath = lib_default().sync('git');
     (0,core.info)('Adding repository directory to the temporary git global config as a safe directory');
     (0,external_node_child_process_namespaceObject.execFileSync)(gitPath, ['config', '--global', '--add', 'safe.directory', wikiDirectory], { stdio: 'inherit' });
-    (0,core.info)('Initializing the repository');
+    // Create directory if it doesn't exist
     if (!(0,external_node_fs_namespaceObject.existsSync)(wikiDirectory)) {
         (0,external_node_fs_namespaceObject.mkdirSync)(wikiDirectory);
     }
-    (0,external_node_child_process_namespaceObject.execFileSync)(gitPath, ['init', '--initial-branch=master', wikiDirectory], execWikiOpts);
-    (0,core.info)('Setting up origin');
-    (0,external_node_child_process_namespaceObject.execFileSync)(gitPath, ['remote', 'add', 'origin', wikiHtmlUrl], execWikiOpts);
+    // Initialize repository if needed
+    const isExistingRepo = (0,external_node_fs_namespaceObject.existsSync)((0,external_node_path_namespaceObject.join)(wikiDirectory, '.git'));
+    if (!isExistingRepo) {
+        (0,core.info)('Initializing new repository');
+        (0,external_node_child_process_namespaceObject.execFileSync)(gitPath, ['init', '--initial-branch=master', wikiDirectory], execWikiOpts);
+    }
+    // Set or update the remote URL
+    (0,core.info)('Configuring remote URL');
+    const remoteOutput = (0,external_node_child_process_namespaceObject.execFileSync)(gitPath, ['remote'], { cwd: wikiDirectory, encoding: 'utf8' }) || '';
+    const hasRemote = remoteOutput.includes('origin');
+    if (hasRemote) {
+        (0,external_node_child_process_namespaceObject.execFileSync)(gitPath, ['remote', 'set-url', 'origin', wikiHtmlUrl], execWikiOpts);
+    }
+    else {
+        (0,external_node_child_process_namespaceObject.execFileSync)(gitPath, ['remote', 'add', 'origin', wikiHtmlUrl], execWikiOpts);
+    }
     (0,core.info)('Configuring authentication');
-    // Configure Git to use the PAT for the wiki repository (emulating the behavior of GitHub Actions
-    // from the checkout@v4 action.
     const basicCredential = Buffer.from(`x-access-token:${config.githubToken}`, 'utf8').toString('base64');
     try {
         (0,external_node_child_process_namespaceObject.execFileSync)(gitPath, ['config', '--local', '--unset-all', 'http.https://github.com/.extraheader'], execWikiOpts);
     }
     catch (error) {
         // Type guard to ensure we're handling the correct error type
-        if (error instanceof Error) {
-            // Only ignore specific status code if needed
-            if (error.status !== 5) {
-                throw error;
-            }
+        // Only ignore specific status code if needed
+        if (error instanceof Error && error.status !== 5) {
+            throw error;
         }
     }
     (0,external_node_child_process_namespaceObject.execFileSync)(gitPath, ['config', '--local', 'http.https://github.com/.extraheader', `Authorization: Basic ${basicCredential}`], execWikiOpts);
@@ -35023,8 +35035,13 @@ async function generateWikiFiles(terraformModules) {
 function commitAndPushWikiChanges() {
     (0,core.startGroup)('Committing and pushing changes to wiki');
     try {
-        const { prBody, prNumber, prTitle } = context;
-        const commitMessage = `PR #${prNumber} - ${prTitle}\n\n${prBody}`.trim();
+        const { prNumber, prTitle } = context;
+        // Note: We originally used the PR title and PR body to create the commit message; however, due to the way
+        // GitHub formats the commits/revision history for the Wiki it's designed to be smaller and thus we use
+        // the PR title for now.
+        // Ref: https://github.com/techpivot/terraform-modules-demo/wiki/aws%E2%88%95s3%E2%80%92bucket%E2%80%92object/_history
+        // Ref: https://github.com/techpivot/terraform-module-releaser/issues/95
+        const commitMessage = `PR #${prNumber} - ${prTitle}`.trim();
         const wikiDirectory = (0,external_node_path_namespaceObject.resolve)(context.workspaceDir, WIKI_SUBDIRECTORY_NAME);
         const execWikiOpts = { cwd: wikiDirectory, stdio: 'inherit' };
         const gitPath = lib_default().sync('git');
@@ -36103,7 +36120,7 @@ function initialize() {
  * @param {string[]} terraformModuleNamesToRemove - List of Terraform module names to remove.
  * @returns {Promise<void>} Resolves when wiki-related operations are completed.
  */
-async function handleWikiOperations(config, terraformChangedModules, terraformModuleNamesToRemove) {
+async function handleReleasePlanComment(config, terraformChangedModules, terraformModuleNamesToRemove) {
     let wikiStatus = WikiStatus.DISABLED;
     let failure;
     let error;
@@ -36178,11 +36195,49 @@ async function run() {
         const terraformChangedModules = getTerraformChangedModules(terraformModules);
         const terraformModuleNamesToRemove = getTerraformModulesToRemove(allTags, terraformModules);
         if (!context.isPrMergeEvent) {
-            await handleWikiOperations(config, terraformChangedModules, terraformModuleNamesToRemove);
+            await handleReleasePlanComment(config, terraformChangedModules, terraformModuleNamesToRemove);
         }
         else {
             await handleMergeEvent(config, terraformChangedModules, terraformModuleNamesToRemove, terraformModules, allReleases, allTags);
         }
+        // Set the outputs for the GitHub Action
+        const changedModuleNames = terraformChangedModules.map((module) => module.moduleName);
+        const changedModulePaths = terraformChangedModules.map((module) => module.directory);
+        const changedModulesMap = Object.fromEntries(terraformChangedModules.map((module) => [
+            module.moduleName,
+            {
+                path: module.directory,
+                currentTag: module.latestTag,
+                nextTag: module.nextTag,
+                releaseType: module.releaseType,
+            },
+        ]));
+        // Add new outputs for all modules
+        const allModuleNames = terraformModules.map((module) => module.moduleName);
+        const allModulePaths = terraformModules.map((module) => module.directory);
+        const allModulesMap = Object.fromEntries(terraformModules.map((module) => [
+            module.moduleName,
+            {
+                path: module.directory,
+                latestTag: module.latestTag,
+                latestTagVersion: module.latestTagVersion,
+            },
+        ]));
+        // Log the changes for debugging
+        (0,core.startGroup)('Outputs');
+        (0,core.info)(`Changed module names: ${JSON.stringify(changedModuleNames)}`);
+        (0,core.info)(`Changed module paths: ${JSON.stringify(changedModulePaths)}`);
+        (0,core.info)(`Changed modules map: ${JSON.stringify(changedModulesMap, null, 2)}`);
+        (0,core.info)(`All module names: ${JSON.stringify(allModuleNames)}`);
+        (0,core.info)(`All module paths: ${JSON.stringify(allModulePaths)}`);
+        (0,core.info)(`All modules map: ${JSON.stringify(allModulesMap, null, 2)}`);
+        (0,core.endGroup)();
+        (0,core.setOutput)('changed-module-names', changedModuleNames);
+        (0,core.setOutput)('changed-module-paths', changedModulePaths);
+        (0,core.setOutput)('changed-modules-map', changedModulesMap);
+        (0,core.setOutput)('all-module-names', allModuleNames);
+        (0,core.setOutput)('all-module-paths', allModulePaths);
+        (0,core.setOutput)('all-modules-map', allModulesMap);
     }
     catch (error) {
         if (error instanceof Error) {
