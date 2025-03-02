@@ -7,6 +7,8 @@ providing an overview of their functionality and the latest versions.
 
 | Module Name | Latest Version |
 | -- | -- |
+| [kms](/techpivot/terraform-module-releaser/wiki/kms) | null |
+| [kms/examples/complete](/techpivot/terraform-module-releaser/wiki/kms∕examples∕complete) | null |
 | [s3-bucket-object](/techpivot/terraform-module-releaser/wiki/s3‒bucket‒object) | null |
 | [vpc-endpoint](/techpivot/terraform-module-releaser/wiki/vpc‒endpoint) | v1.0.0 |
 

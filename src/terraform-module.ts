@@ -3,7 +3,7 @@ import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { config } from '@/config';
 import { context } from '@/context';
 import type { CommitDetails, GitHubRelease, TerraformChangedModule, TerraformModule } from '@/types';
-import { isTerraformDirectory, shouldExcludeFile } from '@/utils/file';
+import { isTerraformDirectory, shouldExcludeFile, shouldIgnoreModulePath } from '@/utils/file';
 import { determineReleaseType, getNextTagVersion } from '@/utils/semver';
 import { removeTrailingDots } from '@/utils/string';
 import { debug, endGroup, info, startGroup } from '@actions/core';
@@ -68,7 +68,7 @@ function getTerraformModuleNameFromRelativePath(terraformDirectory: string): str
 /**
  * Gets the relative path of the Terraform module directory associated with a specified file.
  *
- * Traverses upward from the file’s directory to locate the nearest Terraform module directory.
+ * Traverses upward from the file's directory to locate the nearest Terraform module directory.
  * Returns the module's path relative to the current working directory.
  *
  * @param {string} filePath - The absolute or relative path of the file to analyze.
@@ -186,7 +186,15 @@ export function getAllTerraformModules(
       // If it's a directory, recursively search inside it
       if (stat.isDirectory()) {
         if (isTerraformDirectory(filePath)) {
-          const moduleName = getTerraformModuleNameFromRelativePath(relative(workspaceDir, filePath));
+          const relativePath = relative(workspaceDir, filePath);
+
+          // Check if this module path should be ignored
+          if (shouldIgnoreModulePath(relativePath, config.modulePathIgnore)) {
+            info(`Skipping module in ${relativePath} due to module-path-ignore match`);
+            continue;
+          }
+
+          const moduleName = getTerraformModuleNameFromRelativePath(relativePath);
           terraformModulesMap[moduleName] = {
             moduleName,
             directory: filePath,
@@ -206,9 +214,9 @@ export function getAllTerraformModules(
   // Start the search from the workspace root directory
   info(`Searching for Terraform modules in ${workspaceDir}`);
   searchDirectory(workspaceDir);
-  info(
-    `Found ${Object.keys(terraformModulesMap).length} Terraform module${Object.keys(terraformModulesMap).length !== 1 ? 's' : ''}`,
-  );
+
+  const totalModulesFound = Object.keys(terraformModulesMap).length;
+  info(`Found ${totalModulesFound} Terraform module${totalModulesFound !== 1 ? 's' : ''}`);
   info('Terraform Modules:');
   info(JSON.stringify(terraformModulesMap, null, 2));
 
@@ -225,11 +233,17 @@ export function getAllTerraformModules(
         continue;
       }
 
+      // Check if this module path should be ignored
+      if (shouldIgnoreModulePath(moduleRelativePath, config.modulePathIgnore)) {
+        info(`  (skipping) ➜ Matches module-path-ignore pattern for path \`${moduleRelativePath}\``);
+        continue;
+      }
+
       const moduleName = getTerraformModuleNameFromRelativePath(moduleRelativePath);
 
       // Skip excluded files based on provided pattern
       if (shouldExcludeFile(moduleRelativePath, relativeFilePath, config.moduleChangeExcludePatterns)) {
-        info(`  (skipping) ➜ Matches module-change-exclude-pattern for \`${moduleName}\``);
+        info(`  (skipping) ➜ Matches module-change-exclude-pattern for path \`${moduleRelativePath}\``);
         continue;
       }
 

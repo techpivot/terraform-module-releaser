@@ -209,11 +209,24 @@ describe('wiki', async () => {
       const expectedFiles = readdirSync(fixturesDir).map((file) => basename(file));
       expect(expectedFiles.length).equals(files.length);
 
+      // Import all fixture files using import.meta.glob
+      const fixtureContents = import.meta.glob('../__tests__/fixtures/*.md', {
+        eager: true,
+        query: '?raw',
+        import: 'default',
+      });
+
       // Compare each generated file to its corresponding fixture
       for (const file of files) {
         const generatedContent = readFileSync(file, 'utf8');
-        const expectedFilePath = join(fixturesDir, basename(file));
-        const expectedContent = readFileSync(expectedFilePath, 'utf8');
+        const fileName = basename(file);
+        const fixtureKey = Object.keys(fixtureContents).find((key) => key.endsWith(fileName));
+
+        if (!fixtureKey) {
+          throw new Error(`Could not find fixture for ${file} ${fileName}`);
+        }
+
+        const expectedContent = fixtureContents[fixtureKey] as string;
 
         // Assert that the contents match
         expect(expectedContent).toEqual(generatedContent);
@@ -222,21 +235,29 @@ describe('wiki', async () => {
       expect(startGroup).toHaveBeenCalledWith('Generating wiki ...');
       expect(endGroup).toHaveBeenCalled();
 
+      // Note: The wiki generation is asynchronous so we don't check order
       const expectedCalls = [
         ['Removing existing wiki files...'],
         [`Removed contents of directory [${wikiDir}], preserving items: .git`],
         [`Using parallelism: ${cpus().length + 2}`],
         ['Generating tf-docs for: s3-bucket-object'],
         ['Generating tf-docs for: vpc-endpoint'],
+        ['Generating tf-docs for: kms'],
+        ['Generating tf-docs for: kms/examples/complete'],
         ['Finished tf-docs for: vpc-endpoint'],
-        ['Generated: vpc‒endpoint.md'],
+        ['Finished tf-docs for: kms'],
+        ['Finished tf-docs for: kms/examples/complete'],
         ['Finished tf-docs for: s3-bucket-object'],
+        ['Generated: kms.md'],
+        ['Generated: kms∕examples∕complete.md'],
+        ['Generated: vpc‒endpoint.md'],
         ['Generated: s3‒bucket‒object.md'],
         ['Generated: Home.md'],
         ['Generated: _Sidebar.md'],
         ['Generated: _Footer.md'],
         ['Wiki files generated:'],
       ];
+
       for (const call of expectedCalls) {
         expect(info).toHaveBeenCalledWith(...call);
       }

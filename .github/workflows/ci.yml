@@ -49,6 +49,8 @@ jobs:
           disable-wiki: false
           wiki-sidebar-changelog-max: 10
           delete-legacy-tags: false # Note: We don't want to delete tags in this repository
+          terraform-docs-version: v0.19.0
+          module-path-ignore: tf-modules/kms/examples/complete
           module-change-exclude-patterns: .gitignore,*.md,*.tftest.hcl,tests/**,examples/**
           module-asset-exclude-patterns: .gitignore,*.md,*.tftest.hcl,tests/**
           use-ssh-source-format: true

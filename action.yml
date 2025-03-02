@@ -60,6 +60,10 @@ inputs:
       or where third-party branding is undesirable.
     required: true
     default: "false"
+  module-path-ignore:
+    description: Comma separated list of module paths to completely ignore. This will prevent any versioning, release, or documentation for these modules.
+    required: false
+    default: ""
   module-change-exclude-patterns:
     description: >
       A comma-separated list of file patterns to exclude from triggering version changes in Terraform modules.

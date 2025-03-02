@@ -19,7 +19,7 @@
 import { execFileSync } from 'node:child_process';
 import https from 'node:https';
 
-const OPENAI_MODEL = 'gpt-4-turbo-2024-04-09';
+const OPENAI_MODEL = 'gpt-4o-mini-2024-07-18';
 const PROMPT = `
 You're the head of developer relations at a SaaS. Write a concise, professional, and fun changelog, prioritizing important changes.
 
@@ -33,7 +33,7 @@ For each commit, use this format:
 - **Bold 3-5 word Summary** {optional related GitHub emoji}: Continuation with 1-3 sentence description. @author (optional #PR)
   - Sub-bullets for key details (include only if necessary)
 
-Place PR/issue numbers matching the exact pattern #\d+ (e.g., #123) at the end of the section in parentheses.
+Place PR/issue numbers matching the exact pattern #\\d+ (e.g., #123) at the end of the section in parentheses.
 
 Do not use commit hashes as PR numbers.
 
