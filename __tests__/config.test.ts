@@ -151,7 +151,6 @@ describe('config', () => {
       expect(config.wikiSidebarChangelogMax).toBe(10);
       expect(config.disableBranding).toBe(false);
       expect(config.githubToken).toBe('ghp_test_token_2c6912E7710c838347Ae178B4');
-      expect(config.modulePathIgnore).toEqual(['tf-modules/kms/examples/complete']);
       expect(config.moduleChangeExcludePatterns).toEqual(['.gitignore', '*.md']);
       expect(config.moduleAssetExcludePatterns).toEqual(['tests/**', 'examples/**']);
       expect(config.modulePathIgnore).toEqual(['tf-modules/kms/examples/complete']);
