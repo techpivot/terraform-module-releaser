@@ -28248,10 +28248,11 @@ let configInstance = null;
  * are removed and each value is trimmed of whitespace.
  *
  * @param inputName - Name of the input to retrieve.
+ * @param required - Whether the input is required.
  * @returns An array of trimmed and filtered values.
  */
-const getArrayInput = (inputName) => {
-    const input = (0,core.getInput)(inputName, { required: true });
+const getArrayInput = (inputName, required) => {
+    const input = (0,core.getInput)(inputName, { required });
     return Array.from(new Set(input
         .split(',')
         .map((item) => item.trim())
@@ -28289,9 +28290,9 @@ function initializeConfig() {
         (0,core.startGroup)('Initializing Config');
         // Initialize the config instance
         configInstance = {
-            majorKeywords: getArrayInput('major-keywords'),
-            minorKeywords: getArrayInput('minor-keywords'),
-            patchKeywords: getArrayInput('patch-keywords'),
+            majorKeywords: getArrayInput('major-keywords', true),
+            minorKeywords: getArrayInput('minor-keywords', true),
+            patchKeywords: getArrayInput('patch-keywords', true),
             defaultFirstTag: (0,core.getInput)('default-first-tag', { required: true }),
             terraformDocsVersion: (0,core.getInput)('terraform-docs-version', { required: true }),
             deleteLegacyTags: (0,core.getBooleanInput)('delete-legacy-tags', { required: true }),
@@ -28299,8 +28300,9 @@ function initializeConfig() {
             wikiSidebarChangelogMax: Number.parseInt((0,core.getInput)('wiki-sidebar-changelog-max', { required: true }), 10),
             disableBranding: (0,core.getBooleanInput)('disable-branding', { required: true }),
             githubToken: (0,core.getInput)('github_token', { required: true }),
-            moduleChangeExcludePatterns: getArrayInput('module-change-exclude-patterns'),
-            moduleAssetExcludePatterns: getArrayInput('module-asset-exclude-patterns'),
+            modulePathIgnore: getArrayInput('module-path-ignore', false),
+            moduleChangeExcludePatterns: getArrayInput('module-change-exclude-patterns', false),
+            moduleAssetExcludePatterns: getArrayInput('module-asset-exclude-patterns', false),
             useSSHSourceFormat: (0,core.getBooleanInput)('use-ssh-source-format', { required: true }),
         };
         // Validate that *.tf is not in excludePatterns
@@ -28322,6 +28324,7 @@ function initializeConfig() {
         (0,core.info)(`Delete Legacy Tags: ${configInstance.deleteLegacyTags}`);
         (0,core.info)(`Disable Wiki: ${configInstance.disableWiki}`);
         (0,core.info)(`Wiki Sidebar Changelog Max: ${configInstance.wikiSidebarChangelogMax}`);
+        (0,core.info)(`Module Paths to Ignore: ${configInstance.modulePathIgnore.join(', ')}`);
         (0,core.info)(`Module Change Exclude Patterns: ${configInstance.moduleChangeExcludePatterns.join(', ')}`);
         (0,core.info)(`Module Asset Exclude Patterns: ${configInstance.moduleAssetExcludePatterns.join(', ')}`);
         (0,core.info)(`Use SSH Source Format: ${configInstance.useSSHSourceFormat}`);
@@ -32012,7 +32015,7 @@ legacyRestEndpointMethods.VERSION = dist_src_version_VERSION;
 //# sourceMappingURL=index.js.map
 
 ;// CONCATENATED MODULE: ./package.json
-const package_namespaceObject = /*#__PURE__*/JSON.parse('{"rE":"1.4.2","TB":"https://github.com/techpivot/terraform-module-releaser"}');
+const package_namespaceObject = /*#__PURE__*/JSON.parse('{"rE":"1.5.0","TB":"https://github.com/techpivot/terraform-module-releaser"}');
 ;// CONCATENATED MODULE: ./src/context.ts
 
 
@@ -34303,6 +34306,37 @@ function isTerraformDirectory(dirPath) {
     return (0,external_node_fs_namespaceObject.existsSync)(dirPath) && (0,external_node_fs_namespaceObject.readdirSync)(dirPath).some((file) => (0,external_node_path_namespaceObject.extname)(file) === '.tf');
 }
 /**
+ * Checks if a module path should be ignored based on provided ignore patterns.
+ *
+ * This function evaluates whether a given module path matches any of the specified ignore patterns
+ * using the minimatch library for glob pattern matching.
+ *
+ * @remarks
+ * Important pattern matching behavior notes:
+ * - A pattern like "dir/**" will match files/directories INSIDE "dir" but NOT "dir" itself
+ * - To match both a directory and its contents, you must include both patterns:
+ *   ["dir", "dir/**"]
+ * - The function uses matchBase: false for precise path structure matching
+ *
+ * @example
+ * // Will return false (doesn't match the directory itself)
+ * shouldIgnoreModulePath('tf-modules/kms/examples/complete', ['tf-modules/kms/examples/complete/**']);
+ *
+ * @example
+ * // Will return true (matches the exact path)
+ * shouldIgnoreModulePath('tf-modules/kms/examples/complete', ['tf-modules/kms/examples/complete']);
+ *
+ * @param {string} modulePath - The path of the module to check.
+ * @param {string[]} ignorePatterns - Array of path patterns to ignore.
+ * @returns {boolean} True if the module should be ignored, false otherwise.
+ */
+function shouldIgnoreModulePath(modulePath, ignorePatterns) {
+    if (!ignorePatterns || ignorePatterns.length === 0) {
+        return false;
+    }
+    return ignorePatterns.some((pattern) => minimatch(modulePath, pattern, { matchBase: false }));
+}
+/**
  * Checks if a file should be excluded from matching based on the defined exclude patterns
  * and relative paths from the base directory.
  *
@@ -34481,6 +34515,13 @@ class Queue {
 		while (current) {
 			yield current.value;
 			current = current.next;
+		}
+	}
+
+	* drain() {
+		let current;
+		while ((current = this.dequeue()) !== undefined) {
+			yield current;
 		}
 	}
 }
@@ -35893,7 +35934,7 @@ function getTerraformModuleNameFromRelativePath(terraformDirectory) {
 /**
  * Gets the relative path of the Terraform module directory associated with a specified file.
  *
- * Traverses upward from the file’s directory to locate the nearest Terraform module directory.
+ * Traverses upward from the file's directory to locate the nearest Terraform module directory.
  * Returns the module's path relative to the current working directory.
  *
  * @param {string} filePath - The absolute or relative path of the file to analyze.
@@ -35976,6 +36017,7 @@ function getAllTerraformModules(commits, allTags, allReleases) {
     console.time('Elapsed time finding terraform modules'); // Start timing
     const terraformModulesMap = {};
     const workspaceDir = context.workspaceDir;
+    // Terraform only processes .tf and .tf.json files in the current working directory where you run the terraform commands. It does not automatically scan or include files from subdirectories.
     // Helper function to recursively search for Terraform modules
     const searchDirectory = (dir) => {
         const files = (0,external_node_fs_namespaceObject.readdirSync)(dir);
@@ -35985,7 +36027,13 @@ function getAllTerraformModules(commits, allTags, allReleases) {
             // If it's a directory, recursively search inside it
             if (stat.isDirectory()) {
                 if (isTerraformDirectory(filePath)) {
-                    const moduleName = getTerraformModuleNameFromRelativePath((0,external_node_path_namespaceObject.relative)(workspaceDir, filePath));
+                    const relativePath = (0,external_node_path_namespaceObject.relative)(workspaceDir, filePath);
+                    // Check if this module path should be ignored
+                    if (shouldIgnoreModulePath(relativePath, config.modulePathIgnore)) {
+                        (0,core.info)(`Skipping module in ${relativePath} due to module-path-ignore match`);
+                        continue;
+                    }
+                    const moduleName = getTerraformModuleNameFromRelativePath(relativePath);
                     terraformModulesMap[moduleName] = {
                         moduleName,
                         directory: filePath,
@@ -35993,14 +36041,20 @@ function getAllTerraformModules(commits, allTags, allReleases) {
                         releases: getReleasesForModule(moduleName, allReleases),
                     };
                 }
-                else {
-                    searchDirectory(filePath); // Recurse into subdirectories
-                }
+                // We'll always recurse into subdirectories to find terraform modules even after we've found a match.
+                // This is because we want to find all modules in the workspace and although not conventional, there are
+                // cases where a module could be completely nested within another module and be 100% separate.
+                searchDirectory(filePath); // Recurse into subdirectories
             }
         }
     };
     // Start the search from the workspace root directory
+    (0,core.info)(`Searching for Terraform modules in ${workspaceDir}`);
     searchDirectory(workspaceDir);
+    const totalModulesFound = Object.keys(terraformModulesMap).length;
+    (0,core.info)(`Found ${totalModulesFound} Terraform module${totalModulesFound !== 1 ? 's' : ''}`);
+    (0,core.info)('Terraform Modules:');
+    (0,core.info)(JSON.stringify(terraformModulesMap, null, 2));
     // Now process commits to find changed modules
     for (const { message, sha, files } of commits) {
         (0,core.info)(`Parsing commit ${sha}: ${message.trim().split('\n')[0].trim()} (Changed Files = ${files.length})`);
@@ -36011,12 +36065,15 @@ function getAllTerraformModules(commits, allTags, allReleases) {
                 // File isn't associated with a Terraform module
                 continue;
             }
+            // Check if this module path should be ignored
+            if (shouldIgnoreModulePath(moduleRelativePath, config.modulePathIgnore)) {
+                (0,core.info)(`  (skipping) ➜ Matches module-path-ignore pattern for path \`${moduleRelativePath}\``);
+                continue;
+            }
             const moduleName = getTerraformModuleNameFromRelativePath(moduleRelativePath);
             // Skip excluded files based on provided pattern
             if (shouldExcludeFile(moduleRelativePath, relativeFilePath, config.moduleChangeExcludePatterns)) {
-                // Note: This could happen if we detect a change in a subdirectory of a terraform module
-                // but the change is in a file that we want to exclude.
-                (0,core.info)(`Excluding module "${moduleName}" match from "${relativeFilePath}" due to exclude pattern match.`);
+                (0,core.info)(`  (skipping) ➜ Matches module-change-exclude-pattern for path \`${moduleRelativePath}\``);
                 continue;
             }
             const module = terraformModulesMap[moduleName];
