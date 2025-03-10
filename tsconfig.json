@@ -4,7 +4,7 @@
     "target": "ES2022",
     "module": "ES2022",
     "moduleResolution": "bundler",
-    "types": ["node"],
+    "types": ["node", "vite/client"],
     "baseUrl": ".",
     "rootDir": ".",
     "outDir": "./dist",

@@ -14,6 +14,39 @@ export function isTerraformDirectory(dirPath: string): boolean {
 }
 
 /**
+ * Checks if a module path should be ignored based on provided ignore patterns.
+ *
+ * This function evaluates whether a given module path matches any of the specified ignore patterns
+ * using the minimatch library for glob pattern matching.
+ *
+ * @remarks
+ * Important pattern matching behavior notes:
+ * - A pattern like "dir/**" will match files/directories INSIDE "dir" but NOT "dir" itself
+ * - To match both a directory and its contents, you must include both patterns:
+ *   ["dir", "dir/**"]
+ * - The function uses matchBase: false for precise path structure matching
+ *
+ * @example
+ * // Will return false (doesn't match the directory itself)
+ * shouldIgnoreModulePath('tf-modules/kms/examples/complete', ['tf-modules/kms/examples/complete/**']);
+ *
+ * @example
+ * // Will return true (matches the exact path)
+ * shouldIgnoreModulePath('tf-modules/kms/examples/complete', ['tf-modules/kms/examples/complete']);
+ *
+ * @param {string} modulePath - The path of the module to check.
+ * @param {string[]} ignorePatterns - Array of path patterns to ignore.
+ * @returns {boolean} True if the module should be ignored, false otherwise.
+ */
+export function shouldIgnoreModulePath(modulePath: string, ignorePatterns: string[]): boolean {
+  if (!ignorePatterns || ignorePatterns.length === 0) {
+    return false;
+  }
+
+  return ignorePatterns.some((pattern: string) => minimatch(modulePath, pattern, { matchBase: false }));
+}
+
+/**
  * Checks if a file should be excluded from matching based on the defined exclude patterns
  * and relative paths from the base directory.
  *

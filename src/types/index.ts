@@ -206,6 +206,13 @@ export interface Config {
    * When set to true, the SSH standard format (non scp variation) will be used. Otherwise, the HTTPS format will be used.
    */
   useSSHSourceFormat: boolean;
+
+  /**
+   * A list of module paths to completely ignore when processing. Any module whose path matches
+   * one of these patterns will not be processed for versioning, release, or documentation.
+   * Paths are relative to the workspace directory.
+   */
+  modulePathIgnore: string[];
 }
 
 /**

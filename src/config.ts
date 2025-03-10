@@ -9,10 +9,11 @@ let configInstance: Config | null = null;
  * are removed and each value is trimmed of whitespace.
  *
  * @param inputName - Name of the input to retrieve.
+ * @param required - Whether the input is required.
  * @returns An array of trimmed and filtered values.
  */
-const getArrayInput = (inputName: string): string[] => {
-  const input = getInput(inputName, { required: true });
+const getArrayInput = (inputName: string, required: boolean): string[] => {
+  const input = getInput(inputName, { required });
 
   return Array.from(
     new Set(
@@ -59,9 +60,9 @@ function initializeConfig(): Config {
 
     // Initialize the config instance
     configInstance = {
-      majorKeywords: getArrayInput('major-keywords'),
-      minorKeywords: getArrayInput('minor-keywords'),
-      patchKeywords: getArrayInput('patch-keywords'),
+      majorKeywords: getArrayInput('major-keywords', true),
+      minorKeywords: getArrayInput('minor-keywords', true),
+      patchKeywords: getArrayInput('patch-keywords', true),
       defaultFirstTag: getInput('default-first-tag', { required: true }),
       terraformDocsVersion: getInput('terraform-docs-version', { required: true }),
       deleteLegacyTags: getBooleanInput('delete-legacy-tags', { required: true }),
@@ -69,8 +70,9 @@ function initializeConfig(): Config {
       wikiSidebarChangelogMax: Number.parseInt(getInput('wiki-sidebar-changelog-max', { required: true }), 10),
       disableBranding: getBooleanInput('disable-branding', { required: true }),
       githubToken: getInput('github_token', { required: true }),
-      moduleChangeExcludePatterns: getArrayInput('module-change-exclude-patterns'),
-      moduleAssetExcludePatterns: getArrayInput('module-asset-exclude-patterns'),
+      modulePathIgnore: getArrayInput('module-path-ignore', false),
+      moduleChangeExcludePatterns: getArrayInput('module-change-exclude-patterns', false),
+      moduleAssetExcludePatterns: getArrayInput('module-asset-exclude-patterns', false),
       useSSHSourceFormat: getBooleanInput('use-ssh-source-format', { required: true }),
     };
 
@@ -95,6 +97,7 @@ function initializeConfig(): Config {
     info(`Delete Legacy Tags: ${configInstance.deleteLegacyTags}`);
     info(`Disable Wiki: ${configInstance.disableWiki}`);
     info(`Wiki Sidebar Changelog Max: ${configInstance.wikiSidebarChangelogMax}`);
+    info(`Module Paths to Ignore: ${configInstance.modulePathIgnore.join(', ')}`);
     info(`Module Change Exclude Patterns: ${configInstance.moduleChangeExcludePatterns.join(', ')}`);
     info(`Module Asset Exclude Patterns: ${configInstance.moduleAssetExcludePatterns.join(', ')}`);
     info(`Use SSH Source Format: ${configInstance.useSSHSourceFormat}`);

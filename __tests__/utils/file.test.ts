@@ -1,7 +1,13 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { copyModuleContents, isTerraformDirectory, removeDirectoryContents, shouldExcludeFile } from '@/utils/file';
+import {
+  copyModuleContents,
+  isTerraformDirectory,
+  removeDirectoryContents,
+  shouldExcludeFile,
+  shouldIgnoreModulePath,
+} from '@/utils/file';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 describe('utils/file', () => {
@@ -30,6 +36,95 @@ describe('utils/file', () => {
 
     it('should return false for invalid directory', () => {
       expect(isTerraformDirectory('/invalid-directory')).toBe(false);
+    });
+  });
+
+  describe('shouldIgnoreModulePath()', () => {
+    it('should return false when ignore patterns are empty', () => {
+      expect(shouldIgnoreModulePath('path/to/module', [])).toBe(false);
+    });
+
+    it('should return false when path does not match any pattern', () => {
+      expect(shouldIgnoreModulePath('path/to/module', ['other/path', 'different/*'])).toBe(false);
+    });
+
+    it('should return true when path exactly matches a pattern', () => {
+      expect(shouldIgnoreModulePath('path/to/module', ['path/to/module'])).toBe(true);
+    });
+
+    it('should handle /** pattern correctly', () => {
+      // Test the exact directory with the pattern "dir/**"
+      // With minimatch, this does NOT match the exact directory itself without trailing slash
+      expect(shouldIgnoreModulePath('tf-modules/kms/examples/complete', ['tf-modules/kms/examples/complete/**'])).toBe(
+        false,
+      );
+
+      // But it DOES match the directory with trailing slash (as a directory)
+      // Note: This won't ever happen as we only call this function with directory paths which won't have trailing
+      // slash, but it's good to know how minimatch works.
+      expect(shouldIgnoreModulePath('tf-modules/kms/examples/complete/', ['tf-modules/kms/examples/complete/**'])).toBe(
+        true,
+      );
+
+      // Files directly inside the directory
+      expect(
+        shouldIgnoreModulePath('tf-modules/kms/examples/complete/file.txt', ['tf-modules/kms/examples/complete/**']),
+      ).toBe(true);
+
+      // Subdirectories inside the directory
+      expect(
+        shouldIgnoreModulePath('tf-modules/kms/examples/complete/subfolder', ['tf-modules/kms/examples/complete/**']),
+      ).toBe(true);
+
+      // Nested files inside subdirectories
+      expect(
+        shouldIgnoreModulePath('tf-modules/kms/examples/complete/subfolder/nested.txt', [
+          'tf-modules/kms/examples/complete/**',
+        ]),
+      ).toBe(true);
+
+      // To match both the directory and its contents, use both patterns
+      expect(
+        shouldIgnoreModulePath('tf-modules/kms/examples/complete', [
+          'tf-modules/kms/examples/complete',
+          'tf-modules/kms/examples/complete/**',
+        ]),
+      ).toBe(true);
+    });
+
+    it('should return true when path matches a pattern with wildcards', () => {
+      expect(shouldIgnoreModulePath('path/to/module', ['path/to/*'])).toBe(true);
+      expect(shouldIgnoreModulePath('path/to/another', ['path/to/*'])).toBe(true);
+      expect(shouldIgnoreModulePath('path/to/dir/file', ['path/to/*'])).toBe(false);
+    });
+
+    it('should return true when path matches a globstar pattern', () => {
+      expect(shouldIgnoreModulePath('path/to/deep/nested/module', ['**/nested/**'])).toBe(true);
+      expect(shouldIgnoreModulePath('path/nested/file', ['**/nested/**'])).toBe(true);
+      expect(shouldIgnoreModulePath('nested/file', ['**/nested/**'])).toBe(true);
+      expect(shouldIgnoreModulePath('path/almost/file', ['**/nested/**'])).toBe(false);
+    });
+
+    it('should handle paths with file extensions properly', () => {
+      // Important: With minimatch, 'examples/**' DOES match 'examples/complete'
+      expect(shouldIgnoreModulePath('examples/complete', ['examples/**'])).toBe(true);
+      expect(shouldIgnoreModulePath('examples/complete/file.js', ['examples/**'])).toBe(true);
+      expect(shouldIgnoreModulePath('module/examples/complete', ['examples/**'])).toBe(false);
+    });
+
+    it('should handle matchBase=false behavior correctly', () => {
+      // With matchBase: false, patterns without slashes must match the full path
+      expect(shouldIgnoreModulePath('deep/path/module.js', ['module.js'])).toBe(false);
+      expect(shouldIgnoreModulePath('module.js', ['module.js'])).toBe(true);
+    });
+
+    it('should handle multiple patterns correctly', () => {
+      const patterns = ['ignore/this/path', 'also/ignore/*', '**/node_modules/**'];
+
+      expect(shouldIgnoreModulePath('ignore/this/path', patterns)).toBe(true);
+      expect(shouldIgnoreModulePath('also/ignore/something', patterns)).toBe(true);
+      expect(shouldIgnoreModulePath('deep/path/node_modules/package', patterns)).toBe(true);
+      expect(shouldIgnoreModulePath('keep/this/path', patterns)).toBe(false);
     });
   });
 

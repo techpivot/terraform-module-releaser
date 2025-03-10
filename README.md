@@ -17,31 +17,24 @@ documentation.</b></sup>
 [4]: https://github.com/techpivot/terraform-module-releaser/actions/workflows/codeql-analysis.yml
 [5]: https://sonarcloud.io/summary/new_code?id=terraform-module-releaser
 
-Simplify the management of Terraform modules in your monorepo with this **GitHub Action**, designed to automate
-module-specific versioning and releases. By streamlining the Terraform module release process, this action allows you to
-manage multiple modules in a single repository while still maintaining independence and flexibility. Additionally, it
-generates a beautifully crafted wiki for each module, complete with readme information, usage examples, Terraform-docs
-details, and a full changelog.
+Simplify the management of Terraform modules in your monorepo with this **GitHub Action**. It automates module-specific
+versioning and releases by creating proper Git tags and GitHub releases based on your commit messages. Each module
+maintains independence while living in the same repository, with proper isolation for clean dependency management.
+Additionally, the action generates a beautifully crafted wiki for each module, complete with readme information, usage
+examples, Terraform-docs details, and a full changelog.
 
-## Key Features
+## 🚀 Features
 
-- **Efficient Module Tagging**: Module tags are specifically designed to only include the current Terraform module
-  directory (and nothing else), thereby dramatically decreasing the size and improving Terraform performance.
-- **Automated Release Management**: Identifies Terraform modules affected by changes in a pull request and determines
-  the necessary release type (major, minor, or patch) based on commit messages.
-- **Versioning and Tagging**: Calculates the next version tag for each module and commits, tags, and pushes new versions
-  for each module individually.
-- **Release Notes and Comments**: Generates a pull request comment summarizing module changes and release types, and
-  creates a GitHub release for each module with a dynamically generated description.
-- **Wiki Integration**: Updates the wiki with new release information, including:
-  - README.md information for each module
-  - Beautifully crafted module usage examples
-  - `terraform-docs` details for each module
-  - Full changelog for each module
-- **Deletes Synced**: Automatically removes tags from deleted Terraform modules, keeping your repository organized and
-  up-to-date.
-- **Flexible Configuration**: Offers advanced input options for customization, allowing you to tailor the action to your
-  specific needs.
+- **Efficient Module Tagging** – Only includes module directory content, dramatically improving Terraform performance.
+- **Smart Versioning** – Automatically determines release types (major, minor, patch) based on commit messages.
+- **Comprehensive Wiki** – Generates beautiful documentation with usage examples, terraform-docs output, and full
+  changelogs.
+- **Release Automation** – Creates GitHub releases, pull request comments, and version tags with minimal effort.
+- **Self-Maintaining** – Automatically removes tags from deleted modules, keeping your repository clean and organized.
+- **100% GitHub Native** – No external dependencies or services required for modules or operation, everything stays
+  within your GitHub ecosystem.
+- **Zero Configuration** – Works out-of-the-box with sensible defaults for immediate productivity.
+- **Flexible & Extensible** – Customizable settings to precisely match your team's specific workflow requirements.
 
 ## Demo
 
@@ -180,9 +173,37 @@ configuring the following optional input parameters as needed.
 | `disable-wiki`                   | Whether to disable wiki generation for Terraform modules                                                                                                                                                                                                                                                                                                                                             | `false`                                    |
 | `wiki-sidebar-changelog-max`     | An integer that specifies how many changelog entries are displayed in the sidebar per module                                                                                                                                                                                                                                                                                                         | `5`                                        |
 | `disable-branding`               | Controls whether a small branding link to the action's repository is added to PR comments. Recommended to leave enabled to support OSS.                                                                                                                                                                                                                                                              | `false`                                    |
+| `module-path-ignore`             | Comma separated list of module paths to completely ignore (relative to working directory). This will prevent any versioning, release, or documentation for these modules.                                                                                                                                                                                                                            | `` (empty)                                 |
 | `module-change-exclude-patterns` | A comma-separated list of file patterns to exclude from triggering version changes in Terraform modules. Patterns follow glob syntax (e.g., `.gitignore,_.md`) and are relative to each Terraform module directory. Files matching these patterns will not affect version changes. **WARNING**: Avoid excluding '`_.tf`' files, as they are essential for module detection and versioning processes. | `.gitignore, *.md, *.tftest.hcl, tests/**` |
 | `module-asset-exclude-patterns`  | A comma-separated list of file patterns to exclude when bundling a Terraform module for tag/release. Patterns follow glob syntax (e.g., `tests/\*\*`) and are relative to each Terraform module directory. Files matching these patterns will be excluded from the bundled output.                                                                                                                   | `.gitignore, *.md, *.tftest.hcl, tests/**` |
 | `use-ssh-source-format`          | If enabled, all links to source code in generated Wiki documentation will use SSH standard format (e.g., `git::ssh://git@github.com/owner/repo.git`) instead of HTTPS format (`git::https://github.com/owner/repo.git`)                                                                                                                                                                              | `false`                                    |
+
+### Understanding the filtering options
+
+- **`module-path-ignore`**: Completely ignores specified module paths. Any module whose path matches any pattern in this
+  list will not be processed at all by the action. This is useful for:
+
+  - Excluding example modules (e.g., `**/examples/**`)
+  - Skipping test modules (e.g., `**/test/**`)
+  - Ignoring documentation-focused modules (e.g., `**/docs/**`)
+  - Excluding entire directories or paths that contain Terraform files but shouldn't be versioned as modules
+
+  Example:
+
+  ```yaml
+  module-path-ignore: "**/examples/**,**/test/**,root-modules"
+  ```
+
+- **`module-change-exclude-patterns`**: These patterns determine which file changes are _ignored_ when checking if a
+  module needs a new release. For example, changes to documentation, examples, or workflow files typically don't require
+  a new module release.
+- **`module-asset-exclude-patterns`**: When building a release asset for a module, these patterns determine which files
+  are _excluded_ from the asset. This helps reduce the asset size by omitting test files, examples, documentation, etc.
+
+All pattern matching is implemented using [minimatch](https://github.com/isaacs/minimatch), which supports glob patterns
+similar to those used in `.gitignore` files. For more details on the pattern matching implementation, see our
+[source code](https://github.com/techpivot/terraform-module-releaser/blob/main/src/utils/file.ts) or visit the
+[minimatch documentation](https://github.com/isaacs/minimatch).
 
 ### Example Usage with Inputs
 
@@ -219,6 +240,7 @@ jobs:
           module-change-exclude-patterns: .gitignore,*.md,*.tftest.hcl,tests/**
           module-asset-exclude-patterns: .gitignore,*.md,*.tftest.hcl,tests/**
           use-ssh-source-format: false
+          module-path-ignore: path/to/ignore1,path/to/ignore2
 ```
 
 ## Outputs

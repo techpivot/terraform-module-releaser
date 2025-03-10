@@ -1,5 +1,15 @@
 import { clearConfigForTesting, config, getConfig } from '@/config';
-import { booleanConfigKeys, booleanInputs, requiredInputs, stubInputEnv } from '@/tests/helpers/inputs';
+import {
+  arrayInputs,
+  booleanInputs,
+  inputToConfigKey,
+  inputToConfigKeyMap,
+  optionalInputs,
+  requiredInputs,
+  stringInputs,
+  stubInputEnv,
+} from '@/tests/helpers/inputs';
+import type { Config } from '@/types';
 import { endGroup, getBooleanInput, getInput, info, startGroup } from '@actions/core';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -22,6 +32,30 @@ describe('config', () => {
       it(`should throw error when required input "${input}" is missing`, () => {
         stubInputEnv({ [input]: null });
         expect(() => getConfig()).toThrow(new Error(`Input required and not supplied: ${input}`));
+        expect(getInput).toHaveBeenCalled();
+      });
+    }
+
+    for (const input of optionalInputs) {
+      it(`should handle optional input "${input}" when not present`, () => {
+        stubInputEnv({ [input]: null });
+        // Simply verify it doesn't throw without the specific error object
+        expect(() => getConfig()).not.toThrow();
+
+        // Get the config and check the actual value
+        const config = getConfig();
+        // Get the config key using the mapping directly if possible
+        const configKey = inputToConfigKeyMap[input] || inputToConfigKey(input);
+
+        // Type-safe access using the mapping
+        if (arrayInputs.includes(input)) {
+          // Cast configKey to keyof Config to ensure type safety
+          expect(config[configKey as keyof Config]).toEqual([]);
+        }
+        if (stringInputs.includes(input)) {
+          expect(config[configKey as keyof Config]).toEqual('');
+        }
+
         expect(getInput).toHaveBeenCalled();
       });
     }
@@ -70,8 +104,10 @@ describe('config', () => {
 
         // Check the boolean conversion for each key in booleanInputs
         const config = getConfig();
-        for (const inputKey of booleanConfigKeys) {
-          expect(config[inputKey]).toBe(booleanValue.toLowerCase() === 'true');
+        for (const booleanInput of booleanInputs) {
+          // Get config key from the mapping, which is already typed as keyof Config
+          const configKey = inputToConfigKeyMap[booleanInput];
+          expect(config[configKey]).toBe(booleanValue.toLowerCase() === 'true');
         }
       }
     });
@@ -117,11 +153,11 @@ describe('config', () => {
       expect(config.githubToken).toBe('ghp_test_token_2c6912E7710c838347Ae178B4');
       expect(config.moduleChangeExcludePatterns).toEqual(['.gitignore', '*.md']);
       expect(config.moduleAssetExcludePatterns).toEqual(['tests/**', 'examples/**']);
+      expect(config.modulePathIgnore).toEqual(['tf-modules/kms/examples/complete']);
       expect(config.useSSHSourceFormat).toBe(false);
       expect(startGroup).toHaveBeenCalledWith('Initializing Config');
       expect(startGroup).toHaveBeenCalledTimes(1);
       expect(endGroup).toHaveBeenCalledTimes(1);
-      expect(info).toHaveBeenCalledTimes(11);
       expect(vi.mocked(info).mock.calls).toEqual([
         ['Major Keywords: MAJOR CHANGE, BREAKING CHANGE, !'],
         ['Minor Keywords: feat, feature'],
@@ -131,6 +167,7 @@ describe('config', () => {
         ['Delete Legacy Tags: false'],
         ['Disable Wiki: false'],
         ['Wiki Sidebar Changelog Max: 10'],
+        ['Module Paths to Ignore: tf-modules/kms/examples/complete'],
         ['Module Change Exclude Patterns: .gitignore, *.md'],
         ['Module Asset Exclude Patterns: tests/**, examples/**'],
         ['Use SSH Source Format: false'],
@@ -179,6 +216,12 @@ describe('config', () => {
       const config = getConfig();
       expect(config.majorKeywords).toEqual(['BREAKING CHANGE', '!']);
       expect(config.moduleChangeExcludePatterns).toEqual(['.gitignore', '*.md']);
+    });
+
+    it('should handle empty modulePathIgnore', () => {
+      stubInputEnv({ 'module-path-ignore': '' });
+      const config = getConfig();
+      expect(config.modulePathIgnore).toEqual([]);
     });
   });
 });
