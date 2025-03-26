@@ -47,7 +47,7 @@
   "dependencies": {
     "@actions/core": "^1.11.1",
     "@octokit/core": "^6.1.4",
-    "@octokit/plugin-paginate-rest": "^11.4.3",
+    "@octokit/plugin-paginate-rest": "^11.6.0",
     "@octokit/plugin-rest-endpoint-methods": "^13.3.1",
     "@octokit/request-error": "^6.1.7",
     "minimatch": "^10.0.1",
