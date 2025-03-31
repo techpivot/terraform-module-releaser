@@ -58,7 +58,7 @@
     "@biomejs/biome": "^1.9.4",
     "@octokit/types": "^13.10.0",
     "@octokit/webhooks-types": "^7.6.1",
-    "@types/node": "^22.13.13",
+    "@types/node": "^22.13.14",
     "@types/which": "^3.0.4",
     "@vercel/ncc": "^0.38.3",
     "@vitest/coverage-v8": "^3.0.9",
