@@ -49,7 +49,6 @@ function createModuleChangelogEntry(heading: string, commits: string[]): string 
  */
 export function getPullRequestChangelog(terraformChangedModules: TerraformChangedModule[]): string {
   const pullRequestChangelog: string[] = [];
-  const { prNumber, prTitle } = context;
 
   for (const { nextTag, commitMessages } of terraformChangedModules) {
     pullRequestChangelog.push(createModuleChangelogEntry(nextTag, commitMessages));
@@ -65,7 +64,6 @@ export function getPullRequestChangelog(terraformChangedModules: TerraformChange
  * @returns {string} The content of the module's changelog.
  */
 export function getModuleChangelog(terraformChangedModule: TerraformChangedModule): string {
-  const { prNumber, prTitle, repoUrl } = context;
   const { nextTagVersion, commitMessages } = terraformChangedModule;
 
   return createModuleChangelogEntry(nextTagVersion, commitMessages);
