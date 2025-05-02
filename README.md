@@ -162,21 +162,21 @@ resources.
 While the out-of-the-box defaults are suitable for most use cases, you can further customize the action's behavior by
 configuring the following optional input parameters as needed.
 
-| Input                            | Description                                                                                                                                                                                                                                                                                                                                                                                          | Default                                    |
-| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
-| `major-keywords`                 | Keywords in commit messages that indicate a major release                                                                                                                                                                                                                                                                                                                                            | `major change,breaking change`             |
-| `minor-keywords`                 | Keywords in commit messages that indicate a minor release                                                                                                                                                                                                                                                                                                                                            | `feat,feature`                             |
-| `patch-keywords`                 | Keywords in commit messages that indicate a patch release                                                                                                                                                                                                                                                                                                                                            | `fix,chore,docs`                           |
-| `default-first-tag`              | Specifies the default tag version                                                                                                                                                                                                                                                                                                                                                                    | `v1.0.0`                                   |
-| `terraform-docs-version`         | Specifies the terraform-docs version used to generate documentation for the wiki                                                                                                                                                                                                                                                                                                                     | `v0.19.0`                                  |
-| `delete-legacy-tags`             | Specifies a boolean that determines whether tags and releases from Terraform modules that have been deleted should be automatically removed                                                                                                                                                                                                                                                          | `true`                                     |
-| `disable-wiki`                   | Whether to disable wiki generation for Terraform modules                                                                                                                                                                                                                                                                                                                                             | `false`                                    |
-| `wiki-sidebar-changelog-max`     | An integer that specifies how many changelog entries are displayed in the sidebar per module                                                                                                                                                                                                                                                                                                         | `5`                                        |
-| `disable-branding`               | Controls whether a small branding link to the action's repository is added to PR comments. Recommended to leave enabled to support OSS.                                                                                                                                                                                                                                                              | `false`                                    |
-| `module-path-ignore`             | Comma separated list of module paths to completely ignore (relative to working directory). This will prevent any versioning, release, or documentation for these modules.                                                                                                                                                                                                                            | `` (empty)                                 |
-| `module-change-exclude-patterns` | A comma-separated list of file patterns to exclude from triggering version changes in Terraform modules. Patterns follow glob syntax (e.g., `.gitignore,_.md`) and are relative to each Terraform module directory. Files matching these patterns will not affect version changes. **WARNING**: Avoid excluding '`_.tf`' files, as they are essential for module detection and versioning processes. | `.gitignore, *.md, *.tftest.hcl, tests/**` |
-| `module-asset-exclude-patterns`  | A comma-separated list of file patterns to exclude when bundling a Terraform module for tag/release. Patterns follow glob syntax (e.g., `tests/\*\*`) and are relative to each Terraform module directory. Files matching these patterns will be excluded from the bundled output.                                                                                                                   | `.gitignore, *.md, *.tftest.hcl, tests/**` |
-| `use-ssh-source-format`          | If enabled, all links to source code in generated Wiki documentation will use SSH standard format (e.g., `git::ssh://git@github.com/owner/repo.git`) instead of HTTPS format (`git::https://github.com/owner/repo.git`)                                                                                                                                                                              | `false`                                    |
+| Input                            | Description                                                                                                                                                                                                                                                                                                                                                                                          | Default                                 |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| `major-keywords`                 | Keywords in commit messages that indicate a major release                                                                                                                                                                                                                                                                                                                                            | `major change,breaking change`          |
+| `minor-keywords`                 | Keywords in commit messages that indicate a minor release                                                                                                                                                                                                                                                                                                                                            | `feat,feature`                          |
+| `patch-keywords`                 | Keywords in commit messages that indicate a patch release                                                                                                                                                                                                                                                                                                                                            | `fix,chore,docs`                        |
+| `default-first-tag`              | Specifies the default tag version                                                                                                                                                                                                                                                                                                                                                                    | `v1.0.0`                                |
+| `terraform-docs-version`         | Specifies the terraform-docs version used to generate documentation for the wiki                                                                                                                                                                                                                                                                                                                     | `v0.19.0`                               |
+| `delete-legacy-tags`             | Specifies a boolean that determines whether tags and releases from Terraform modules that have been deleted should be automatically removed                                                                                                                                                                                                                                                          | `true`                                  |
+| `disable-wiki`                   | Whether to disable wiki generation for Terraform modules                                                                                                                                                                                                                                                                                                                                             | `false`                                 |
+| `wiki-sidebar-changelog-max`     | An integer that specifies how many changelog entries are displayed in the sidebar per module                                                                                                                                                                                                                                                                                                         | `5`                                     |
+| `disable-branding`               | Controls whether a small branding link to the action's repository is added to PR comments. Recommended to leave enabled to support OSS.                                                                                                                                                                                                                                                              | `false`                                 |
+| `module-path-ignore`             | A comma-separated list of module paths to completely ignore during processing. Paths matching these patterns will not be considered for versioning, releases, or documentation generation.                                                                                                                                                                                                           | ` ` (empty string)                      |
+| `module-change-exclude-patterns` | A comma-separated list of file patterns to exclude from triggering version changes in Terraform modules. Patterns follow glob syntax (e.g., `.gitignore,_.md`) and are relative to each Terraform module directory. Files matching these patterns will not affect version changes. **WARNING**: Avoid excluding '`_.tf`' files, as they are essential for module detection and versioning processes. | `.gitignore,*.md,*.tftest.hcl,tests/**` |
+| `module-asset-exclude-patterns`  | A comma-separated list of file patterns to exclude when bundling a Terraform module for tag/release. Patterns follow glob syntax (e.g., `tests/\*\*`) and are relative to each Terraform module directory. Files matching these patterns will be excluded from the bundled output.                                                                                                                   | `.gitignore,*.md,*.tftest.hcl,tests/**` |
+| `use-ssh-source-format`          | If enabled, all links to source code in generated Wiki documentation will use SSH standard format (e.g., `git::ssh://git@github.com/owner/repo.git`) instead of HTTPS format (`git::https://github.com/owner/repo.git`)                                                                                                                                                                              | `false`                                 |
 
 ### Understanding the filtering options
 
@@ -188,17 +188,74 @@ configuring the following optional input parameters as needed.
   - Ignoring documentation-focused modules (e.g., `**/docs/**`)
   - Excluding entire directories or paths that contain Terraform files but shouldn't be versioned as modules
 
+  **Important pattern matching notes:**
+
+  - Patterns are relative to the workspace directory (no leading slash)
+  - A pattern like `dir/**` will match files and directories INSIDE `dir` but NOT the `dir` directory itself
+  - To match both a directory and its contents, you need both patterns: `dir,dir/**`
+  - To exclude a specific directory and all its contents, use: `path/to/directory,path/to/directory/**`
+
   Example:
 
   ```yaml
   module-path-ignore: "**/examples/**,**/test/**,root-modules"
   ```
 
+> **Note**:
+
 - **`module-change-exclude-patterns`**: These patterns determine which file changes are _ignored_ when checking if a
   module needs a new release. For example, changes to documentation, examples, or workflow files typically don't require
   a new module release.
+
+  **Key details:**
+
+  - Patterns are relative to each **module directory**, not the workspace root
+  - Uses `matchBase: true` for pattern matching, so `*.md` will match any markdown file in any subdirectory
+  - Applied only after a module is identified but before determining if it needs a version change
+  - Default patterns: `.gitignore, *.md, *.tftest.hcl, tests/**`
+  - Use this for files that should be part of the module but don't affect its functionality
+
+  **Common use cases:**
+
+  - Documentation files (`*.md`, `docs/**`)
+  - Test files (`tests/**`, `*.tftest.hcl`)
+  - Examples (`examples/**`)
+  - Metadata files (`.gitignore`, `.gitattributes`)
+
+  Example:
+
+  ```yaml
+  module-change-exclude-patterns: ".gitignore,*.md,docs/**,examples/**,*.tftest.hcl,tests/**"
+  ```
+
+  > **Warning**: Avoid excluding `*.tf` files, as they are essential for module functionality and versioning.
+
 - **`module-asset-exclude-patterns`**: When building a release asset for a module, these patterns determine which files
   are _excluded_ from the asset. This helps reduce the asset size by omitting test files, examples, documentation, etc.
+
+  **Key details:**
+
+  - Patterns are relative to each **module directory**, not the workspace root
+  - Uses `matchBase: true` for pattern matching (same as `module-change-exclude-patterns`)
+  - Applied during the bundle/archive creation phase for GitHub releases
+  - Default patterns: `.gitignore, *.md, *.tftest.hcl, tests/**`
+  - These patterns do NOT affect versioning decisions - only the contents of release assets
+
+  **Common use cases:**
+
+  - Test directories and files (`tests/**`, `*.tftest.hcl`)
+  - Documentation that's not needed for module functionality (`*.md`)
+  - Development-specific files (`.gitignore`, `CHANGELOG.md`)
+  - Example code that shouldn't be included in the release (`examples/**`)
+
+  Example:
+
+  ```yaml
+  module-asset-exclude-patterns: ".gitignore,*.md,examples/**,tests/**,*.tftest.hcl"
+  ```
+
+  > **Important**: Unlike `module-change-exclude-patterns`, these patterns only affect what goes into the release asset,
+  > not whether a release is triggered.
 
 All pattern matching is implemented using [minimatch](https://github.com/isaacs/minimatch), which supports glob patterns
 similar to those used in `.gitignore` files. For more details on the pattern matching implementation, see our
@@ -237,7 +294,7 @@ jobs:
           delete-legacy-tags: true
           disable-wiki: false
           wiki-sidebar-changelog-max: 10
-          module-change-exclude-patterns: .gitignore,*.md,*.tftest.hcl,tests/**
+          module-change-exclude-patterns: .gitignore,*.md,docs/**,examples/**,*.tftest.hcl,tests/**
           module-asset-exclude-patterns: .gitignore,*.md,*.tftest.hcl,tests/**
           use-ssh-source-format: false
           module-path-ignore: path/to/ignore1,path/to/ignore2
