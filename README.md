@@ -193,15 +193,12 @@ configuring the following optional input parameters as needed.
   - Patterns are relative to the workspace directory (no leading slash)
   - A pattern like `dir/**` will match files and directories INSIDE `dir` but NOT the `dir` directory itself
   - To match both a directory and its contents, you need both patterns: `dir,dir/**`
-  - To exclude a specific directory and all its contents, use: `path/to/directory,path/to/directory/**`
 
   Example:
 
   ```yaml
   module-path-ignore: "**/examples/**,**/test/**,root-modules"
   ```
-
-> **Note**:
 
 - **`module-change-exclude-patterns`**: These patterns determine which file changes are _ignored_ when checking if a
   module needs a new release. For example, changes to documentation, examples, or workflow files typically don't require
@@ -294,10 +291,10 @@ jobs:
           delete-legacy-tags: true
           disable-wiki: false
           wiki-sidebar-changelog-max: 10
+          module-path-ignore: path/to/ignore1,path/to/ignore2
           module-change-exclude-patterns: .gitignore,*.md,docs/**,examples/**,*.tftest.hcl,tests/**
           module-asset-exclude-patterns: .gitignore,*.md,*.tftest.hcl,tests/**
           use-ssh-source-format: false
-          module-path-ignore: path/to/ignore1,path/to/ignore2
 ```
 
 ## Outputs
