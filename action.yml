@@ -69,7 +69,7 @@ inputs:
 
       The minimatch syntax is used for pattern matching. Patterns are relative to the workspace directory (no leading
       slash).
-      
+
       NOTE: To match both a directory and its contents, use separate patterns (e.g., "dir,dir/**").
     required: false
     default: ""
@@ -89,7 +89,7 @@ inputs:
       These patterns follow glob syntax and are relative to each Terraform module directory, not the repository root.
       Files matching these patterns will be excluded from the bundled release archives. Uses matchBase: true for 
       pattern matching, similar to module-change-exclude-patterns.
-      
+
       These patterns only affect what's included in release assets and do not impact versioning decisions.
     required: true
     default: ".gitignore,*.md,*.tftest.hcl,tests/**"
