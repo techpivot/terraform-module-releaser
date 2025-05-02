@@ -61,40 +61,48 @@ inputs:
     required: true
     default: "false"
   module-path-ignore:
-    description: Comma separated list of module paths to completely ignore. This will prevent any versioning, release, or documentation for these modules.
+    description: >
+      A comma-separated list of module paths to completely ignore during processing. Paths matching these patterns will
+      not be considered for versioning, releases, or documentation generation. These patterns follow glob syntax and are 
+      relative to the repository root. Use this to exclude example modules, test modules, or other paths that should not 
+      be treated as releasable modules.
+
+      The minimatch syntax is used for pattern matching. Patterns are relative to the workspace directory (no leading
+      slash).
+
+      NOTE: To match both a directory and its contents, use separate patterns (e.g., "dir,dir/**").
     required: false
     default: ""
   module-change-exclude-patterns:
     description: >
       A comma-separated list of file patterns to exclude from triggering version changes in Terraform modules.
-      These patterns follow glob syntax (e.g., ".gitignore,*.md") and are relative to each Terraform module directory within
-      the repository, rather than the workspace root. Patterns are used for filtering files within module directories, allowing
-      for specific exclusions like documentation or non-Terraform code changes that do not require a version increment.
+      These patterns follow glob syntax and are relative to each Terraform module directory, not the repository root.
+      Files matching these patterns will be tracked in the module but changes to them won't trigger a new version.
+      Uses matchBase: true for pattern matching, so patterns like "*.md" will match files in any subdirectory.
 
-      The minimatch syntax is used for pattern matching. Files matching these patterns will not affect version changes.
-
-      WARNING: Avoid excluding '*.tf' files, as they are essential for module detection and versioning processes.
+      WARNING: Avoid excluding '*.tf' files, as they are essential for module functionality and versioning.
     required: true
     default: ".gitignore,*.md,*.tftest.hcl,tests/**"
   module-asset-exclude-patterns:
     description: >
-      A comma-separated list of file patterns to exclude when bundling a Terraform module for tag/release.
-      These patterns follow glob syntax (e.g., "tests/**") and are relative to each Terraform module directory within
-      the repository. By default, all non-functional Terraform files and directories are excluded to reduce the size of the
-      bundled assets. This helps ensure that any imported file is correctly mapped, while allowing for further exclusions of
-      tests and other non-functional files as needed.
+      A comma-separated list of file patterns to exclude when bundling a Terraform module for release assets.
+      These patterns follow glob syntax and are relative to each Terraform module directory, not the repository root.
+      Files matching these patterns will be excluded from the bundled release archives. Uses matchBase: true for 
+      pattern matching, similar to module-change-exclude-patterns.
 
-      The minimatch syntax is used for pattern matching. Files matching these patterns will be excluded from the bundled output.
+      These patterns only affect what's included in release assets and do not impact versioning decisions.
     required: true
     default: ".gitignore,*.md,*.tftest.hcl,tests/**"
   use-ssh-source-format:
-    description: If enabled, all links to source code in generated Wiki documentation will use SSH format instead of HTTPS format
+    description: >
+      If enabled, all links to source code in generated Wiki documentation will use SSH format instead of HTTPS format.
     required: true
     default: "false"
   github_token:
-    description: |
-      Required for retrieving pull request metadata, tags, releases, updating PR comments, wiki, and creating tags/releases.
-      Automatically injected for convenience; no need to provide a custom token unless you have specific requirements.
+    description: >
+      Required for retrieving pull request metadata, tags, releases, updating PR comments, wiki, and creating 
+      tags/releases. Automatically injected for convenience; no need to provide a custom token unless you have 
+      specific requirements.
     required: true
     default: ${{ github.token }}
 
