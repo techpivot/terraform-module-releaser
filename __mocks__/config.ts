@@ -16,7 +16,7 @@ const defaultConfig: Config = {
   minorKeywords: ['feat', 'feature'],
   patchKeywords: ['fix', 'chore'],
   defaultFirstTag: 'v1.0.0',
-  terraformDocsVersion: 'v0.19.0',
+  terraformDocsVersion: 'v0.20.0',
   deleteLegacyTags: false,
   disableWiki: false,
   wikiSidebarChangelogMax: 10,
