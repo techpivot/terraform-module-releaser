@@ -42,7 +42,8 @@
     "package": "ncc build src/index.ts --source-map -o dist",
     "test": "vitest run --coverage",
     "test:watch": "vitest",
-    "coverage": "make-coverage-badge --output-path ./assets/coverage-badge.svg"
+    "coverage": "make-coverage-badge --output-path ./assets/coverage-badge.svg",
+    "terraform-docs-version": "gh api repos/terraform-docs/terraform-docs/releases/latest --jq '.tag_name'"
   },
   "dependencies": {
     "@actions/core": "^1.11.1",
