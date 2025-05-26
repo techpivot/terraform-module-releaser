@@ -48,7 +48,7 @@
     "@actions/core": "^1.11.1",
     "@octokit/core": "^6.1.5",
     "@octokit/plugin-paginate-rest": "^12.0.0",
-    "@octokit/plugin-rest-endpoint-methods": "^14.0.0",
+    "@octokit/plugin-rest-endpoint-methods": "^16.0.0",
     "@octokit/request-error": "^6.1.7",
     "minimatch": "^10.0.1",
     "p-limit": "^6.2.0",
