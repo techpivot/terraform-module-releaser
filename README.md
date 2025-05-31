@@ -78,12 +78,12 @@ example of how to use this action in a monorepo setup. See real-world usage in a
 Before using this action, you'll need to enable the wiki feature for your repository:
 
 1. Go to your repository's homepage
-2. Navigate to the **Settings** tab
-3. Under the **Features** section, check the **Wikis** option to enable GitHub Wiki
-4. Click on the **Wiki** tab in your repository
-5. Click **Create the first page** button
-6. Add a simple title (like "Home") and some content
-7. Click **Save Page** to initialize the wiki
+1. Navigate to the **Settings** tab
+1. Under the **Features** section, check the **Wikis** option to enable GitHub Wiki
+1. Click on the **Wiki** tab in your repository
+1. Click **Create the first page** button
+1. Add a simple title (like "Home") and some content
+1. Click **Save Page** to initialize the wiki
 
 > This initialization step is necessary because GitHub doesn't provide an API to programmatically enable or initialize
 > the wiki.

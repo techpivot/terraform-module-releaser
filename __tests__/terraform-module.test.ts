@@ -1,12 +1,19 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { config } from '@/mocks/config';
 import { context } from '@/mocks/context';
-import { getAllTerraformModules } from '@/terraform-module';
-import type { CommitDetails, GitHubRelease } from '@/types';
+import {
+  getAllTerraformModules,
+  getTerraformChangedModules,
+  getTerraformModulesToRemove,
+  isChangedModule,
+} from '@/terraform-module';
+import type { CommitDetails, GitHubRelease, TerraformChangedModule, TerraformModule } from '@/types';
 import { endGroup, info, startGroup } from '@actions/core';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 describe('terraform-module', () => {
-  /*
   describe('isChangedModule()', () => {
     it('should identify changed terraform modules correctly', () => {
       const changedModule: TerraformChangedModule = {
@@ -134,7 +141,6 @@ describe('terraform-module', () => {
       expect(vi.mocked(info)).toHaveBeenCalledWith('Found 1 changed Terraform module.');
     });
   });
-*/
 
   describe('getAllTerraformModules', () => {
     const workspaceDir = process.cwd();
