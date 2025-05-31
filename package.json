@@ -42,14 +42,15 @@
     "package": "ncc build src/index.ts --source-map -o dist",
     "test": "vitest run --coverage",
     "test:watch": "vitest",
-    "coverage": "make-coverage-badge --output-path ./assets/coverage-badge.svg"
+    "coverage": "make-coverage-badge --output-path ./assets/coverage-badge.svg",
+    "terraform-docs-version": "gh api repos/terraform-docs/terraform-docs/releases/latest --jq '.tag_name'"
   },
   "dependencies": {
     "@actions/core": "^1.11.1",
-    "@octokit/core": "^6.1.5",
-    "@octokit/plugin-paginate-rest": "^12.0.0",
-    "@octokit/plugin-rest-endpoint-methods": "^14.0.0",
-    "@octokit/request-error": "^6.1.7",
+    "@octokit/core": "^7.0.2",
+    "@octokit/plugin-paginate-rest": "^13.0.1",
+    "@octokit/plugin-rest-endpoint-methods": "^16.0.0",
+    "@octokit/request-error": "^7.0.0",
     "minimatch": "^10.0.1",
     "p-limit": "^6.2.0",
     "which": "^5.0.0"
@@ -58,7 +59,7 @@
     "@biomejs/biome": "^1.9.4",
     "@octokit/types": "^14.0.0",
     "@octokit/webhooks-types": "^7.6.1",
-    "@types/node": "^22.15.17",
+    "@types/node": "^22.15.29",
     "@types/which": "^3.0.4",
     "@vercel/ncc": "^0.38.3",
     "@vitest/coverage-v8": "^3.1.3",

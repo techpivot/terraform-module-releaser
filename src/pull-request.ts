@@ -2,7 +2,13 @@ import { getPullRequestChangelog } from '@/changelog';
 import { config } from '@/config';
 import { context } from '@/context';
 import type { CommitDetails, GitHubRelease, ReleasePlanCommentOptions, TerraformChangedModule } from '@/types';
-import { BRANDING_COMMENT, GITHUB_ACTIONS_BOT_USER_ID, PR_RELEASE_MARKER, PR_SUMMARY_MARKER } from '@/utils/constants';
+import {
+  BRANDING_COMMENT,
+  GITHUB_ACTIONS_BOT_USER_ID,
+  PROJECT_URL,
+  PR_RELEASE_MARKER,
+  PR_SUMMARY_MARKER,
+} from '@/utils/constants';
 import { WikiStatus, getWikiLink } from '@/wiki';
 import { debug, endGroup, info, startGroup } from '@actions/core';
 import { RequestError } from '@octokit/request-error';
@@ -233,38 +239,56 @@ export async function addReleasePlanComment(
       }
     }
 
-    // Wiki Check
-    switch (wikiStatus.status) {
-      case WikiStatus.SUCCESS:
-        commentBody.push(
-          '\n> #### ✅ Wiki Check <sup><a href="#" title="Wiki enabled and CI can checkout wiki repo">ℹ️</a></sup>',
-        );
-        break;
-      case WikiStatus.FAILURE:
-        commentBody.push(
-          `\n> #### ⚠️ Wiki Check: Failed to checkout wiki. ${wikiStatus.errorMessage}<br><br>Please consult the README for additional information and review logs in the latest GitHub workflow run.`,
-        );
-        break;
-      case WikiStatus.DISABLED:
-        commentBody.push('\n> ##### 🚫 Wiki Check: Generation is disabled.');
-        break;
-    }
-
-    // Modules to Remove
-    if (terraformModuleNamesToRemove.length > 0) {
-      commentBody.push(
-        `\n> **Note**: The following Terraform modules no longer exist in source; however, corresponding tags/releases exist.${
-          config.deleteLegacyTags
-            ? ' Automation tag/release deletion is **enabled** and corresponding tags/releases will be automatically deleted.<br>'
-            : ' Automation tag/release deletion is **disabled** — **no** subsequent action will take place.<br>'
-        }`,
-      );
-      commentBody.push(terraformModuleNamesToRemove.map((moduleName) => `\`${moduleName}\``).join(', '));
-    }
-
     // Changelog
     if (terraformChangedModules.length > 0) {
       commentBody.push('\n# Changelog\n', getPullRequestChangelog(terraformChangedModules));
+    }
+
+    // Wiki Status
+    commentBody.push(
+      '\n## Wiki Status <sup><a href="#" title="Checks to ensure that the Wiki is enabled and properly initialized">ℹ️</a></sup>',
+    );
+    switch (wikiStatus.status) {
+      case WikiStatus.DISABLED:
+        commentBody.push('🚫 Wiki generation **disabled** via `disable-wiki` flag.');
+        break;
+      case WikiStatus.SUCCESS:
+        commentBody.push('✅ Enabled');
+        break;
+      case WikiStatus.FAILURE:
+        commentBody.push('**⚠️ Failed to checkout wiki:**');
+        commentBody.push('```');
+        commentBody.push(`${wikiStatus.errorMessage}`);
+        commentBody.push('```');
+        commentBody.push(
+          `Please consult the [README.md](${PROJECT_URL}/blob/main/README.md#getting-started) for additional information (**Ensure the Wiki is initialized**).`,
+        );
+        break;
+    }
+
+    // Automated Tag Cleanup
+    commentBody.push(
+      '\n## Automated Tag Cleanup <sup><a href="#" title="Controls whether obsolete tags and releases will be automatically deleted">ℹ️</a></sup>',
+    );
+
+    // Modules to Remove
+    if (!config.deleteLegacyTags) {
+      commentBody.push(
+        '🚫 Existing tags and releases will be **preserved** as the `delete-legacy-tags` flag is disabled.',
+      );
+    } else if (terraformModuleNamesToRemove.length === 0) {
+      commentBody.push('✅ All tags and releases are synchronized with the codebase. No cleanup required.');
+    } else {
+      if (terraformModuleNamesToRemove.length === 1) {
+        commentBody.push(
+          '**⚠️ The following module no longer exists in source but has tags/releases. $\\color{Red}{\\textsf{It will be automatically deleted.}}$**',
+        );
+      } else {
+        commentBody.push(
+          '**⚠️ The following modules no longer exist in source but have tags/releases. $\\color{Red}{\\textsf{They will be automatically deleted.}}$**',
+        );
+      }
+      commentBody.push(terraformModuleNamesToRemove.map((moduleName) => `- \`${moduleName}\``).join('\n'));
     }
 
     // Branding

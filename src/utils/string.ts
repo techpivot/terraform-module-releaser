@@ -31,19 +31,28 @@ export function trimSlashes(str: string): string {
 }
 
 /**
- * Removes trailing dots from a string without using regex.
+ * Removes trailing characters from a string without using regex.
  *
  * This function iteratively checks each character from the end of the string
- * and removes any consecutive dots at the end. It uses a direct character-by-character
- * approach instead of regex to avoid potential backtracking issues and ensure
- * consistent O(n) performance.
+ * and removes any consecutive characters that match the specified characters to remove.
+ * It uses a direct character-by-character approach instead of regex to avoid potential
+ * backtracking issues and ensure consistent O(n) performance.
  *
  * @param {string} input - The string to process
- * @returns {string} The input string with all trailing dots removed
+ * @param {string[]} charactersToRemove - Array of characters to remove from the end
+ * @returns {string} The input string with all trailing specified characters removed
+ *
+ * @example
+ * // Returns "example"
+ * removeTrailingCharacters("example...", ["."])
+ *
+ * @example
+ * // Returns "module-name"
+ * removeTrailingCharacters("module-name-_.", [".", "-", "_"])
  */
-export function removeTrailingDots(input: string) {
+export function removeTrailingCharacters(input: string, charactersToRemove: string[]): string {
   let endIndex = input.length;
-  while (endIndex > 0 && input[endIndex - 1] === '.') {
+  while (endIndex > 0 && charactersToRemove.includes(input[endIndex - 1])) {
     endIndex--;
   }
   return input.slice(0, endIndex);

@@ -31,6 +31,12 @@ function getRequiredEnvironmentVar(name: string): string {
   return value;
 }
 
+// Returns the API URL. For example: https://api.github.com.
+// Some environments this may not be set. Ensure we specify
+function getApiBaseUrl(): string {
+  return process.env.GITHUB_API_URL || 'https://api.github.com';
+}
+
 /**
  * Additional type guard to check if an object is a valid PullRequestEvent. By definition, we know that
  * because the GITHUB_EVENT_NAME is "pull_request" the payload will be a PullRequestEvent. However,
@@ -93,10 +99,12 @@ function initializeContext(): Context {
 
     // Get required environment variables
     const eventName = getRequiredEnvironmentVar('GITHUB_EVENT_NAME');
-    const serverUrl = getRequiredEnvironmentVar('GITHUB_SERVER_URL');
+    const serverUrl = getRequiredEnvironmentVar('GITHUB_SERVER_URL'); // https://github.techpivot.com | https://github.com
+    const apiUrl = getApiBaseUrl(); // https://github.techpivot.com/api/v3 | https://api.github.com
     const repository = getRequiredEnvironmentVar('GITHUB_REPOSITORY');
     const eventPath = getRequiredEnvironmentVar('GITHUB_EVENT_PATH');
     const workspaceDir = getRequiredEnvironmentVar('GITHUB_WORKSPACE');
+
     const [owner, repo] = repository.split('/');
 
     if (eventName !== 'pull_request') {
@@ -123,6 +131,7 @@ function initializeContext(): Context {
       repo: { owner, repo },
       repoUrl: `${serverUrl}/${owner}/${repo}`,
       octokit: new OctokitRestApi({
+        baseUrl: apiUrl,
         auth: `token ${config.githubToken}`,
         userAgent: `[octokit] terraform-module-releaser/${version} (${homepage})`,
       }),
@@ -138,6 +147,8 @@ function initializeContext(): Context {
       contextInstance.prBody?.length > 60 ? `${contextInstance.prBody.slice(0, 57)}...` : contextInstance.prBody;
 
     info(`Event Name: ${eventName}`);
+    info(`GitHub Server URL: ${serverUrl}`);
+    info(`GitHub API URL: ${apiUrl}`);
     info(`Repository: ${contextInstance.repo.owner}/${contextInstance.repo.repo}`);
     info(`Repository URL: ${contextInstance.repoUrl}`);
     info(`Pull Request Number: ${contextInstance.prNumber}`);
