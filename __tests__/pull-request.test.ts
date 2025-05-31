@@ -444,16 +444,12 @@ describe('pull-request', () => {
 
       expect(context.octokit.rest.issues.createComment).toHaveBeenCalledWith(
         expect.objectContaining({
-          body: expect.stringContaining(
-            '**Note**: The following Terraform modules no longer exist in source; however, corresponding tags/releases exist.',
-          ),
+          body: expect.stringContaining('**⚠️ The following module no longer exists in source but has tags/releases.'),
         }),
       );
       expect(context.octokit.rest.issues.createComment).toHaveBeenCalledWith(
         expect.objectContaining({
-          body: expect.stringContaining(
-            'Automation tag/release deletion is **enabled** and corresponding tags/releases will be automatically deleted.<br>',
-          ),
+          body: expect.stringContaining('$\\color{Red}{\\textsf{It will be automatically deleted.}}$'),
         }),
       );
 
@@ -464,16 +460,7 @@ describe('pull-request', () => {
 
       expect(context.octokit.rest.issues.createComment).toHaveBeenCalledWith(
         expect.objectContaining({
-          body: expect.stringContaining(
-            '**Note**: The following Terraform modules no longer exist in source; however, corresponding tags/releases exist.',
-          ),
-        }),
-      );
-      expect(context.octokit.rest.issues.createComment).toHaveBeenCalledWith(
-        expect.objectContaining({
-          body: expect.stringContaining(
-            'Automation tag/release deletion is **disabled** — **no** subsequent action will take place.<br>',
-          ),
+          body: expect.stringContaining('🚫 Existing tags and releases will be **preserved**'),
         }),
       );
     });
@@ -503,37 +490,66 @@ describe('pull-request', () => {
       );
     });
 
-    it('should include modules to remove when specified', async () => {
+    it('should include modules to remove when flag enabeld ', async () => {
       const modulesToRemove = ['legacy-module1', 'legacy-module2'];
 
       stubOctokitReturnData('issues.createComment', {
         data: { id: 1, html_url: 'https://github.com/org/repo/pull/1#issuecomment-1' },
       });
       stubOctokitReturnData('issues.listComments', { data: [] });
+      config.set({ deleteLegacyTags: true });
 
       await addReleasePlanComment([], modulesToRemove, { status: WikiStatus.SUCCESS });
 
       expect(context.octokit.rest.issues.createComment).toHaveBeenCalledWith(
         expect.objectContaining({
-          body: expect.stringContaining('`legacy-module1`, `legacy-module2`'),
+          body: expect.stringContaining('- `legacy-module1`'),
         }),
       );
+      expect(context.octokit.rest.issues.createComment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: expect.stringContaining('- `legacy-module2`'),
+        }),
+      );
+    });
+
+    it('should not include modules to remove when flag disabled ', async () => {
+      const modulesToRemove = ['legacy-module1', 'legacy-module2'];
+
+      stubOctokitReturnData('issues.createComment', {
+        data: { id: 1, html_url: 'https://github.com/org/repo/pull/1#issuecomment-1' },
+      });
+      stubOctokitReturnData('issues.listComments', { data: [] });
+      config.set({ deleteLegacyTags: false });
+
+      await addReleasePlanComment([], modulesToRemove, { status: WikiStatus.SUCCESS });
+
+      const createCommentCalls = vi.mocked(context.octokit.rest.issues.createComment).mock.calls;
+      expect(createCommentCalls.length).toBeGreaterThanOrEqual(1);
+
+      // Get the comment body text from the first call
+      const commentBody = createCommentCalls[0]?.[0]?.body as string;
+
+      // Ensure both modules are not included in the body
+      expect(commentBody).not.toContain('`legacy-module1`');
+      expect(commentBody).not.toContain('`legacy-module2`');
+      expect(commentBody).toContain('🚫 Existing tags and releases will be **preserved**');
     });
 
     it('should handle different wiki statuses', async () => {
       const cases = [
         {
           status: WikiStatus.SUCCESS,
-          expectedContent: '✅ Wiki Check',
+          expectedContent: '✅ Enabled',
         },
         {
           status: WikiStatus.FAILURE,
           errorMessage: 'Failed to clone',
-          expectedContent: '⚠️ Wiki Check: Failed to checkout wiki.',
+          expectedContent: '**⚠️ Failed to checkout wiki:**',
         },
         {
           status: WikiStatus.DISABLED,
-          expectedContent: '🚫 Wiki Check: Generation is disabled',
+          expectedContent: '🚫 Wiki generation **disabled** via `disable-wiki` flag.',
         },
       ];
 

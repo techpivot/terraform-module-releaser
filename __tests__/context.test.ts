@@ -185,14 +185,14 @@ describe('context', () => {
       const getterRepo = getContext().repo;
       expect(proxyRepo).toEqual(getterRepo);
       expect(startGroup).toHaveBeenCalledWith('Initializing Context');
-      expect(info).toHaveBeenCalledTimes(9);
+      expect(info).toHaveBeenCalledTimes(11);
 
       // Reset mock call counts/history via mockClear()
       vi.mocked(info).mockClear();
       vi.mocked(startGroup).mockClear();
 
       // Second access should not trigger initialization
-      const prNumber = context.prNumber;
+      const prNumber = context.prNumber; // Intentionally access a property with no usage
       expect(startGroup).not.toHaveBeenCalled();
       expect(info).not.toHaveBeenCalled();
     });
