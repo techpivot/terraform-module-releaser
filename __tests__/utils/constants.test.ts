@@ -32,12 +32,12 @@ describe('constants', () => {
   });
 
   it('should have the correct branding comment HTML', () => {
-    const expectedBrandingComment = `<h4 align="center"><sub align="middle">Powered by <img src="https://raw.githubusercontent.com/techpivot/terraform-module-releaser/refs/heads/main/assets/github-mark-top-padding.png" height="16" width="12" align="top" /> <a href="${PROJECT_URL}">techpivot/terraform-module-releaser</a></sub></h4>`;
+    const expectedBrandingComment = `<h4 align="center"><sub align="middle">Powered by:&nbsp;&nbsp;<a href="${PROJECT_URL}"><img src="https://raw.githubusercontent.com/techpivot/terraform-module-releaser/refs/heads/main/assets/octicons-mark-github.svg" height="12" width="12" align="center" /></a> <a href="${PROJECT_URL}">techpivot/terraform-module-releaser</a></sub></h4>`;
     expect(BRANDING_COMMENT).toBe(expectedBrandingComment);
   });
 
   it('should have the correct branding wiki HTML', () => {
-    const expectedBrandingWiki = `<h4 align="center">Powered by <img src="https://raw.githubusercontent.com/techpivot/terraform-module-releaser/refs/heads/main/assets/github-mark-12x14.png" height="14" width="12" align="top" /> <a href="${PROJECT_URL}">techpivot/terraform-module-releaser</a></h4>`;
+    const expectedBrandingWiki = `<h3 align="center">Powered by:&nbsp;&nbsp;<a href="${PROJECT_URL}"><img src="https://raw.githubusercontent.com/techpivot/terraform-module-releaser/refs/heads/main/assets/octicons-mark-github.svg" height="14" width="14" align="center" /></a> <a href="${PROJECT_URL}">techpivot/terraform-module-releaser</a></h3>`;
     expect(BRANDING_WIKI).toBe(expectedBrandingWiki);
   });
 

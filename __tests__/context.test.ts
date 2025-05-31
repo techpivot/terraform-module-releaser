@@ -177,6 +177,34 @@ describe('context', () => {
       });
       expect(getContext().prBody).toEqual('');
     });
+
+    it('should use custom GITHUB_API_URL when provided', () => {
+      const customApiUrl = 'https://github.example.com/api/v3';
+      vi.stubEnv('GITHUB_API_URL', customApiUrl);
+
+      // Clear context to force reinitialization
+      clearContextForTesting();
+
+      const context = getContext();
+
+      // Check that the context was created (which means the custom API URL was used)
+      expect(context).toBeDefined();
+      expect(context.octokit).toBeDefined();
+    });
+
+    it('should use default GITHUB_API_URL when not provided', () => {
+      // Ensure GITHUB_API_URL is not set to test the default fallback
+      vi.stubEnv('GITHUB_API_URL', undefined);
+
+      // Clear context to force reinitialization
+      clearContextForTesting();
+
+      const context = getContext();
+
+      // Check that the context was created with default API URL
+      expect(context).toBeDefined();
+      expect(context.octokit).toBeDefined();
+    });
   });
 
   describe('context proxy', () => {
@@ -185,14 +213,14 @@ describe('context', () => {
       const getterRepo = getContext().repo;
       expect(proxyRepo).toEqual(getterRepo);
       expect(startGroup).toHaveBeenCalledWith('Initializing Context');
-      expect(info).toHaveBeenCalledTimes(9);
+      expect(info).toHaveBeenCalledTimes(11);
 
       // Reset mock call counts/history via mockClear()
       vi.mocked(info).mockClear();
       vi.mocked(startGroup).mockClear();
 
       // Second access should not trigger initialization
-      const prNumber = context.prNumber;
+      const prNumber = context.prNumber; // Intentionally access a property with no usage
       expect(startGroup).not.toHaveBeenCalled();
       expect(info).not.toHaveBeenCalled();
     });

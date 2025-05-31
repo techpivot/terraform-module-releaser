@@ -102,9 +102,9 @@ Content Guidelines:
 
 Technical Details:
 - Extract first line of commit messages before any dash (-) or line break
-- Include author as @username only for significant contributions (not minor fixes)
-- Include PR numbers matching exact pattern #\d+ (e.g., #123) - never use commit hashes
-- If no PR/issue number found, omit entirely
+- Include author as @username if available in the author field
+- Use pullRequest.number for PR references (e.g., #123) when available
+- If no pull request associated with commit, omit PR reference entirely
 - Skip sections with no meaningful content
 - Use contextual emojis that relate to the specific change, not just the section
 - Never use H4 headings

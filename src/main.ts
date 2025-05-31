@@ -107,16 +107,45 @@ async function handleMergeEvent(
 }
 
 /**
- * Entry point for the GitHub Action. Determines the flow based on whether the event
- * is a pull request or a merge, and executes the appropriate operations.
+ * Executes the main process of the terraform-module-releaser action.
  *
- * @returns {Promise<void>} Resolves when the action completes successfully or fails.
+ * This function handles the Terraform module release workflow by:
+ * 1. Checking if a release comment already exists to prevent duplicate releases
+ * 2. Collecting pull request commits, tags, and existing releases
+ * 3. Identifying Terraform modules and which ones have changed
+ * 4. Determining modules that need to be removed
+ * 5. Handling either release planning (commenting on PR) or the actual merge event
+ * 6. Setting GitHub Action outputs with information about changed and all modules
+ *
+ * The function sets the following outputs:
+ * - changed-module-names: Names of modules that changed
+ * - changed-module-paths: Paths to modules that changed
+ * - changed-modules-map: Detailed map of changed modules with metadata
+ * - all-module-names: Names of all detected modules
+ * - all-module-paths: Paths to all detected modules
+ * - all-modules-map: Detailed map of all modules with metadata
+ *
+ * @returns {Promise<void>} A promise that resolves when the process completes
+ * @throws Will capture and report any errors through setFailed
  */
 export async function run(): Promise<void> {
   try {
     const { config, context } = initialize();
 
     if (await hasReleaseComment()) {
+      // Prevent duplicate releases by checking for existing release comments.
+      // This serves as a lightweight state mechanism for the Terraform Release Action.
+      // When a release is completed, a comment is added to the PR. If this comment exists,
+      // it indicates the release has already been processed, preventing:
+      // - Manual workflow re-runs from creating duplicate releases
+      // - Automatic workflow retries from re-releasing the same modules
+      // - Race conditions in concurrent workflow executions
+      //
+      // This approach is preferred over artifact storage as it requires no additional
+      // dependencies, storage permissions, or cleanup - the comment persists with the PR
+      // and provides a clear audit trail of release activity. Another potential solution
+      // might be to add a label to the PR. However, these are easier modified by users
+      // with write permissions while the comment modification would require an admin.
       info('Release comment found. Exiting.');
       return;
     }
