@@ -38,8 +38,11 @@ const WIKI_SUBDIRECTORY_NAME = '.wiki';
  * for the wiki is created if it doesn't already exist. If the wiki does not exist or is not enabled,
  * an error will be caught and logged.
  *
- * Note: It's important we clone via SSH and not HTTPS. Will likely need to test cloning this for
- * self-hosted GitHub enterprise on custom domain as this hasn't been done.
+ * Note: We clone using HTTPS using the credentials associated with the specified GITHUB_TOKEN.
+ *
+ * Unfortunately, there is no API endpoint provided by GitHub to programmatically enable the Wiki
+ * feature or initialize the .wiki repository. The REST API can only interact with the Wiki once it
+ * has been manually enabled.
  *
  * @throws {Error} If the `git clone` command fails due to issues such as the wiki not existing.
  */
@@ -78,9 +81,14 @@ export function checkoutWiki(): void {
   }
 
   info('Configuring authentication');
+
+  // Note: Extract the domain from serverUrl for the extraheader configuration (Same as pulling from the env Server URL)
+  const serverDomain = new URL(context.repoUrl).hostname;
+  const extraHeaderKey = `http.https://${serverDomain}/.extraheader`;
   const basicCredential = Buffer.from(`x-access-token:${config.githubToken}`, 'utf8').toString('base64');
+
   try {
-    execFileSync(gitPath, ['config', '--local', '--unset-all', 'http.https://github.com/.extraheader'], execWikiOpts);
+    execFileSync(gitPath, ['config', '--local', '--unset-all', extraHeaderKey], execWikiOpts);
   } catch (error) {
     // Type guard to ensure we're handling the correct error type
     // Only ignore specific status code if needed
@@ -89,11 +97,7 @@ export function checkoutWiki(): void {
     }
   }
 
-  execFileSync(
-    gitPath,
-    ['config', '--local', 'http.https://github.com/.extraheader', `Authorization: Basic ${basicCredential}`],
-    execWikiOpts,
-  );
+  execFileSync(gitPath, ['config', '--local', extraHeaderKey, `Authorization: Basic ${basicCredential}`], execWikiOpts);
 
   try {
     info('Fetching the repository');
@@ -201,17 +205,38 @@ export function getWikiLink(moduleName: string, relative = true): string {
 /**
  * Formats the module source URL based on configuration settings.
  *
- * @param repoUrl - The repository URL
- * @param useSSH - Whether to use SSH format
+ * Converts repository URLs to the appropriate format for module sourcing:
+ * - SSH format: ssh://git@hostname/path.git
+ * - HTTPS format: https://hostname/path.git
+ *
+ * @param repoUrl - The repository URL (must be a valid HTTPS URL)
+ * @param useSSH - Whether to use SSH format instead of HTTPS
  * @returns The formatted source URL for the module
+ * @throws {TypeError} When repoUrl is not a valid URL that can be parsed
+ *
+ * @example
+ * ```typescript
+ * // HTTPS format
+ * formatModuleSource('https://github.com/owner/repo', false)
+ * // Returns: 'https://github.com/owner/repo.git'
+ *
+ * // SSH format
+ * formatModuleSource('https://github.techpivot.com/owner/repo', true)
+ * // Returns: 'ssh://git@github.techpivot.com/owner/repo.git'
+ * ```
  */
 function formatModuleSource(repoUrl: string, useSSH: boolean): string {
   if (useSSH) {
+    const url = new URL(repoUrl);
+    const hostname = url.hostname;
+    const pathname = url.pathname;
+
     // Convert HTTPS URL to SSH format
-    // From: https://github.com/owner/repo
-    // To:   ssh://git@github.com/owner/repo
-    return `ssh://${repoUrl.replace(/^https:\/\/github\.com/, 'git@github.com')}.git`;
+    // From: https://github.techpivot.com/owner/repo
+    // To: ssh://git@github.techpivot.com/owner/repo.git
+    return `ssh://git@${hostname}${pathname}.git`;
   }
+
   return `${repoUrl}.git`;
 }
 

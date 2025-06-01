@@ -40,7 +40,7 @@ vi.mock('node:util', () => ({
 }));
 
 describe('terraform-docs', async () => {
-  const terraformDocsVersion = 'v0.19.0';
+  const terraformDocsVersion = 'v0.20.0';
   const mockExecFileSync = vi.mocked(execFileSync);
   const mockWhichSync = vi.mocked(which.sync);
   const fsExistsSyncMock = vi.mocked(existsSync);

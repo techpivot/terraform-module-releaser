@@ -158,7 +158,6 @@ export function removeDirectoryContents(directory: string, exceptions: string[] 
 
     // Skip removal for items listed in the exceptions array
     if (!shouldExcludeFile(directory, itemPath, exceptions)) {
-      //if (!exceptions.includes(item)) {
       rmSync(itemPath, { recursive: true, force: true });
     }
   }

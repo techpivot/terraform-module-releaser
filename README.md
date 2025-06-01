@@ -23,6 +23,9 @@ maintains independence while living in the same repository, with proper isolatio
 Additionally, the action generates a beautifully crafted wiki for each module, complete with readme information, usage
 examples, Terraform-docs details, and a full changelog.
 
+Compatible with both GitHub.com and GitHub Enterprise Server (GHES) – works seamlessly in cloud and on-premises
+environments.
+
 ## 🚀 Features
 
 - **Efficient Module Tagging** – Only includes module directory content, dramatically improving Terraform performance.
@@ -70,17 +73,20 @@ example of how to use this action in a monorepo setup. See real-world usage in a
 
 ## Getting Started
 
-### Step 1: Ensure GitHub Wiki is Enabled
+### Step 1: Enable and Initialize GitHub Wiki
 
-Before using this action, make sure that the wiki is enabled and initialized for your repository:
+Before using this action, you'll need to enable the wiki feature for your repository:
 
-1. Go to your repository's homepage.
-1. Navigate to the **Settings** tab.
-1. Under the **Features** section, ensure the **Wikis** option is checked to enable the GitHub Wiki.
-1. Navigate to the **Wiki** tab on your repository.
-1. Click the **Create the first page** button and add a basic title like **Home** to initialize the wiki with an initial
-   commit.
-1. Save the changes to ensure your wiki is not empty when the GitHub Action updates it with module information.
+1. Go to your repository's homepage
+1. Navigate to the **Settings** tab
+1. Under the **Features** section, check the **Wikis** option to enable GitHub Wiki
+1. Click on the **Wiki** tab in your repository
+1. Click **Create the first page** button
+1. Add a simple title (like "Home") and some content
+1. Click **Save Page** to initialize the wiki
+
+> This initialization step is necessary because GitHub doesn't provide an API to programmatically enable or initialize
+> the wiki.
 
 ### Step 2: Configure the Action
 
@@ -115,6 +121,22 @@ This configuration provides an out-of-the-box solution that should work for most
 reasonably configured.
 
 If you need to customize additional parameters, please refer to [Input Parameters](#input-parameters) section below.
+
+## GitHub Enterprise Server (GHES) Support
+
+This action is fully compatible with GitHub Enterprise Server deployments:
+
+- **Automatic Detection**: The action automatically detects when running on GHES and adjusts API endpoints accordingly
+- **Wiki Generation**: Full wiki support works on GHES instances with wiki features enabled
+- **Release Management**: Creates releases and tags using your GHES instance's API
+- **No Additional Configuration**: Works out-of-the-box on GHES without requiring special configuration
+- **SSH Source Format**: Use the use-ssh-source-format parameter for GHES environments that prefer SSH-based Git URLs
+
+### GHES Requirements
+
+- GitHub Enterprise Server version that supports GitHub Actions
+- Wiki feature enabled on your GHES instance (contact your administrator if wikis are disabled)
+- Appropriate permissions for the GitHub Actions runner to access repository features
 
 ## Permissions
 
@@ -360,7 +382,7 @@ by Piotr Krukowski.
 - **100% GitHub-based**: This action has no external dependencies, eliminating the need for additional authentication
   and complexity. Unlike earlier variations that stored built module assets in external services like Amazon S3, this
   action keeps everything within GitHub, providing a self-contained and streamlined solution for managing Terraform
-  modules.
+  modules. Works seamlessly with both GitHub.com and GitHub Enterprise Server environments.
 - **Pull Request-based workflow**: This action runs on the pull_request event, using pull request comments to track
   permanent releases tied to commits. This method ensures persistence, unlike Action Artifacts, which expire. As a
   result, the module does not support non-PR workflows, such as direct pushes to the default branch.

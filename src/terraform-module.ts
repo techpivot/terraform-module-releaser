@@ -5,7 +5,7 @@ import { context } from '@/context';
 import type { CommitDetails, GitHubRelease, TerraformChangedModule, TerraformModule } from '@/types';
 import { isTerraformDirectory, shouldExcludeFile, shouldIgnoreModulePath } from '@/utils/file';
 import { determineReleaseType, getNextTagVersion } from '@/utils/semver';
-import { removeTrailingDots } from '@/utils/string';
+import { removeTrailingCharacters } from '@/utils/string';
 import { debug, endGroup, info, startGroup } from '@actions/core';
 
 /**
@@ -62,7 +62,7 @@ function getTerraformModuleNameFromRelativePath(terraformDirectory: string): str
     .replace(/\s+/g, '') // Remove any remaining whitespace
     .toLowerCase(); // All of our module names will be lowercase
 
-  return removeTrailingDots(cleanedDirectory);
+  return removeTrailingCharacters(cleanedDirectory, ['.', '-', '_']);
 }
 
 /**
@@ -161,7 +161,6 @@ function getReleasesForModule(moduleName: string, allReleases: GitHubRelease[]):
  *   change details.
  * @throws {Error} - If a module associated with a file is missing from the terraformModulesMap.
  */
-
 export function getAllTerraformModules(
   commits: CommitDetails[],
   allTags: string[],
@@ -278,6 +277,36 @@ export function getAllTerraformModules(
     }
   }
 
+  // Handle initial release scenario: Mark modules for release if they have no existing tags/releases
+  // This ensures that on the first run of this action, all discovered modules get released even if
+  // they weren't modified in the current commit(s). This is necessary because:
+  //  - New repositories may have existing modules that need initial releases
+  //  - Modules without any version history should be tagged with an initial version
+  //  - This allows the action to work correctly on repositories being set up for the first time
+  for (const [moduleName, module] of Object.entries(terraformModulesMap)) {
+    // Only process modules that:
+    // - Haven't been marked as changed by commit analysis above
+    // - Have no existing tags (indicating they've never been released)
+    if (!isChangedModule(module) && module.tags.length === 0) {
+      info(`Marking module '${moduleName}' for initial release (no existing tags found)`);
+
+      // Convert the TerraformModule to TerraformChangedModule for initial release
+      const releaseType = 'patch'; // Use patch for initial releases (can be configured via config.defaultFirstTag)
+      const nextTagVersion = getNextTagVersion(null, releaseType);
+
+      Object.assign(module, {
+        isChanged: true,
+        // Empty commit messages array for initial releases. Originally set to ['Initial release'],
+        // but since the changelog generation function automatically includes PR information,
+        // we leave this empty to avoid redundant messaging in the release notes.
+        commitMessages: [],
+        releaseType,
+        nextTag: `${moduleName}/${nextTagVersion}`,
+        nextTagVersion,
+      });
+    }
+  }
+
   // Sort terraform modules by module name
   const sortedTerraformModules = Object.values(terraformModulesMap)
     .slice()
@@ -332,8 +361,10 @@ export function getTerraformModulesToRemove(allTags: string[], terraformModules:
   // Get an array of all module names from the terraformModules
   const moduleNamesFromModules = terraformModules.map((module) => module.moduleName);
 
-  // Perform a diff between the two arrays to find the module names that need to be removed
-  const moduleNamesToRemove = moduleNamesFromTags.filter((moduleName) => !moduleNamesFromModules.includes(moduleName));
+  // Perform a diff between the two arrays to find the module names that need to be removed and sort
+  const moduleNamesToRemove = moduleNamesFromTags
+    .filter((moduleName) => !moduleNamesFromModules.includes(moduleName))
+    .sort((a, b) => a.localeCompare(b));
 
   info('Terraform modules to remove');
   info(JSON.stringify(moduleNamesToRemove, null, 2));

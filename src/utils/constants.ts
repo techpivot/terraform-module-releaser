@@ -7,9 +7,8 @@ export const PR_RELEASE_MARKER = '<!-- techpivot/terraform-module-releaser — r
 
 export const PROJECT_URL = 'https://github.com/techpivot/terraform-module-releaser';
 
-export const BRANDING_COMMENT = `<h4 align="center"><sub align="middle">Powered by <img src="https://raw.githubusercontent.com/techpivot/terraform-module-releaser/refs/heads/main/assets/github-mark-top-padding.png" height="16" width="12" align="top" /> <a href="${PROJECT_URL}">techpivot/terraform-module-releaser</a></sub></h4>`;
-
-export const BRANDING_WIKI = `<h4 align="center">Powered by <img src="https://raw.githubusercontent.com/techpivot/terraform-module-releaser/refs/heads/main/assets/github-mark-12x14.png" height="14" width="12" align="top" /> <a href="${PROJECT_URL}">techpivot/terraform-module-releaser</a></h4>`;
+export const BRANDING_COMMENT = `<h4 align="center"><sub align="middle">Powered by:&nbsp;&nbsp;<a href="${PROJECT_URL}"><img src="https://raw.githubusercontent.com/techpivot/terraform-module-releaser/refs/heads/main/assets/octicons-mark-github.svg" height="12" width="12" align="center" /></a> <a href="${PROJECT_URL}">techpivot/terraform-module-releaser</a></sub></h4>`;
+export const BRANDING_WIKI = `<h3 align="center">Powered by:&nbsp;&nbsp;<a href="${PROJECT_URL}"><img src="https://raw.githubusercontent.com/techpivot/terraform-module-releaser/refs/heads/main/assets/octicons-mark-github.svg" height="14" width="14" align="center" /></a> <a href="${PROJECT_URL}">techpivot/terraform-module-releaser</a></h3>`;
 
 /**
  * WIKI_TITLE_REPLACEMENTS - This object maps specific characters in wiki titles to visually
