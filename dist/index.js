@@ -9048,7 +9048,7 @@ module.exports = {
 
 
 const { parseSetCookie } = __nccwpck_require__(8915)
-const { stringify, getHeadersList } = __nccwpck_require__(3834)
+const { stringify } = __nccwpck_require__(3834)
 const { webidl } = __nccwpck_require__(4222)
 const { Headers } = __nccwpck_require__(6349)
 
@@ -9124,14 +9124,13 @@ function getSetCookies (headers) {
 
   webidl.brandCheck(headers, Headers, { strict: false })
 
-  const cookies = getHeadersList(headers).cookies
+  const cookies = headers.getSetCookie()
 
   if (!cookies) {
     return []
   }
 
-  // In older versions of undici, cookies is a list of name:value.
-  return cookies.map((pair) => parseSetCookie(Array.isArray(pair) ? pair[1] : pair))
+  return cookies.map((pair) => parseSetCookie(pair))
 }
 
 /**
@@ -9558,13 +9557,14 @@ module.exports = {
 /***/ }),
 
 /***/ 3834:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+/***/ ((module) => {
 
 
 
-const assert = __nccwpck_require__(2613)
-const { kHeadersList } = __nccwpck_require__(6443)
-
+/**
+ * @param {string} value
+ * @returns {boolean}
+ */
 function isCTLExcludingHtab (value) {
   if (value.length === 0) {
     return false
@@ -9825,31 +9825,13 @@ function stringify (cookie) {
   return out.join('; ')
 }
 
-let kHeadersListNode
-
-function getHeadersList (headers) {
-  if (headers[kHeadersList]) {
-    return headers[kHeadersList]
-  }
-
-  if (!kHeadersListNode) {
-    kHeadersListNode = Object.getOwnPropertySymbols(headers).find(
-      (symbol) => symbol.description === 'headers list'
-    )
-
-    assert(kHeadersListNode, 'Headers cannot be parsed')
-  }
-
-  const headersList = headers[kHeadersListNode]
-  assert(headersList)
-
-  return headersList
-}
-
 module.exports = {
   isCTLExcludingHtab,
-  stringify,
-  getHeadersList
+  validateCookieName,
+  validateCookiePath,
+  validateCookieValue,
+  toIMFDate,
+  stringify
 }
 
 
@@ -13840,6 +13822,7 @@ const {
   isValidHeaderName,
   isValidHeaderValue
 } = __nccwpck_require__(5523)
+const util = __nccwpck_require__(9023)
 const { webidl } = __nccwpck_require__(4222)
 const assert = __nccwpck_require__(2613)
 
@@ -14393,6 +14376,9 @@ Object.defineProperties(Headers.prototype, {
   [Symbol.toStringTag]: {
     value: 'Headers',
     configurable: true
+  },
+  [util.inspect.custom]: {
+    enumerable: false
   }
 })
 
@@ -23540,6 +23526,20 @@ class Pool extends PoolBase {
       ? { ...options.interceptors }
       : undefined
     this[kFactory] = factory
+
+    this.on('connectionError', (origin, targets, error) => {
+      // If a connection error occurs, we remove the client from the pool,
+      // and emit a connectionError event. They will not be re-used.
+      // Fixes https://github.com/nodejs/undici/issues/3895
+      for (const target of targets) {
+        // Do not use kRemoveClient here, as it will close the client,
+        // but the client cannot be closed in this state.
+        const idx = this[kClients].indexOf(target)
+        if (idx !== -1) {
+          this[kClients].splice(idx, 1)
+        }
+      }
+    })
   }
 
   [kGetDispatcher] () {
@@ -29274,7 +29274,7 @@ var createTokenAuth = function createTokenAuth2(token) {
 
 
 ;// CONCATENATED MODULE: ./node_modules/@octokit/core/dist-src/version.js
-const version_VERSION = "6.1.4";
+const version_VERSION = "7.0.2";
 
 
 ;// CONCATENATED MODULE: ./node_modules/@octokit/core/dist-src/index.js
@@ -29546,8 +29546,10 @@ var paginatingEndpoints = (/* unused pure expression or super */ null && ([
   "GET /notifications",
   "GET /organizations",
   "GET /orgs/{org}/actions/cache/usage-by-repository",
+  "GET /orgs/{org}/actions/hosted-runners",
   "GET /orgs/{org}/actions/permissions/repositories",
   "GET /orgs/{org}/actions/runner-groups",
+  "GET /orgs/{org}/actions/runner-groups/{runner_group_id}/hosted-runners",
   "GET /orgs/{org}/actions/runner-groups/{runner_group_id}/repositories",
   "GET /orgs/{org}/actions/runner-groups/{runner_group_id}/runners",
   "GET /orgs/{org}/actions/runners",
@@ -29557,6 +29559,7 @@ var paginatingEndpoints = (/* unused pure expression or super */ null && ([
   "GET /orgs/{org}/actions/variables/{name}/repositories",
   "GET /orgs/{org}/attestations/{subject_digest}",
   "GET /orgs/{org}/blocks",
+  "GET /orgs/{org}/campaigns",
   "GET /orgs/{org}/code-scanning/alerts",
   "GET /orgs/{org}/code-security/configurations",
   "GET /orgs/{org}/code-security/configurations/{configuration_id}/repositories",
@@ -29565,7 +29568,6 @@ var paginatingEndpoints = (/* unused pure expression or super */ null && ([
   "GET /orgs/{org}/codespaces/secrets/{secret_name}/repositories",
   "GET /orgs/{org}/copilot/billing/seats",
   "GET /orgs/{org}/copilot/metrics",
-  "GET /orgs/{org}/copilot/usage",
   "GET /orgs/{org}/dependabot/alerts",
   "GET /orgs/{org}/dependabot/secrets",
   "GET /orgs/{org}/dependabot/secrets/{secret_name}/repositories",
@@ -29600,10 +29602,11 @@ var paginatingEndpoints = (/* unused pure expression or super */ null && ([
   "GET /orgs/{org}/repos",
   "GET /orgs/{org}/rulesets",
   "GET /orgs/{org}/rulesets/rule-suites",
+  "GET /orgs/{org}/rulesets/{ruleset_id}/history",
   "GET /orgs/{org}/secret-scanning/alerts",
   "GET /orgs/{org}/security-advisories",
+  "GET /orgs/{org}/settings/network-configurations",
   "GET /orgs/{org}/team/{team_slug}/copilot/metrics",
-  "GET /orgs/{org}/team/{team_slug}/copilot/usage",
   "GET /orgs/{org}/teams",
   "GET /orgs/{org}/teams/{team_slug}/discussions",
   "GET /orgs/{org}/teams/{team_slug}/discussions/{discussion_number}/comments",
@@ -29698,6 +29701,7 @@ var paginatingEndpoints = (/* unused pure expression or super */ null && ([
   "GET /repos/{owner}/{repo}/rules/branches/{branch}",
   "GET /repos/{owner}/{repo}/rulesets",
   "GET /repos/{owner}/{repo}/rulesets/rule-suites",
+  "GET /repos/{owner}/{repo}/rulesets/{ruleset_id}/history",
   "GET /repos/{owner}/{repo}/secret-scanning/alerts",
   "GET /repos/{owner}/{repo}/secret-scanning/alerts/{alert_number}/locations",
   "GET /repos/{owner}/{repo}/security-advisories",
@@ -29793,7 +29797,7 @@ paginateRest.VERSION = plugin_paginate_rest_dist_bundle_VERSION;
 
 
 ;// CONCATENATED MODULE: ./node_modules/@octokit/plugin-rest-endpoint-methods/dist-src/version.js
-const dist_src_version_VERSION = "13.3.1";
+const dist_src_version_VERSION = "16.0.0";
 
 //# sourceMappingURL=version.js.map
 
@@ -29824,6 +29828,7 @@ const Endpoints = {
     createEnvironmentVariable: [
       "POST /repos/{owner}/{repo}/environments/{environment_name}/variables"
     ],
+    createHostedRunnerForOrg: ["POST /orgs/{org}/actions/hosted-runners"],
     createOrUpdateEnvironmentSecret: [
       "PUT /repos/{owner}/{repo}/environments/{environment_name}/secrets/{secret_name}"
     ],
@@ -29860,6 +29865,9 @@ const Endpoints = {
     ],
     deleteEnvironmentVariable: [
       "DELETE /repos/{owner}/{repo}/environments/{environment_name}/variables/{name}"
+    ],
+    deleteHostedRunnerForOrg: [
+      "DELETE /orgs/{org}/actions/hosted-runners/{hosted_runner_id}"
     ],
     deleteOrgSecret: ["DELETE /orgs/{org}/actions/secrets/{secret_name}"],
     deleteOrgVariable: ["DELETE /orgs/{org}/actions/variables/{name}"],
@@ -29949,6 +29957,24 @@ const Endpoints = {
     getGithubActionsPermissionsRepository: [
       "GET /repos/{owner}/{repo}/actions/permissions"
     ],
+    getHostedRunnerForOrg: [
+      "GET /orgs/{org}/actions/hosted-runners/{hosted_runner_id}"
+    ],
+    getHostedRunnersGithubOwnedImagesForOrg: [
+      "GET /orgs/{org}/actions/hosted-runners/images/github-owned"
+    ],
+    getHostedRunnersLimitsForOrg: [
+      "GET /orgs/{org}/actions/hosted-runners/limits"
+    ],
+    getHostedRunnersMachineSpecsForOrg: [
+      "GET /orgs/{org}/actions/hosted-runners/machine-sizes"
+    ],
+    getHostedRunnersPartnerImagesForOrg: [
+      "GET /orgs/{org}/actions/hosted-runners/images/partner"
+    ],
+    getHostedRunnersPlatformsForOrg: [
+      "GET /orgs/{org}/actions/hosted-runners/platforms"
+    ],
     getJobForWorkflowRun: ["GET /repos/{owner}/{repo}/actions/jobs/{job_id}"],
     getOrgPublicKey: ["GET /orgs/{org}/actions/secrets/public-key"],
     getOrgSecret: ["GET /orgs/{org}/actions/secrets/{secret_name}"],
@@ -29992,6 +30018,10 @@ const Endpoints = {
     listEnvironmentVariables: [
       "GET /repos/{owner}/{repo}/environments/{environment_name}/variables"
     ],
+    listGithubHostedRunnersInGroupForOrg: [
+      "GET /orgs/{org}/actions/runner-groups/{runner_group_id}/hosted-runners"
+    ],
+    listHostedRunnersForOrg: ["GET /orgs/{org}/actions/hosted-runners"],
     listJobsForWorkflowRun: [
       "GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs"
     ],
@@ -30109,6 +30139,9 @@ const Endpoints = {
     ],
     updateEnvironmentVariable: [
       "PATCH /repos/{owner}/{repo}/environments/{environment_name}/variables/{name}"
+    ],
+    updateHostedRunnerForOrg: [
+      "PATCH /orgs/{org}/actions/hosted-runners/{hosted_runner_id}"
     ],
     updateOrgVariable: ["PATCH /orgs/{org}/actions/variables/{name}"],
     updateRepoVariable: [
@@ -30240,6 +30273,9 @@ const Endpoints = {
     getGithubBillingUsageReportOrg: [
       "GET /organizations/{org}/settings/billing/usage"
     ],
+    getGithubBillingUsageReportUser: [
+      "GET /users/{username}/settings/billing/usage"
+    ],
     getGithubPackagesBillingOrg: ["GET /orgs/{org}/settings/billing/packages"],
     getGithubPackagesBillingUser: [
       "GET /users/{username}/settings/billing/packages"
@@ -30250,6 +30286,13 @@ const Endpoints = {
     getSharedStorageBillingUser: [
       "GET /users/{username}/settings/billing/shared-storage"
     ]
+  },
+  campaigns: {
+    createCampaign: ["POST /orgs/{org}/campaigns"],
+    deleteCampaign: ["DELETE /orgs/{org}/campaigns/{campaign_number}"],
+    getCampaignSummary: ["GET /orgs/{org}/campaigns/{campaign_number}"],
+    listOrgCampaigns: ["GET /orgs/{org}/campaigns"],
+    updateCampaign: ["PATCH /orgs/{org}/campaigns/{campaign_number}"]
   },
   checks: {
     create: ["POST /repos/{owner}/{repo}/check-runs"],
@@ -30529,10 +30572,9 @@ const Endpoints = {
     getCopilotSeatDetailsForUser: [
       "GET /orgs/{org}/members/{username}/copilot"
     ],
-    listCopilotSeats: ["GET /orgs/{org}/copilot/billing/seats"],
-    usageMetricsForOrg: ["GET /orgs/{org}/copilot/usage"],
-    usageMetricsForTeam: ["GET /orgs/{org}/team/{team_slug}/copilot/usage"]
+    listCopilotSeats: ["GET /orgs/{org}/copilot/billing/seats"]
   },
+  credentials: { revoke: ["POST /credentials/revoke"] },
   dependabot: {
     addSelectedRepoToOrgSecret: [
       "PUT /orgs/{org}/dependabot/secrets/{secret_name}/repositories/{repository_id}"
@@ -30626,6 +30668,26 @@ const Endpoints = {
   gitignore: {
     getAllTemplates: ["GET /gitignore/templates"],
     getTemplate: ["GET /gitignore/templates/{name}"]
+  },
+  hostedCompute: {
+    createNetworkConfigurationForOrg: [
+      "POST /orgs/{org}/settings/network-configurations"
+    ],
+    deleteNetworkConfigurationFromOrg: [
+      "DELETE /orgs/{org}/settings/network-configurations/{network_configuration_id}"
+    ],
+    getNetworkConfigurationForOrg: [
+      "GET /orgs/{org}/settings/network-configurations/{network_configuration_id}"
+    ],
+    getNetworkSettingsForOrg: [
+      "GET /orgs/{org}/settings/network-settings/{network_settings_id}"
+    ],
+    listNetworkConfigurationsForOrg: [
+      "GET /orgs/{org}/settings/network-configurations"
+    ],
+    updateNetworkConfigurationForOrg: [
+      "PATCH /orgs/{org}/settings/network-configurations/{network_configuration_id}"
+    ]
   },
   interactions: {
     getRestrictionsForAuthenticatedUser: ["GET /user/interaction-limits"],
@@ -30818,6 +30880,7 @@ const Endpoints = {
       "PUT /orgs/{org}/outside_collaborators/{username}"
     ],
     createInvitation: ["POST /orgs/{org}/invitations"],
+    createIssueType: ["POST /orgs/{org}/issue-types"],
     createOrUpdateCustomProperties: ["PATCH /orgs/{org}/properties/schema"],
     createOrUpdateCustomPropertiesValuesForRepos: [
       "PATCH /orgs/{org}/properties/values"
@@ -30827,6 +30890,7 @@ const Endpoints = {
     ],
     createWebhook: ["POST /orgs/{org}/hooks"],
     delete: ["DELETE /orgs/{org}"],
+    deleteIssueType: ["DELETE /orgs/{org}/issue-types/{issue_type_id}"],
     deleteWebhook: ["DELETE /orgs/{org}/hooks/{hook_id}"],
     enableOrDisableSecurityProductOnAllOrgRepos: [
       "POST /orgs/{org}/{security_product}/{enablement}",
@@ -30843,6 +30907,10 @@ const Endpoints = {
     getMembershipForAuthenticatedUser: ["GET /user/memberships/orgs/{org}"],
     getMembershipForUser: ["GET /orgs/{org}/memberships/{username}"],
     getOrgRole: ["GET /orgs/{org}/organization-roles/{role_id}"],
+    getOrgRulesetHistory: ["GET /orgs/{org}/rulesets/{ruleset_id}/history"],
+    getOrgRulesetVersion: [
+      "GET /orgs/{org}/rulesets/{ruleset_id}/history/{version_id}"
+    ],
     getWebhook: ["GET /orgs/{org}/hooks/{hook_id}"],
     getWebhookConfigForOrg: ["GET /orgs/{org}/hooks/{hook_id}/config"],
     getWebhookDelivery: [
@@ -30857,6 +30925,7 @@ const Endpoints = {
     listForAuthenticatedUser: ["GET /user/orgs"],
     listForUser: ["GET /users/{username}/orgs"],
     listInvitationTeams: ["GET /orgs/{org}/invitations/{invitation_id}/teams"],
+    listIssueTypes: ["GET /orgs/{org}/issue-types"],
     listMembers: ["GET /orgs/{org}/members"],
     listMembershipsForAuthenticatedUser: ["GET /user/memberships/orgs"],
     listOrgRoleTeams: ["GET /orgs/{org}/organization-roles/{role_id}/teams"],
@@ -30931,6 +31000,7 @@ const Endpoints = {
     ],
     unblockUser: ["DELETE /orgs/{org}/blocks/{username}"],
     update: ["PATCH /orgs/{org}"],
+    updateIssueType: ["PUT /orgs/{org}/issue-types/{issue_type_id}"],
     updateMembershipForAuthenticatedUser: [
       "PATCH /user/memberships/orgs/{org}"
     ],
@@ -31042,37 +31112,6 @@ const Endpoints = {
     updateOrgPrivateRegistry: [
       "PATCH /orgs/{org}/private-registries/{secret_name}"
     ]
-  },
-  projects: {
-    addCollaborator: ["PUT /projects/{project_id}/collaborators/{username}"],
-    createCard: ["POST /projects/columns/{column_id}/cards"],
-    createColumn: ["POST /projects/{project_id}/columns"],
-    createForAuthenticatedUser: ["POST /user/projects"],
-    createForOrg: ["POST /orgs/{org}/projects"],
-    createForRepo: ["POST /repos/{owner}/{repo}/projects"],
-    delete: ["DELETE /projects/{project_id}"],
-    deleteCard: ["DELETE /projects/columns/cards/{card_id}"],
-    deleteColumn: ["DELETE /projects/columns/{column_id}"],
-    get: ["GET /projects/{project_id}"],
-    getCard: ["GET /projects/columns/cards/{card_id}"],
-    getColumn: ["GET /projects/columns/{column_id}"],
-    getPermissionForUser: [
-      "GET /projects/{project_id}/collaborators/{username}/permission"
-    ],
-    listCards: ["GET /projects/columns/{column_id}/cards"],
-    listCollaborators: ["GET /projects/{project_id}/collaborators"],
-    listColumns: ["GET /projects/{project_id}/columns"],
-    listForOrg: ["GET /orgs/{org}/projects"],
-    listForRepo: ["GET /repos/{owner}/{repo}/projects"],
-    listForUser: ["GET /users/{username}/projects"],
-    moveCard: ["POST /projects/columns/cards/{card_id}/moves"],
-    moveColumn: ["POST /projects/columns/{column_id}/moves"],
-    removeCollaborator: [
-      "DELETE /projects/{project_id}/collaborators/{username}"
-    ],
-    update: ["PATCH /projects/{project_id}"],
-    updateCard: ["PATCH /projects/columns/cards/{card_id}"],
-    updateColumn: ["PATCH /projects/columns/{column_id}"]
   },
   pulls: {
     checkIfMerged: ["GET /repos/{owner}/{repo}/pulls/{pull_number}/merge"],
@@ -31445,6 +31484,12 @@ const Endpoints = {
     ],
     getRepoRuleSuites: ["GET /repos/{owner}/{repo}/rulesets/rule-suites"],
     getRepoRuleset: ["GET /repos/{owner}/{repo}/rulesets/{ruleset_id}"],
+    getRepoRulesetHistory: [
+      "GET /repos/{owner}/{repo}/rulesets/{ruleset_id}/history"
+    ],
+    getRepoRulesetVersion: [
+      "GET /repos/{owner}/{repo}/rulesets/{ruleset_id}/history/{version_id}"
+    ],
     getRepoRulesets: ["GET /repos/{owner}/{repo}/rulesets"],
     getStatusChecksProtection: [
       "GET /repos/{owner}/{repo}/branches/{branch}/protection/required_status_checks"
@@ -31618,7 +31663,13 @@ const Endpoints = {
   search: {
     code: ["GET /search/code"],
     commits: ["GET /search/commits"],
-    issuesAndPullRequests: ["GET /search/issues"],
+    issuesAndPullRequests: [
+      "GET /search/issues",
+      {},
+      {
+        deprecated: "octokit.rest.search.issuesAndPullRequests() is deprecated, see https://docs.github.com/rest/search/search#search-issues-and-pull-requests"
+      }
+    ],
     labels: ["GET /search/labels"],
     repos: ["GET /search/repositories"],
     topics: ["GET /search/topics"],
@@ -31672,14 +31723,8 @@ const Endpoints = {
     addOrUpdateMembershipForUserInOrg: [
       "PUT /orgs/{org}/teams/{team_slug}/memberships/{username}"
     ],
-    addOrUpdateProjectPermissionsInOrg: [
-      "PUT /orgs/{org}/teams/{team_slug}/projects/{project_id}"
-    ],
     addOrUpdateRepoPermissionsInOrg: [
       "PUT /orgs/{org}/teams/{team_slug}/repos/{owner}/{repo}"
-    ],
-    checkPermissionsForProjectInOrg: [
-      "GET /orgs/{org}/teams/{team_slug}/projects/{project_id}"
     ],
     checkPermissionsForRepoInOrg: [
       "GET /orgs/{org}/teams/{team_slug}/repos/{owner}/{repo}"
@@ -31717,13 +31762,9 @@ const Endpoints = {
     listPendingInvitationsInOrg: [
       "GET /orgs/{org}/teams/{team_slug}/invitations"
     ],
-    listProjectsInOrg: ["GET /orgs/{org}/teams/{team_slug}/projects"],
     listReposInOrg: ["GET /orgs/{org}/teams/{team_slug}/repos"],
     removeMembershipForUserInOrg: [
       "DELETE /orgs/{org}/teams/{team_slug}/memberships/{username}"
-    ],
-    removeProjectInOrg: [
-      "DELETE /orgs/{org}/teams/{team_slug}/projects/{project_id}"
     ],
     removeRepoInOrg: [
       "DELETE /orgs/{org}/teams/{team_slug}/repos/{owner}/{repo}"
@@ -32015,7 +32056,7 @@ legacyRestEndpointMethods.VERSION = dist_src_version_VERSION;
 //# sourceMappingURL=index.js.map
 
 ;// CONCATENATED MODULE: ./package.json
-const package_namespaceObject = /*#__PURE__*/JSON.parse('{"rE":"1.5.0","TB":"https://github.com/techpivot/terraform-module-releaser"}');
+const package_namespaceObject = /*#__PURE__*/JSON.parse('{"rE":"1.6.0","TB":"https://github.com/techpivot/terraform-module-releaser"}');
 ;// CONCATENATED MODULE: ./src/context.ts
 
 
@@ -32098,7 +32139,8 @@ function initializeContext() {
         (0,core.startGroup)('Initializing Context');
         // Get required environment variables
         const eventName = getRequiredEnvironmentVar('GITHUB_EVENT_NAME');
-        const serverUrl = getRequiredEnvironmentVar('GITHUB_SERVER_URL');
+        const serverUrl = getRequiredEnvironmentVar('GITHUB_SERVER_URL'); // https://github.techpivot.com | https://github.com
+        const apiUrl = process.env.GITHUB_API_URL ?? 'https://api.github.com'; // https://github.techpivot.com/api/v3 | https://api.github.com
         const repository = getRequiredEnvironmentVar('GITHUB_REPOSITORY');
         const eventPath = getRequiredEnvironmentVar('GITHUB_EVENT_PATH');
         const workspaceDir = getRequiredEnvironmentVar('GITHUB_WORKSPACE');
@@ -32120,6 +32162,7 @@ function initializeContext() {
             repo: { owner, repo },
             repoUrl: `${serverUrl}/${owner}/${repo}`,
             octokit: new OctokitRestApi({
+                baseUrl: apiUrl,
                 auth: `token ${config.githubToken}`,
                 userAgent: `[octokit] terraform-module-releaser/${package_namespaceObject.rE} (${package_namespaceObject.TB})`,
             }),
@@ -32132,6 +32175,8 @@ function initializeContext() {
         };
         const truncatedBody = contextInstance.prBody?.length > 60 ? `${contextInstance.prBody.slice(0, 57)}...` : contextInstance.prBody;
         (0,core.info)(`Event Name: ${eventName}`);
+        (0,core.info)(`GitHub Server URL: ${serverUrl}`);
+        (0,core.info)(`GitHub API URL: ${apiUrl}`);
         (0,core.info)(`Repository: ${contextInstance.repo.owner}/${contextInstance.repo.repo}`);
         (0,core.info)(`Repository URL: ${contextInstance.repoUrl}`);
         (0,core.info)(`Pull Request Number: ${contextInstance.prNumber}`);
@@ -32201,7 +32246,6 @@ function createModuleChangelogEntry(heading, commits) {
  */
 function getPullRequestChangelog(terraformChangedModules) {
     const pullRequestChangelog = [];
-    const { prNumber, prTitle } = context;
     for (const { nextTag, commitMessages } of terraformChangedModules) {
         pullRequestChangelog.push(createModuleChangelogEntry(nextTag, commitMessages));
     }
@@ -32214,7 +32258,6 @@ function getPullRequestChangelog(terraformChangedModules) {
  * @returns {string} The content of the module's changelog.
  */
 function getModuleChangelog(terraformChangedModule) {
-    const { prNumber, prTitle, repoUrl } = context;
     const { nextTagVersion, commitMessages } = terraformChangedModule;
     return createModuleChangelogEntry(nextTagVersion, commitMessages);
 }
@@ -32237,8 +32280,8 @@ const GITHUB_ACTIONS_BOT_EMAIL = '41898282+github-actions[bot]@users.noreply.git
 const PR_SUMMARY_MARKER = '<!-- techpivot/terraform-module-releaser — pr-summary-marker -->';
 const PR_RELEASE_MARKER = '<!-- techpivot/terraform-module-releaser — release-marker -->';
 const PROJECT_URL = 'https://github.com/techpivot/terraform-module-releaser';
-const BRANDING_COMMENT = `<h4 align="center"><sub align="middle">Powered by <img src="https://raw.githubusercontent.com/techpivot/terraform-module-releaser/refs/heads/main/assets/github-mark-top-padding.png" height="16" width="12" align="top" /> <a href="${PROJECT_URL}">techpivot/terraform-module-releaser</a></sub></h4>`;
-const BRANDING_WIKI = `<h4 align="center">Powered by <img src="https://raw.githubusercontent.com/techpivot/terraform-module-releaser/refs/heads/main/assets/github-mark-12x14.png" height="14" width="12" align="top" /> <a href="${PROJECT_URL}">techpivot/terraform-module-releaser</a></h4>`;
+const BRANDING_COMMENT = `<h4 align="center"><sub align="middle">Powered by:&nbsp;&nbsp;<a href="${PROJECT_URL}"><img src="https://raw.githubusercontent.com/techpivot/terraform-module-releaser/refs/heads/main/assets/octicons-mark-github.svg" height="12" width="12" align="center" /></a> <a href="${PROJECT_URL}">techpivot/terraform-module-releaser</a></sub></h4>`;
+const BRANDING_WIKI = `<h3 align="center">Powered by:&nbsp;&nbsp;<a href="${PROJECT_URL}"><img src="https://raw.githubusercontent.com/techpivot/terraform-module-releaser/refs/heads/main/assets/octicons-mark-github.svg" height="14" width="14" align="center" /></a> <a href="${PROJECT_URL}">techpivot/terraform-module-releaser</a></h3>`;
 /**
  * WIKI_TITLE_REPLACEMENTS - This object maps specific characters in wiki titles to visually
  * similar Unicode alternatives to handle GitHub Wiki limitations related to directory structure,
@@ -34432,7 +34475,6 @@ function removeDirectoryContents(directory, exceptions = []) {
         const itemPath = (0,external_node_path_namespaceObject.join)(directory, item);
         // Skip removal for items listed in the exceptions array
         if (!shouldExcludeFile(directory, itemPath, exceptions)) {
-            //if (!exceptions.includes(item)) {
             (0,external_node_fs_namespaceObject.rmSync)(itemPath, { recursive: true, force: true });
         }
     }
@@ -34519,9 +34561,8 @@ class Queue {
 	}
 
 	* drain() {
-		let current;
-		while ((current = this.dequeue()) !== undefined) {
-			yield current;
+		while (this.#head) {
+			yield this.dequeue();
 		}
 	}
 }
@@ -34663,8 +34704,11 @@ const WIKI_SUBDIRECTORY_NAME = '.wiki';
  * for the wiki is created if it doesn't already exist. If the wiki does not exist or is not enabled,
  * an error will be caught and logged.
  *
- * Note: It's important we clone via SSH and not HTTPS. Will likely need to test cloning this for
- * self-hosted GitHub enterprise on custom domain as this hasn't been done.
+ * Note: We clone using HTTPS using the credentials associated with the specified GITHUB_TOKEN.
+ *
+ * Unfortunately, there is no API endpoint provided by GitHub to programmatically enable the Wiki
+ * feature or initialize the .wiki repository. The REST API can only interact with the Wiki once it
+ * has been manually enabled.
  *
  * @throws {Error} If the `git clone` command fails due to issues such as the wiki not existing.
  */
@@ -34697,9 +34741,12 @@ function checkoutWiki() {
         (0,external_node_child_process_namespaceObject.execFileSync)(gitPath, ['remote', 'add', 'origin', wikiHtmlUrl], execWikiOpts);
     }
     (0,core.info)('Configuring authentication');
+    // Note: Extract the domain from serverUrl for the extraheader configuration (Same as pulling from the env Server URL)
+    const serverDomain = new URL(context.repoUrl).hostname;
+    const extraHeaderKey = `http.https://${serverDomain}/.extraheader`;
     const basicCredential = Buffer.from(`x-access-token:${config.githubToken}`, 'utf8').toString('base64');
     try {
-        (0,external_node_child_process_namespaceObject.execFileSync)(gitPath, ['config', '--local', '--unset-all', 'http.https://github.com/.extraheader'], execWikiOpts);
+        (0,external_node_child_process_namespaceObject.execFileSync)(gitPath, ['config', '--local', '--unset-all', extraHeaderKey], execWikiOpts);
     }
     catch (error) {
         // Type guard to ensure we're handling the correct error type
@@ -34708,7 +34755,7 @@ function checkoutWiki() {
             throw error;
         }
     }
-    (0,external_node_child_process_namespaceObject.execFileSync)(gitPath, ['config', '--local', 'http.https://github.com/.extraheader', `Authorization: Basic ${basicCredential}`], execWikiOpts);
+    (0,external_node_child_process_namespaceObject.execFileSync)(gitPath, ['config', '--local', extraHeaderKey, `Authorization: Basic ${basicCredential}`], execWikiOpts);
     try {
         (0,core.info)('Fetching the repository');
         (0,external_node_child_process_namespaceObject.execFileSync)(gitPath, [
@@ -34805,16 +34852,35 @@ function getWikiLink(moduleName, relative = true) {
 /**
  * Formats the module source URL based on configuration settings.
  *
- * @param repoUrl - The repository URL
- * @param useSSH - Whether to use SSH format
+ * Converts repository URLs to the appropriate format for module sourcing:
+ * - SSH format: ssh://git@hostname/path.git
+ * - HTTPS format: https://hostname/path.git
+ *
+ * @param repoUrl - The repository URL (must be a valid HTTPS URL)
+ * @param useSSH - Whether to use SSH format instead of HTTPS
  * @returns The formatted source URL for the module
+ * @throws {TypeError} When repoUrl is not a valid URL that can be parsed
+ *
+ * @example
+ * ```typescript
+ * // HTTPS format
+ * formatModuleSource('https://github.com/owner/repo', false)
+ * // Returns: 'https://github.com/owner/repo.git'
+ *
+ * // SSH format
+ * formatModuleSource('https://github.techpivot.com/owner/repo', true)
+ * // Returns: 'ssh://git@github.techpivot.com/owner/repo.git'
+ * ```
  */
 function formatModuleSource(repoUrl, useSSH) {
     if (useSSH) {
+        const url = new URL(repoUrl);
+        const hostname = url.hostname;
+        const pathname = url.pathname;
         // Convert HTTPS URL to SSH format
-        // From: https://github.com/owner/repo
-        // To:   ssh://git@github.com/owner/repo
-        return `ssh://${repoUrl.replace(/^https:\/\/github\.com/, 'git@github.com')}.git`;
+        // From: https://github.techpivot.com/owner/repo
+        // To: ssh://git@github.techpivot.com/owner/repo.git
+        return `ssh://git@${hostname}${pathname}.git`;
     }
     return `${repoUrl}.git`;
 }
@@ -35297,28 +35363,44 @@ async function addReleasePlanComment(terraformChangedModules, terraformModuleNam
                 commentBody.push(`| \`${moduleName}\` | ${existingVersion} | ${latestTagDisplay} | **${nextTagVersion}** |`);
             }
         }
-        // Wiki Check
-        switch (wikiStatus.status) {
-            case WikiStatus.SUCCESS:
-                commentBody.push('\n> #### ✅ Wiki Check <sup><a href="#" title="Wiki enabled and CI can checkout wiki repo">ℹ️</a></sup>');
-                break;
-            case WikiStatus.FAILURE:
-                commentBody.push(`\n> #### ⚠️ Wiki Check: Failed to checkout wiki. ${wikiStatus.errorMessage}<br><br>Please consult the README for additional information and review logs in the latest GitHub workflow run.`);
-                break;
-            case WikiStatus.DISABLED:
-                commentBody.push('\n> ##### 🚫 Wiki Check: Generation is disabled.');
-                break;
-        }
-        // Modules to Remove
-        if (terraformModuleNamesToRemove.length > 0) {
-            commentBody.push(`\n> **Note**: The following Terraform modules no longer exist in source; however, corresponding tags/releases exist.${config.deleteLegacyTags
-                ? ' Automation tag/release deletion is **enabled** and corresponding tags/releases will be automatically deleted.<br>'
-                : ' Automation tag/release deletion is **disabled** — **no** subsequent action will take place.<br>'}`);
-            commentBody.push(terraformModuleNamesToRemove.map((moduleName) => `\`${moduleName}\``).join(', '));
-        }
         // Changelog
         if (terraformChangedModules.length > 0) {
             commentBody.push('\n# Changelog\n', getPullRequestChangelog(terraformChangedModules));
+        }
+        // Wiki Status
+        commentBody.push('\n<h2><sub>Wiki Status<sup title="Checks to ensure that the Wiki is enabled and properly initialized">ℹ️</sup></sub></h2>\n');
+        switch (wikiStatus.status) {
+            case WikiStatus.DISABLED:
+                commentBody.push('🚫 Wiki generation **disabled** via `disable-wiki` flag.');
+                break;
+            case WikiStatus.SUCCESS:
+                commentBody.push('✅ Enabled');
+                break;
+            case WikiStatus.FAILURE:
+                commentBody.push('**⚠️ Failed to checkout wiki:**');
+                commentBody.push('```');
+                commentBody.push(`${wikiStatus.errorMessage}`);
+                commentBody.push('```');
+                commentBody.push(`Please consult the [README.md](${PROJECT_URL}/blob/main/README.md#getting-started) for additional information (**Ensure the Wiki is initialized**).`);
+                break;
+        }
+        // Automated Tag Cleanup
+        commentBody.push('\n<h2><sub>Automated Tag Cleanup<sup title="Controls whether obsolete tags and releases will be automatically deleted">ℹ️</sup></sub></h2>\n');
+        // Modules to Remove
+        if (!config.deleteLegacyTags) {
+            commentBody.push('⏸️ Existing tags and releases will be **preserved** as the `delete-legacy-tags` flag is disabled.');
+        }
+        else if (terraformModuleNamesToRemove.length === 0) {
+            commentBody.push('✅ All tags and releases are synchronized with the codebase. No cleanup required.');
+        }
+        else {
+            if (terraformModuleNamesToRemove.length === 1) {
+                commentBody.push('**⚠️ The following module no longer exists in source but has tags/releases. It will be automatically deleted.**');
+            }
+            else {
+                commentBody.push('**⚠️ The following modules no longer exist in source but have tags/releases. They will be automatically deleted.**');
+            }
+            commentBody.push(terraformModuleNamesToRemove.map((moduleName) => `- \`${moduleName}\``).join('\n'));
         }
         // Branding
         if (config.disableBranding === false) {
@@ -35853,19 +35935,28 @@ function trimSlashes(str) {
     return str.slice(start, end);
 }
 /**
- * Removes trailing dots from a string without using regex.
+ * Removes trailing characters from a string without using regex.
  *
  * This function iteratively checks each character from the end of the string
- * and removes any consecutive dots at the end. It uses a direct character-by-character
- * approach instead of regex to avoid potential backtracking issues and ensure
- * consistent O(n) performance.
+ * and removes any consecutive characters that match the specified characters to remove.
+ * It uses a direct character-by-character approach instead of regex to avoid potential
+ * backtracking issues and ensure consistent O(n) performance.
  *
  * @param {string} input - The string to process
- * @returns {string} The input string with all trailing dots removed
+ * @param {string[]} charactersToRemove - Array of characters to remove from the end
+ * @returns {string} The input string with all trailing specified characters removed
+ *
+ * @example
+ * // Returns "example"
+ * removeTrailingCharacters("example...", ["."])
+ *
+ * @example
+ * // Returns "module-name"
+ * removeTrailingCharacters("module-name-_.", [".", "-", "_"])
  */
-function removeTrailingDots(input) {
+function removeTrailingCharacters(input, charactersToRemove) {
     let endIndex = input.length;
-    while (endIndex > 0 && input[endIndex - 1] === '.') {
+    while (endIndex > 0 && charactersToRemove.includes(input[endIndex - 1])) {
         endIndex--;
     }
     return input.slice(0, endIndex);
@@ -35929,7 +36020,7 @@ function getTerraformModuleNameFromRelativePath(terraformDirectory) {
         .replace(/--+/g, '-') // Replace consecutive hyphens with a single hyphen
         .replace(/\s+/g, '') // Remove any remaining whitespace
         .toLowerCase(); // All of our module names will be lowercase
-    return removeTrailingDots(cleanedDirectory);
+    return removeTrailingCharacters(cleanedDirectory, ['.', '-', '_']);
 }
 /**
  * Gets the relative path of the Terraform module directory associated with a specified file.
@@ -36100,6 +36191,33 @@ function getAllTerraformModules(commits, allTags, allReleases) {
             });
         }
     }
+    // Handle initial release scenario: Mark modules for release if they have no existing tags/releases
+    // This ensures that on the first run of this action, all discovered modules get released even if
+    // they weren't modified in the current commit(s). This is necessary because:
+    //  - New repositories may have existing modules that need initial releases
+    //  - Modules without any version history should be tagged with an initial version
+    //  - This allows the action to work correctly on repositories being set up for the first time
+    for (const [moduleName, module] of Object.entries(terraformModulesMap)) {
+        // Only process modules that:
+        // - Haven't been marked as changed by commit analysis above
+        // - Have no existing tags (indicating they've never been released)
+        if (!isChangedModule(module) && module.tags.length === 0) {
+            (0,core.info)(`Marking module '${moduleName}' for initial release (no existing tags found)`);
+            // Convert the TerraformModule to TerraformChangedModule for initial release
+            const releaseType = 'patch'; // Use patch for initial releases (can be configured via config.defaultFirstTag)
+            const nextTagVersion = getNextTagVersion(null, releaseType);
+            Object.assign(module, {
+                isChanged: true,
+                // Empty commit messages array for initial releases. Originally set to ['Initial release'],
+                // but since the changelog generation function automatically includes PR information,
+                // we leave this empty to avoid redundant messaging in the release notes.
+                commitMessages: [],
+                releaseType,
+                nextTag: `${moduleName}/${nextTagVersion}`,
+                nextTagVersion,
+            });
+        }
+    }
     // Sort terraform modules by module name
     const sortedTerraformModules = Object.values(terraformModulesMap)
         .slice()
@@ -36139,8 +36257,10 @@ function getTerraformModulesToRemove(allTags, terraformModules) {
         .map((tag) => tag.replace(/\/v\d+\.\d+\.\d+$/, ''))));
     // Get an array of all module names from the terraformModules
     const moduleNamesFromModules = terraformModules.map((module) => module.moduleName);
-    // Perform a diff between the two arrays to find the module names that need to be removed
-    const moduleNamesToRemove = moduleNamesFromTags.filter((moduleName) => !moduleNamesFromModules.includes(moduleName));
+    // Perform a diff between the two arrays to find the module names that need to be removed and sort
+    const moduleNamesToRemove = moduleNamesFromTags
+        .filter((moduleName) => !moduleNamesFromModules.includes(moduleName))
+        .sort((a, b) => a.localeCompare(b));
     (0,core.info)('Terraform modules to remove');
     (0,core.info)(JSON.stringify(moduleNamesToRemove, null, 2));
     (0,core.endGroup)();
@@ -36233,15 +36353,44 @@ async function handleMergeEvent(config, terraformChangedModules, terraformModule
     }
 }
 /**
- * Entry point for the GitHub Action. Determines the flow based on whether the event
- * is a pull request or a merge, and executes the appropriate operations.
+ * Executes the main process of the terraform-module-releaser action.
  *
- * @returns {Promise<void>} Resolves when the action completes successfully or fails.
+ * This function handles the Terraform module release workflow by:
+ * 1. Checking if a release comment already exists to prevent duplicate releases
+ * 2. Collecting pull request commits, tags, and existing releases
+ * 3. Identifying Terraform modules and which ones have changed
+ * 4. Determining modules that need to be removed
+ * 5. Handling either release planning (commenting on PR) or the actual merge event
+ * 6. Setting GitHub Action outputs with information about changed and all modules
+ *
+ * The function sets the following outputs:
+ * - changed-module-names: Names of modules that changed
+ * - changed-module-paths: Paths to modules that changed
+ * - changed-modules-map: Detailed map of changed modules with metadata
+ * - all-module-names: Names of all detected modules
+ * - all-module-paths: Paths to all detected modules
+ * - all-modules-map: Detailed map of all modules with metadata
+ *
+ * @returns {Promise<void>} A promise that resolves when the process completes
+ * @throws Will capture and report any errors through setFailed
  */
 async function run() {
     try {
         const { config, context } = initialize();
         if (await hasReleaseComment()) {
+            // Prevent duplicate releases by checking for existing release comments.
+            // This serves as a lightweight state mechanism for the Terraform Release Action.
+            // When a release is completed, a comment is added to the PR. If this comment exists,
+            // it indicates the release has already been processed, preventing:
+            // - Manual workflow re-runs from creating duplicate releases
+            // - Automatic workflow retries from re-releasing the same modules
+            // - Race conditions in concurrent workflow executions
+            //
+            // This approach is preferred over artifact storage as it requires no additional
+            // dependencies, storage permissions, or cleanup - the comment persists with the PR
+            // and provides a clear audit trail of release activity. Another potential solution
+            // might be to add a label to the PR. However, these are easier modified by users
+            // with write permissions while the comment modification would require an admin.
             (0,core.info)('Release comment found. Exiting.');
             return;
         }
