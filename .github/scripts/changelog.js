@@ -75,7 +75,7 @@ Content Priority (High to Low):
 6. Build/CI changes - generally omit unless they affect end users
 
 Section Structure:
-Use H3 headers only when you have substantial content. Organize logically under these sections:
+Always use H3 headers (###) for the section titles below, but only include a section if it contains relevant entries. Do not render empty sections. Organize logically under these categories:
 - 🚨 Breaking Changes (always first if present)
 - ✨ New Features 
 - 🐛 Bug Fixes
