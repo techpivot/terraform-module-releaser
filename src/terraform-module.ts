@@ -1,375 +1,675 @@
-import { readdirSync, statSync } from 'node:fs';
-import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { relative } from 'node:path';
 import { config } from '@/config';
 import { context } from '@/context';
-import type { CommitDetails, GitHubRelease, TerraformChangedModule, TerraformModule } from '@/types';
-import { isTerraformDirectory, shouldExcludeFile, shouldIgnoreModulePath } from '@/utils/file';
-import { determineReleaseType, getNextTagVersion } from '@/utils/semver';
+import type { CommitDetails, GitHubRelease, ReleaseReason, ReleaseType } from '@/types';
+import { RELEASE_REASON, RELEASE_TYPE } from '@/utils/constants';
 import { removeTrailingCharacters } from '@/utils/string';
-import { debug, endGroup, info, startGroup } from '@actions/core';
+import { endGroup, info, startGroup } from '@actions/core';
 
 /**
- * Type guard function to determine if a given module is a `TerraformChangedModule`.
+ * Represents a Terraform module with its associated metadata, commits, and release information.
  *
- * This function checks if the `module` object has the property `isChanged` set to `true`.
- * It can be used to narrow down the type of the module within TypeScript's type system.
- *
- * @param {TerraformModule | TerraformChangedModule} module - The module to check.
- * @returns {module is TerraformChangedModule} - Returns `true` if the module is a `TerraformChangedModule`, otherwise `false`.
+ * The TerraformModule class provides functionality to track changes to a Terraform module,
+ * manage its release lifecycle, and compute appropriate version updates based on changes.
+ * It handles both direct changes to module files and dependency-triggered updates.
  */
-export function isChangedModule(module: TerraformModule | TerraformChangedModule): module is TerraformChangedModule {
-  return 'isChanged' in module && module.isChanged === true;
-}
+export class TerraformModule {
+  /**
+   * The Terraform module name used for tagging with some special characters removed.
+   */
+  public readonly name: string;
 
-/**
- * Filters an array of Terraform modules to return only those that are marked as changed.
- *
- * @param modules - An array of TerraformModule or TerraformChangedModule objects.
- * @returns An array of TerraformChangedModule objects that have been marked as changed.
- */
-export function getTerraformChangedModules(
-  modules: (TerraformModule | TerraformChangedModule)[],
-): TerraformChangedModule[] {
-  return modules.filter((module): module is TerraformChangedModule => {
-    return (module as TerraformChangedModule).isChanged === true;
-  });
-}
+  /**
+   * The full path to the directory where the module is located.
+   */
+  public readonly directory: string;
 
-/**
- * Generates a valid Terraform module name from the given directory path.
- *
- * The function transforms the directory path by:
- * - Trimming whitespace
- * - Replacing invalid characters with hyphens
- * - Normalizing slashes
- * - Removing leading/trailing slashes
- * - Handling consecutive dots and hyphens
- * - Removing any remaining whitespace
- * - Lowercase (for consistency)
- *
- * @param {string} terraformDirectory - The directory path from which to generate the module name.
- * @returns {string} A valid Terraform module name based on the provided directory path.
- */
-function getTerraformModuleNameFromRelativePath(terraformDirectory: string): string {
-  const cleanedDirectory = terraformDirectory
-    .trim() // Remove leading/trailing whitespace
-    .replace(/[^a-zA-Z0-9/_-]+/g, '-') // Remove invalid characters, allowing a-z, A-Z, 0-9, /, _, -
-    .replace(/\/{2,}/g, '/') // Replace multiple consecutive slashes with a single slash
-    .replace(/\/\.+/g, '/') // Remove slashes followed by dots
-    .replace(/(^\/|\/$)/g, '') // Remove leading/trailing slashes
-    .replace(/\.\.+/g, '.') // Replace consecutive dots with a single dot
-    .replace(/--+/g, '-') // Replace consecutive hyphens with a single hyphen
-    .replace(/\s+/g, '') // Remove any remaining whitespace
-    .toLowerCase(); // All of our module names will be lowercase
+  /**
+   * Map of commits that affect this module, keyed by SHA to prevent duplicates.
+   */
+  private _commits: Map<string, CommitDetails> = new Map();
 
-  return removeTrailingCharacters(cleanedDirectory, ['.', '-', '_']);
-}
+  /**
+   * Private list of tags relevant to this module.
+   */
+  private _tags: string[] = [];
 
-/**
- * Gets the relative path of the Terraform module directory associated with a specified file.
- *
- * Traverses upward from the file's directory to locate the nearest Terraform module directory.
- * Returns the module's path relative to the current working directory.
- *
- * @param {string} filePath - The absolute or relative path of the file to analyze.
- * @returns {string | null} Relative path to the associated Terraform module directory, or null
- *                          if no directory is found.
- */
-function getTerraformModuleDirectoryRelativePath(filePath: string): string | null {
-  const rootDir = resolve(context.workspaceDir);
-  const absoluteFilePath = isAbsolute(filePath) ? filePath : resolve(context.workspaceDir, filePath); // Handle relative/absolute
-  let directory = dirname(absoluteFilePath);
+  /**
+   * Private list of releases relevant to this module.
+   */
+  private _releases: GitHubRelease[] = [];
 
-  // Traverse upward until the current working directory (rootDir) is reached
-  while (directory !== rootDir && directory !== resolve(directory, '..')) {
-    if (isTerraformDirectory(directory)) {
-      return relative(rootDir, directory);
-    }
+  constructor(directory: string) {
+    this.directory = directory;
 
-    directory = resolve(directory, '..'); // Move up a directory
+    // Handle modules outside workspace directory (primarily for testing scenarios)
+    // Falls back to directory name when relative path contains '../'
+    const relativePath = relative(context.workspaceDir, directory);
+
+    // If relative path starts with '../', the module is outside the workspace directory
+    // Fall back to using the directory name directly to avoid invalid module names
+    const pathForModuleName = relativePath.startsWith('../') ? directory : relativePath;
+
+    this.name = TerraformModule.getTerraformModuleNameFromRelativePath(pathForModuleName);
   }
 
-  // Return null if no Terraform module directory is found
-  return null;
-}
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  // Commits
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/**
- * Retrieves the tags for a specified module directory, filtering tags that match the module pattern
- * and sorting by versioning in descending order.
- *
- * @param {string} moduleName - The Terraform module name to find current tags.
- * @param {string[]} allTags - An array of all available tags.
- * @returns {Object} An object with the latest tag, latest tag version, and an array of all matching tags.
- */
-function getTagsForModule(
-  moduleName: string,
-  allTags: string[],
-): {
-  latestTag: string | null;
-  latestTagVersion: string | null;
-  tags: string[];
-} {
-  // Filter tags that match the module directory pattern
-  const tags = allTags
-    .filter((tag) => tag.startsWith(`${moduleName}/v`))
-    .sort((a, b) => {
-      const aParts = a.replace(`${moduleName}/v`, '').split('.').map(Number);
-      const bParts = b.replace(`${moduleName}/v`, '').split('.').map(Number);
-      return bParts[0] - aParts[0] || bParts[1] - aParts[1] || bParts[2] - aParts[2]; // Sort in descending order
-    });
+  /**
+   * Gets all commits that affect this Terraform module.
+   *
+   * Returns a read-only array of commit details that have been associated with this module
+   * through files changes. Each commit includes the SHA, message, and affected file paths.
+   *
+   * @returns {ReadonlyArray<CommitDetails>} A read-only array of commit details affecting this module
+   *
+   * @example
+   * ```typescript
+   * const module = new TerraformModule('/path/to/module');
+   * const commits = module.commits;
+   * console.log(`Module has ${commits.length} commits`);
+   * ```
+   */
+  public get commits(): ReadonlyArray<CommitDetails> {
+    return Array.from(this._commits.values());
+  }
 
-  // Return the latest tag, latest tag version, and all matching tags
-  return {
-    latestTag: tags.length > 0 ? tags[0] : null, // Keep the full tag
-    latestTagVersion: tags.length > 0 ? tags[0].replace(`${moduleName}/`, '') : null, // Extract version only
-    tags,
-  };
-}
+  /**
+   * Gets all commit messages for commits that affect this Terraform module.
+   *
+   * Extracts just the commit messages from the full commit details, providing
+   * a convenient way to access commit messages for analysis or display purposes.
+   *
+   * @returns {ReadonlyArray<string>} A read-only array of commit messages
+   *
+   * @example
+   * ```typescript
+   * const module = new TerraformModule('/path/to/module');
+   * const messages = module.commitMessages;
+   * console.log('Recent changes:', messages.join(', '));
+   * ```
+   */
+  public get commitMessages(): ReadonlyArray<string> {
+    return this.commits.map((c) => c.message);
+  }
 
-/**
- * Retrieves the relevant GitHub releases for a specified module directory.
- *
- * Filters releases for the module and sorts by version in descending order.
- *
- * @param {string} moduleName - The Terraform module name for which to find relevant release tags.
- * @param {GitHubRelease[]} allReleases - An array of GitHub releases.
- * @returns {GitHubRelease[]} An array of releases relevant to the module, sorted with the latest first.
- */
-function getReleasesForModule(moduleName: string, allReleases: GitHubRelease[]): GitHubRelease[] {
-  // Filter releases that are relevant to the module directory
-  const relevantReleases = allReleases
-    .filter((release) => release.title.startsWith(`${moduleName}/`))
-    .sort((a, b) => {
-      // Sort releases by their title or release date (depending on what you use for sorting)
-      // Assuming latest release is at the top by default or using a versioning format like vX.Y.Z
-      const aVersion = a.title.replace(`${moduleName}/v`, '').split('.').map(Number);
-      const bVersion = b.title.replace(`${moduleName}/v`, '').split('.').map(Number);
+  /**
+   * Adds a commit to this module's commit collection with automatic deduplication.
+   *
+   * This method safely adds commit details to the module's internal commit tracking.
+   * It prevents duplicate entries by using the commit SHA as a unique identifier.
+   * Multiple file changes from the same commit will only result in one commit entry.
+   *
+   * @param {CommitDetails} commit - The commit details to add, including SHA, message, and file paths
+   * @returns {void}
+   *
+   * @example
+   * ```typescript
+   * const module = new TerraformModule('/path/to/module');
+   * module.addCommit({
+   *   sha: 'abc123def456',
+   *   message: 'feat: add new feature',
+   *   files: ['module/main.tf', 'module/variables.tf']
+   * });
+   * ```
+   */
+  public addCommit(commit: CommitDetails): void {
+    if (!this._commits.has(commit.sha)) {
+      this._commits.set(commit.sha, commit);
+    }
+  }
+
+  /**
+   * Clears all commits associated with this Terraform module.
+   *
+   * This method removes all commit details from the module's internal commit tracking.
+   * It is typically called after a module has been successfully released to prevent
+   * the module from being released again for the same commits.
+   *
+   * @returns {void}
+   */
+  public clearCommits(): void {
+    this._commits.clear();
+  }
+
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  // Tags
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Sets the Git tags associated with this Terraform module.
+   *
+   * Accepts an array of tag strings and automatically sorts them by semantic version
+   * in descending order (newest first). Tags should follow the format `{moduleName}/v{x.y.z}`.
+   * This method replaces any previously set tags.
+   *
+   * @param {string[]} tags - Array of Git tag strings to associate with this module
+   * @returns {void}
+   *
+   * @example
+   * ```typescript
+   * const module = new TerraformModule('/path/to/module');
+   * module.setTags([
+   *   'my-module/v1.0.0',
+   *   'my-module/v1.1.0',
+   *   'my-module/v2.0.0'
+   * ]);
+   * // Tags will be automatically sorted: v2.0.0, v1.1.0, v1.0.0
+   * ```
+   */
+  public setTags(tags: string[]): void {
+    this._tags = tags.sort((a, b) => {
+      const aVersion = a.replace(/.*\/v/, '').split('.').map(Number);
+      const bVersion = b.replace(/.*\/v/, '').split('.').map(Number);
       return bVersion[0] - aVersion[0] || bVersion[1] - aVersion[1] || bVersion[2] - aVersion[2];
     });
+  }
 
-  return relevantReleases;
-}
+  /**
+   * Gets all Git tags relevant to this Terraform module.
+   *
+   * Returns a read-only array of tag strings that have been filtered and sorted
+   * for this specific module. Tags are sorted by semantic version in descending order.
+   *
+   * @returns {ReadonlyArray<string>} A read-only array of Git tag strings for this module
+   */
+  public get tags(): ReadonlyArray<string> {
+    return this._tags;
+  }
 
-/**
- * Retrieves all Terraform modules within the specified workspace directory and any changes based on commits.
- * Analyzes the directory structure to identify modules and checks commit history for changes.
- *
- * @param {CommitDetails[]} commits - Array of commit details to analyze for changes.
- * @param {string[]} allTags - List of all tags associated with the modules.
- * @param {GitHubRelease[]} allReleases - GitHub releases for the modules.
- * @returns {(TerraformModule | TerraformChangedModule)[]} Array of Terraform modules with their corresponding
- *   change details.
- * @throws {Error} - If a module associated with a file is missing from the terraformModulesMap.
- */
-export function getAllTerraformModules(
-  commits: CommitDetails[],
-  allTags: string[],
-  allReleases: GitHubRelease[],
-): (TerraformModule | TerraformChangedModule)[] {
-  startGroup('Finding all Terraform modules with corresponding changes');
-  console.time('Elapsed time finding terraform modules'); // Start timing
+  /**
+   * Returns the latest full tag for this module.
+   *
+   * @returns {string | null} The latest tag string (e.g., 'module-name/v1.2.3'), or null if no tags exist.
+   */
+  public getLatestTag(): string | null {
+    if (this.tags.length === 0) {
+      return null;
+    }
 
-  const terraformModulesMap: Record<string, TerraformModule | TerraformChangedModule> = {};
-  const workspaceDir = context.workspaceDir;
+    return this.tags[0];
+  }
 
-  // Terraform only processes .tf and .tf.json files in the current working directory where you run the terraform commands. It does not automatically scan or include files from subdirectories.
+  /**
+   * Returns the version part of the latest tag for this module.
+   *
+   * Preserves any version prefixes (such as "v") that may be present or configured.
+   *
+   * @returns {string | null} The version string including any prefixes (e.g., 'v1.2.3'), or null if no tags exist.
+   */
+  public getLatestTagVersion(): string | null {
+    if (this.tags.length === 0) {
+      return null;
+    }
 
-  // Helper function to recursively search for Terraform modules
-  const searchDirectory = (dir: string) => {
-    const files = readdirSync(dir);
+    return this.tags[0].replace(`${this.name}/`, '');
+  }
 
-    for (const file of files) {
-      const filePath = join(dir, file);
-      const stat = statSync(filePath);
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  // Releases
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-      // If it's a directory, recursively search inside it
-      if (stat.isDirectory()) {
-        if (isTerraformDirectory(filePath)) {
-          const relativePath = relative(workspaceDir, filePath);
+  /**
+   * Sets the GitHub releases associated with this Terraform module.
+   *
+   * Accepts an array of GitHub release objects and automatically sorts them by semantic version
+   * in descending order (newest first). Releases should have titles following the format
+   * `{moduleName}/v{x.y.z}`. This method replaces any previously set releases.
+   *
+   * @param {GitHubRelease[]} releases - Array of GitHub release objects to associate with this module
+   * @returns {void}
+   *
+   * @example
+   * ```typescript
+   * const module = new TerraformModule('/path/to/module');
+   * module.setReleases([
+   *   { id: 1, title: 'my-module/v1.0.0', body: 'Initial release', tagName: 'my-module/v1.0.0' },
+   *   { id: 2, title: 'my-module/v1.1.0', body: 'Feature update', tagName: 'my-module/v1.1.0' }
+   * ]);
+   * // Releases will be automatically sorted by version (newest first)
+   * ```
+   */
+  public setReleases(releases: GitHubRelease[]): void {
+    this._releases = releases.sort((a, b) => {
+      const aVersion = a.title.replace(/.*\/v/, '').split('.').map(Number);
+      const bVersion = b.title.replace(/.*\/v/, '').split('.').map(Number);
+      return bVersion[0] - aVersion[0] || bVersion[1] - aVersion[1] || bVersion[2] - aVersion[2];
+    });
+  }
 
-          // Check if this module path should be ignored
-          if (shouldIgnoreModulePath(relativePath, config.modulePathIgnore)) {
-            info(`Skipping module in ${relativePath} due to module-path-ignore match`);
-            continue;
-          }
+  /**
+   * Gets all GitHub releases relevant to this Terraform module.
+   *
+   * Returns a read-only array of GitHub release objects that have been filtered and sorted
+   * for this specific module. Releases are sorted by semantic version in descending order.
+   * Each release contains the ID, title, body content, and associated tag name.
+   *
+   * @returns {ReadonlyArray<GitHubRelease>} A read-only array of GitHub release objects for this module
+   *
+   * @example
+   * ```typescript
+   * const module = new TerraformModule('/path/to/module');
+   * const releases = module.releases;
+   * console.log('Latest release:', releases[0]?.title); // Most recent version
+   * console.log('Release count:', releases.length);
+   *
+   * // Access release details
+   * releases.forEach(release => {
+   *   console.log(`Release ${release.title}: ${release.body}`);
+   * });
+   * ```
+   */
+  public get releases(): ReadonlyArray<GitHubRelease> {
+    return this._releases;
+  }
 
-          const moduleName = getTerraformModuleNameFromRelativePath(relativePath);
-          terraformModulesMap[moduleName] = {
-            moduleName,
-            directory: filePath,
-            ...getTagsForModule(moduleName, allTags),
-            releases: getReleasesForModule(moduleName, allReleases),
-          };
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  // Release Management
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Determines if this module represents an initial release with no existing version tags.
+   *
+   * @returns {boolean} True if this is the first release for the module, false otherwise.
+   */
+  private isInitialRelease(): boolean {
+    return this.tags.length === 0;
+  }
+
+  /**
+   * Checks if the module has direct file changes based on commit history.
+   *
+   * @returns {boolean} True if the module has commits with direct file changes, false otherwise.
+   */
+  private hasDirectChanges(): boolean {
+    return this.commitMessages.length > 0;
+  }
+
+  /**
+   * Evaluates whether the module needs any type of release based on changes, dependencies, or initial state.
+   *
+   * @returns {boolean} True if the module requires a release for any reason, false otherwise.
+   */
+  public needsRelease(): boolean {
+    return this.isInitialRelease() || this.hasDirectChanges();
+  }
+
+  /**
+   * Computes the appropriate semantic version release type based on commit analysis and module state.
+   * Analyzes commit messages against configured keywords to determine if changes warrant major, minor, or patch releases.
+   *
+   * @returns {ReleaseType | null} The computed release type (major, minor, or patch), or null if no release is needed.
+   */
+  public getReleaseType(): ReleaseType | null {
+    // If we have commits, analyze them for release type
+    if (this.hasDirectChanges()) {
+      const { majorKeywords, minorKeywords } = config;
+      let computedReleaseType: ReleaseType = RELEASE_TYPE.PATCH;
+
+      // Analyze each commit message and determine highest release type
+      for (const message of this.commitMessages) {
+        const messageCleaned = message.toLowerCase().trim();
+
+        // Determine release type from current message
+        let currentReleaseType: ReleaseType = RELEASE_TYPE.PATCH;
+        if (majorKeywords.some((keyword) => messageCleaned.includes(keyword.toLowerCase()))) {
+          currentReleaseType = RELEASE_TYPE.MAJOR;
+        } else if (minorKeywords.some((keyword) => messageCleaned.includes(keyword.toLowerCase()))) {
+          currentReleaseType = RELEASE_TYPE.MINOR;
         }
 
-        // We'll always recurse into subdirectories to find terraform modules even after we've found a match.
-        // This is because we want to find all modules in the workspace and although not conventional, there are
-        // cases where a module could be completely nested within another module and be 100% separate.
-        searchDirectory(filePath); // Recurse into subdirectories
+        // Determine the next release type considering the previous release type
+        if (currentReleaseType === RELEASE_TYPE.MAJOR || computedReleaseType === RELEASE_TYPE.MAJOR) {
+          computedReleaseType = RELEASE_TYPE.MAJOR;
+        } else if (currentReleaseType === RELEASE_TYPE.MINOR || computedReleaseType === RELEASE_TYPE.MINOR) {
+          computedReleaseType = RELEASE_TYPE.MINOR;
+        }
       }
+
+      return computedReleaseType;
     }
-  };
 
-  // Start the search from the workspace root directory
-  info(`Searching for Terraform modules in ${workspaceDir}`);
-  searchDirectory(workspaceDir);
-
-  const totalModulesFound = Object.keys(terraformModulesMap).length;
-  info(`Found ${totalModulesFound} Terraform module${totalModulesFound !== 1 ? 's' : ''}`);
-  info('Terraform Modules:');
-  info(JSON.stringify(terraformModulesMap, null, 2));
-
-  // Now process commits to find changed modules
-  for (const { message, sha, files } of commits) {
-    info(`Parsing commit ${sha}: ${message.trim().split('\n')[0].trim()} (Changed Files = ${files.length})`);
-
-    for (const relativeFilePath of files) {
-      info(`Analyzing file: ${relativeFilePath}`);
-      const moduleRelativePath = getTerraformModuleDirectoryRelativePath(relativeFilePath);
-
-      if (moduleRelativePath === null) {
-        // File isn't associated with a Terraform module
-        continue;
-      }
-
-      // Check if this module path should be ignored
-      if (shouldIgnoreModulePath(moduleRelativePath, config.modulePathIgnore)) {
-        info(`  (skipping) ➜ Matches module-path-ignore pattern for path \`${moduleRelativePath}\``);
-        continue;
-      }
-
-      const moduleName = getTerraformModuleNameFromRelativePath(moduleRelativePath);
-
-      // Skip excluded files based on provided pattern
-      if (shouldExcludeFile(moduleRelativePath, relativeFilePath, config.moduleChangeExcludePatterns)) {
-        info(`  (skipping) ➜ Matches module-change-exclude-pattern for path \`${moduleRelativePath}\``);
-        continue;
-      }
-
-      const module = terraformModulesMap[moduleName];
-
-      /* c8 ignore start */
-      if (!module) {
-        // Module not found in the map, this should not happen
-        throw new Error(
-          `Found changed file "${relativeFilePath}" associated with a terraform module "${moduleName}"; however, associated module does not exist`,
-        );
-      }
-      /* c8 ignore stop */
-
-      // Update the module with the TerraformChangedModule properties
-      const releaseType = determineReleaseType(message, (module as TerraformChangedModule)?.releaseType);
-      const nextTagVersion = getNextTagVersion(module.latestTagVersion, releaseType);
-      const commitMessages = (module as TerraformChangedModule).commitMessages || [];
-
-      if (!commitMessages.includes(message)) {
-        commitMessages.push(message);
-      }
-
-      // Update the existing module properties
-      Object.assign(module, {
-        isChanged: true, // Mark as changed
-        commitMessages,
-        releaseType,
-        nextTag: `${moduleName}/${nextTagVersion}`,
-        nextTagVersion,
-      });
+    // If this is initial release, return patch
+    if (this.isInitialRelease()) {
+      return RELEASE_TYPE.PATCH;
     }
+
+    // Otherwise, return null
+    return null;
   }
 
-  // Handle initial release scenario: Mark modules for release if they have no existing tags/releases
-  // This ensures that on the first run of this action, all discovered modules get released even if
-  // they weren't modified in the current commit(s). This is necessary because:
-  //  - New repositories may have existing modules that need initial releases
-  //  - Modules without any version history should be tagged with an initial version
-  //  - This allows the action to work correctly on repositories being set up for the first time
-  for (const [moduleName, module] of Object.entries(terraformModulesMap)) {
-    // Only process modules that:
-    // - Haven't been marked as changed by commit analysis above
-    // - Have no existing tags (indicating they've never been released)
-    if (!isChangedModule(module) && module.tags.length === 0) {
-      info(`Marking module '${moduleName}' for initial release (no existing tags found)`);
-
-      // Convert the TerraformModule to TerraformChangedModule for initial release
-      const releaseType = 'patch'; // Use patch for initial releases (can be configured via config.defaultFirstTag)
-      const nextTagVersion = getNextTagVersion(null, releaseType);
-
-      Object.assign(module, {
-        isChanged: true,
-        // Empty commit messages array for initial releases. Originally set to ['Initial release'],
-        // but since the changelog generation function automatically includes PR information,
-        // we leave this empty to avoid redundant messaging in the release notes.
-        commitMessages: [],
-        releaseType,
-        nextTag: `${moduleName}/${nextTagVersion}`,
-        nextTagVersion,
-      });
+  /**
+   * Identifies all release reasons that apply to this module based on its current state.
+   * A module can have multiple reasons for requiring a release, such as both direct changes and dependency updates.
+   *
+   * @returns {ReleaseReason[]} An array of release reasons, or an empty array if no release is needed.
+   */
+  public getReleaseReasons(): ReleaseReason[] {
+    if (!this.needsRelease()) {
+      return [];
     }
+
+    const reasons: ReleaseReason[] = [];
+
+    if (this.isInitialRelease()) {
+      reasons.push(RELEASE_REASON.INITIAL);
+    }
+    if (this.hasDirectChanges()) {
+      reasons.push(RELEASE_REASON.DIRECT_CHANGES);
+    }
+    //if (this.hasLocalDependencyUpdates()) {
+    //  reasons.push(RELEASE_REASON.LOCAL_DEPENDENCY_UPDATE);
+    //}
+
+    return reasons;
   }
 
-  // Sort terraform modules by module name
-  const sortedTerraformModules = Object.values(terraformModulesMap)
-    .slice()
-    .sort((a, b) => {
-      return a.moduleName.localeCompare(b.moduleName);
-    });
+  /**
+   * Returns the version part of the release tag that would be created for this module.
+   *
+   * Computes the next semantic version based on the module's current state and changes.
+   * Preserves version prefixes (such as "v") as configured. Returns null if no release is needed.
+   *
+   * @returns {string | null} The version string including any prefixes (e.g., 'v1.2.3'), or null if no release is needed.
+   *
+   * @example
+   * ```typescript
+   * const module = new TerraformModule('/path/to/module');
+   * const version = module.getReleaseTagVersion(); // Returns 'v1.2.4' if release needed
+   * ```
+   */
+  public getReleaseTagVersion(): string | null {
+    const releaseType = this.getReleaseType();
+    if (releaseType === null) {
+      return null;
+    }
 
-  info('Finished analyzing directory tree, terraform modules, and commits');
-  info(`Found ${sortedTerraformModules.length} terraform module${sortedTerraformModules.length !== 1 ? 's' : ''}.`);
+    const latestTagVersion = this.getLatestTagVersion();
+    if (latestTagVersion === null) {
+      return config.defaultFirstTag;
+    }
 
-  let terraformChangedModules: TerraformChangedModule[] | null = getTerraformChangedModules(sortedTerraformModules);
-  info(
-    `Found ${terraformChangedModules.length} changed Terraform module${terraformChangedModules.length !== 1 ? 's' : ''}.`,
-  );
-  // Free up memory by unsetting terraformChangedModules
-  terraformChangedModules = null;
+    // Extract the numerical part. This could be "v1.2.1" or in the future something else.
+    const versionMatch = latestTagVersion.match(/(\d+)\.(\d+)\.(\d+)/);
+    if (!versionMatch) {
+      return config.defaultFirstTag;
+    }
 
-  debug('Terraform Modules:');
-  debug(JSON.stringify(sortedTerraformModules, null, 2));
+    const [, major, minor, patch] = versionMatch;
+    const semver = [Number(major), Number(minor), Number(patch)];
 
-  console.timeEnd('Elapsed time finding terraform modules');
-  endGroup();
+    if (releaseType === RELEASE_TYPE.MAJOR) {
+      semver[0]++;
+      semver[1] = 0;
+      semver[2] = 0;
+    } else if (releaseType === RELEASE_TYPE.MINOR) {
+      semver[1]++;
+      semver[2] = 0;
+    } else {
+      semver[2]++;
+    }
 
-  return sortedTerraformModules;
-}
+    // Hard coding "v" for now. Potentially fixing in the future.
+    return `v${semver.join('.')}`;
+  }
 
-/**
- * Determines an array of Terraform module names that need to be removed.
- *
- * @param {string[]} allTags - A list of all tags associated with the modules.
- * @param {TerraformModule[]} terraformModules - An array of Terraform modules.
- * @returns {string[]} An array of Terraform module names that need to be removed.
- */
-export function getTerraformModulesToRemove(allTags: string[], terraformModules: TerraformModule[]): string[] {
-  startGroup('Finding all Terraform modules that should be removed');
+  /**
+   * Returns the full release tag that would be created for this module based on its current state.
+   *
+   * Combines the module name with the computed release version to form a complete tag
+   * in the format '{moduleName}/v{x.y.z}'. Returns null if no release is needed.
+   *
+   * @returns {string | null} The full release tag string (e.g., 'module-name/v1.2.3'), or null if no release is needed.
+   *
+   * @example
+   * ```typescript
+   * const module = new TerraformModule('/path/to/module');
+   * const tag = module.getReleaseTag(); // Returns 'my-module/v1.2.4' if release needed
+   * ```
+   */
+  public getReleaseTag(): string | null {
+    const releaseTagVersion = this.getReleaseTagVersion();
+    if (releaseTagVersion === null) {
+      return null;
+    }
 
-  // Get an array of all module names from the tags
-  const moduleNamesFromTags = Array.from(
-    new Set(
-      allTags
-        // Currently, we will remove all tags. If we wanted to allow other tags that didnt
-        // take the form of moduleName/vX.Y.Z, we could filter them out here. However, the purpose
-        // of this monorepo terraform releaser is repo-encompassing and thus if someone has a
-        // dangling tag, we should ideally remove it.
-        //.filter((tag) => {
-        //  return /^.*\/v\d+\.\d+\.\d+$/.test(tag);
-        //})
-        .map((tag) => tag.replace(/\/v\d+\.\d+\.\d+$/, '')),
-    ),
-  );
+    return `${this.name}/${releaseTagVersion}`;
+  }
 
-  // Get an array of all module names from the terraformModules
-  const moduleNamesFromModules = terraformModules.map((module) => module.moduleName);
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  // Helper
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-  // Perform a diff between the two arrays to find the module names that need to be removed and sort
-  const moduleNamesToRemove = moduleNamesFromTags
-    .filter((moduleName) => !moduleNamesFromModules.includes(moduleName))
-    .sort((a, b) => a.localeCompare(b));
+  /**
+   * Returns a formatted string representation of the module for debugging and logging.
+   *
+   * The output includes the module name, directory path, recent commits (if any),
+   * and release information when a release is needed. Commits are displayed with
+   * their short SHA and first line of the commit message.
+   *
+   * @returns {string} A multi-line formatted string containing:
+   *   - Module name with package emoji
+   *   - Directory path
+   *   - List of tags (if present)
+   *   - List of releases with ID, title and tag (if present)
+   *   - List of commits with short SHA and message (if present)
+   *   - Release type, next tag, and version (if release needed)
+   *   - Dependency triggers (if applicable)
+   *
+   * @example
+   * ```
+   * 📦 [my-package]
+   *    Directory: /path/to/package
+   *    Tags:
+   *      - my-package/v1.0.0
+   *    Releases:
+   *      - [123] my-package/v1.0.0 -> tag: `my-package/v1.0.0`
+   *    Commits:
+   *      - [abc1234] feat: add new feature
+   *      - [def5678] fix: resolve bug
+   *    Release type: minor
+   *    Next tag: v1.2.0
+   *    Next version: 1.2.0
+   * ```
+   */
+  public toString(): string {
+    const lines = [`📦 [${this.name}]`, `   Directory: ${this.directory}`];
 
-  info('Terraform modules to remove');
-  info(JSON.stringify(moduleNamesToRemove, null, 2));
+    if (this.tags.length > 0) {
+      lines.push('   Tags:');
+      for (const tag of this.tags) {
+        lines.push(`     - ${tag}`);
+      }
+    }
 
-  endGroup();
+    if (this.releases.length > 0) {
+      lines.push('   Releases:');
+      for (const release of this.releases) {
+        lines.push(`     - [#${release.id}] ${release.title}  (tag: ${release.tagName})`);
+      }
+    }
 
-  return moduleNamesToRemove;
+    if (this.commits.length > 0) {
+      lines.push('   Commits:');
+      for (const commit of this.commits) {
+        const shortSha = commit.sha.slice(0, 7);
+        const firstLine = commit.message.split('\n')[0];
+        lines.push(`     - [${shortSha}] ${firstLine}`);
+      }
+    }
+
+    // Add release-specific info if relevant
+    if (this.needsRelease()) {
+      lines.push(`   Release Type: ${this.getReleaseType()}`);
+      lines.push(`   Release Reasons: ${this.getReleaseReasons().join(', ')}`);
+      lines.push(`   Release Tag: ${this.getReleaseTag()}`);
+    }
+
+    return lines.join('\n');
+  }
+
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  // Static Utilities
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Generates a valid Terraform module name from the given relative directory path.
+   *
+   * The function transforms the directory path by:
+   * - Trimming whitespace
+   * - Replacing invalid characters with hyphens
+   * - Normalizing slashes
+   * - Removing leading/trailing slashes
+   * - Handling consecutive dots and hyphens
+   * - Removing any remaining whitespace
+   * - Converting to lowercase (for consistency)
+   * - Removing trailing dots, hyphens, and underscores
+   *
+   * @param {string} terraformDirectory - The relative directory path from which to generate the module name.
+   * @returns {string} A valid Terraform module name based on the provided directory path.
+   */
+  public static getTerraformModuleNameFromRelativePath(terraformDirectory: string): string {
+    const cleanedDirectory = terraformDirectory
+      .trim()
+      .replace(/[^a-zA-Z0-9/_-]+/g, '-')
+      .replace(/\/{2,}/g, '/')
+      .replace(/\/\.+/g, '/')
+      .replace(/(^\/|\/$)/g, '')
+      .replace(/\.\.+/g, '.')
+      .replace(/--+/g, '-')
+      .replace(/\s+/g, '')
+      .toLowerCase();
+    return removeTrailingCharacters(cleanedDirectory, ['.', '-', '_']);
+  }
+
+  /**
+   * Static utility to check if a tag is associated with a given module name.
+   *
+   * @param {string} moduleName - The Terraform module name
+   * @param {string} tag - The tag to check
+   * @returns {boolean} True if the tag belongs to the module
+   */
+  public static isModuleAssociatedWithTag(moduleName: string, tag: string): boolean {
+    return tag.startsWith(`${moduleName}/v`);
+  }
+
+  /**
+   * Static utility to filter tags for a given module name.
+   *
+   * @param {string} moduleName - The Terraform module name to find current tags
+   * @param {string[]} allTags - An array of all available tags
+   * @returns {string[]} An array of all matching tags for the module
+   */
+  public static getTagsForModule(moduleName: string, allTags: string[]): string[] {
+    return allTags.filter((tag) => TerraformModule.isModuleAssociatedWithTag(moduleName, tag));
+  }
+
+  /**
+   * Static utility to filter releases for a given module name.
+   *
+   * @param {string} moduleName - The Terraform module name to find current releases
+   * @param {GitHubRelease[]} allReleases - An array of all available GitHub releases
+   * @returns {GitHubRelease[]} An array of all matching releases for the module
+   */
+  public static getReleasesForModule(moduleName: string, allReleases: GitHubRelease[]): GitHubRelease[] {
+    return allReleases.filter((release) => TerraformModule.isModuleAssociatedWithTag(moduleName, release.tagName));
+  }
+
+  /**
+   * Returns all modules that need a release from the provided list.
+   *
+   * @param {TerraformModule[]} modules - Array of TerraformModule instances
+   * @returns {TerraformModule[]} Array of modules that need a release
+   */
+  public static getModulesNeedingRelease(modules: TerraformModule[]): TerraformModule[] {
+    return modules.filter((module) => module.needsRelease());
+  }
+
+  /**
+   * Determines an array of Terraform tags that need to be deleted.
+   *
+   * Identifies tags that belong to modules no longer present in the current
+   * module list by filtering tags that match the pattern {moduleName}/vX.Y.Z
+   * where the module name is not in the current modules.
+   *
+   * @param {string[]} allTags - A list of all tags associated with the modules.
+   * @param {TerraformModule[]} terraformModules - An array of Terraform modules.
+   * @returns {string[]} An array of tag names that need to be deleted.
+   */
+  public static getTagsToDelete(allTags: string[], terraformModules: TerraformModule[]): string[] {
+    startGroup('Finding all Terraform tags that should be deleted');
+
+    // Get module names from current terraformModules (these exist in source)
+    const moduleNamesFromModules = new Set(terraformModules.map((module) => module.name));
+
+    // Filter tags that belong to modules no longer in the current module list
+    const tagsToRemove = allTags
+      .filter((tag) => {
+        // Extract module name from tag by removing the version suffix
+        // Handle both versioned tags (module-name/vX.Y.Z) and non-versioned tags
+        const versionMatch = tag.match(/^(.+)\/v.+$/);
+        const moduleName = versionMatch ? versionMatch[1] : tag;
+        return !moduleNamesFromModules.has(moduleName);
+      })
+      .sort((a, b) => a.localeCompare(b));
+
+    info('Terraform tags to delete:');
+    info(JSON.stringify(tagsToRemove, null, 2));
+
+    endGroup();
+
+    return tagsToRemove;
+  }
+
+  /**
+   * Determines an array of Terraform releases that need to be deleted.
+   *
+   * Identifies releases that belong to modules no longer present in the current
+   * module list by filtering releases that match the pattern {moduleName}/vX.Y.Z
+   * where the module name is not in the current modules.
+   *
+   * @param {GitHubRelease[]} allReleases - A list of all releases associated with the modules.
+   * @param {TerraformModule[]} terraformModules - An array of Terraform modules.
+   * @returns {GitHubRelease[]} An array of releases that need to be deleted.
+   *
+   * @example
+   * ```typescript
+   * const releasesToDelete = TerraformModule.getReleasesToDelete(allReleases, currentModules);
+   * ```
+   */
+  public static getReleasesToDelete(
+    allReleases: GitHubRelease[],
+    terraformModules: TerraformModule[],
+  ): GitHubRelease[] {
+    startGroup('Finding all Terraform releases that should be deleted');
+
+    // Get module names from current terraformModules (these exist in source)
+    const moduleNamesFromModules = new Set(terraformModules.map((module) => module.name));
+
+    // Filter releases that belong to modules no longer in the current module list
+    const releasesToRemove = allReleases
+      .filter((release) => {
+        // Extract module name from versioned release tag by removing the version suffix
+        // Handle both versioned tags (module-name/vX.Y.Z) and non-versioned tags
+        const versionMatch = release.tagName.match(/^(.+)\/v.+$/);
+        const moduleName = versionMatch ? versionMatch[1] : release.tagName;
+        return !moduleNamesFromModules.has(moduleName);
+      })
+      .sort((a, b) => a.tagName.localeCompare(b.tagName));
+
+    info('Terraform releases to delete:');
+    info(
+      JSON.stringify(
+        releasesToRemove.map((release) => release.tagName),
+        null,
+        2,
+      ),
+    );
+
+    endGroup();
+
+    return releasesToRemove;
+  }
 }
