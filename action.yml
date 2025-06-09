@@ -67,6 +67,8 @@ inputs:
       relative to the repository root. Use this to exclude example modules, test modules, or other paths that should not 
       be treated as releasable modules.
 
+      This is a top-level filter: if a module matches any of these patterns, it is completely excluded from all release, versioning, and documentation logic. No releases will ever happen for a module that matches this filter.
+
       The minimatch syntax is used for pattern matching. Patterns are relative to the workspace directory (no leading
       slash).
 
@@ -79,6 +81,8 @@ inputs:
       These patterns follow glob syntax and are relative to each Terraform module directory, not the repository root.
       Files matching these patterns will be tracked in the module but changes to them won't trigger a new version.
       Uses matchBase: true for pattern matching, so patterns like "*.md" will match files in any subdirectory.
+
+      This option allows you to release a module but control which files inside a matched Terraform module should not force a bump of the module version. For example, you may want to exclude documentation or test files from triggering a release, but still include them in the module asset bundle.
 
       WARNING: Avoid excluding '*.tf' files, as they are essential for module functionality and versioning.
     required: true
