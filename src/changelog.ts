@@ -1,5 +1,5 @@
 import { context } from '@/context';
-import type { TerraformChangedModule, TerraformModule } from '@/types';
+import type { TerraformModule } from '@/terraform-module';
 
 /**
  * Creates a changelog entry for a Terraform module.
@@ -7,10 +7,10 @@ import type { TerraformChangedModule, TerraformModule } from '@/types';
  * The changelog contains a heading and a list of commits formatted with a timestamp.
  *
  * @param {string} heading - The version or tag heading for the changelog entry.
- * @param {Array<string>} commits - An array of commit messages to include in the changelog.
+ * @param {readonly string[]} commits - An array of commit messages to include in the changelog.
  * @returns {string} A formatted changelog entry as a string.
  */
-function createModuleChangelogEntry(heading: string, commits: string[]): string {
+function createTerraformModuleChangelogEntry(heading: string, commits: readonly string[]): string {
   const { prNumber, prTitle, repoUrl } = context;
   const currentDate = new Date().toISOString().split('T')[0]; // Format: YYYY-MM-DD
   const changelogContent: string[] = [`## \`${heading}\` (${currentDate})\n`];
@@ -28,7 +28,7 @@ function createModuleChangelogEntry(heading: string, commits: string[]): string 
 
     // Trim the commit message and for markdown, newlines that are part of a list format
     // better if they use a <br> tag instead of a newline character.
-    .map((commitMessage) => commitMessage.trim().replace(/(\n)/g, '<br>'));
+    .map((commitMessage) => commitMessage.trim().replace(/\n/g, '<br>'));
 
   for (const normalizedCommit of normalizedCommitMessages) {
     changelogContent.push(`- ${normalizedCommit}`);
@@ -44,39 +44,67 @@ function createModuleChangelogEntry(heading: string, commits: string[]): string 
  * This aggregated changelog is used explicitly as a comment in the pull request message,
  * providing a concise summary of all module changes.
  *
- * @param {TerraformChangedModule[]} terraformChangedModules - An array of changed Terraform modules.
+ * @param {TerraformModule[]} terraformModules - An array of changed Terraform modules.
  * @returns {string} The content of the global pull request changelog.
  */
-export function getPullRequestChangelog(terraformChangedModules: TerraformChangedModule[]): string {
+export function getPullRequestChangelog(terraformModules: TerraformModule[]): string {
   const pullRequestChangelog: string[] = [];
 
-  for (const { nextTag, commitMessages } of terraformChangedModules) {
-    pullRequestChangelog.push(createModuleChangelogEntry(nextTag, commitMessages));
+  for (const terraformModule of terraformModules) {
+    if (terraformModule.needsRelease()) {
+      const releaseTag = terraformModule.getReleaseTag();
+      if (releaseTag !== null) {
+        pullRequestChangelog.push(createTerraformModuleChangelogEntry(releaseTag, terraformModule.commitMessages));
+      }
+    }
   }
 
   return pullRequestChangelog.join('\n\n');
 }
 
 /**
- * Retrieves the changelog for a specific Terraform module.
+ * Creates formatted changelog entries for a specific Terraform module that needs release.
  *
- * @param {ChangedTerraformModule} changedTerraformModule - The Terraform module whose changelog is to be retrieved.
- * @returns {string} The content of the module's changelog.
+ * @param {TerraformModule} terraformModule - The Terraform module whose changelog is to be retrieved.
+ * @returns {string} The content of the module's changelog, or empty string if no release is needed.
  */
-export function getModuleChangelog(terraformChangedModule: TerraformChangedModule): string {
-  const { nextTagVersion, commitMessages } = terraformChangedModule;
+export function createTerraformModuleChangelog(terraformModule: TerraformModule): string {
+  if (terraformModule.needsRelease()) {
+    const releaseTagVersion = terraformModule.getReleaseTagVersion();
+    if (releaseTagVersion !== null) {
+      return createTerraformModuleChangelogEntry(releaseTagVersion, terraformModule.commitMessages);
+    }
+  }
 
-  return createModuleChangelogEntry(nextTagVersion, commitMessages);
+  return '';
 }
 
 /**
- * Generates a changelog for a given Terraform module by concatenating the body
- * content of each release associated with the module.
+ * Retrieves the complete changelog as a markdown string for the specified Terraform module.
  *
- * @param {TerraformModule} terraformModule - The Terraform module for which to generate the changelog.
- * @returns {string} A string containing the concatenated body content of all releases.
+ * This function concatenates the release notes from all releases associated with the module,
+ * separated by double newlines to maintain proper markdown formatting. Empty release bodies
+ * are filtered out to avoid unnecessary whitespace in the final changelog.
+ *
+ * @param {TerraformModule} terraformModule - The Terraform module instance containing release data
+ * @returns {string} A markdown-formatted string containing all release notes, or an empty string if no releases exist
+ *
+ * @example
+ * ```typescript
+ * const changelog = getTerraformModuleFullReleaseChangelog(myModule);
+ * console.log(changelog);
+ * // Output:
+ * // ## Release v1.2.0
+ * // - Added new feature
+ * //
+ * // ## Release v1.1.0
+ * // - Bug fixes
+ * ```
  */
-export function getModuleReleaseChangelog(terraformModule: TerraformModule): string {
-  // Enumerate over the releases of the given Terraform module
-  return terraformModule.releases.map((release) => `${release.body}`).join('\n\n');
+export function getTerraformModuleFullReleaseChangelog(terraformModule: TerraformModule): string {
+  // Filter out releases with empty bodies and concatenate release notes with proper spacing
+  return terraformModule.releases
+    .map((release) => release.body?.trim())
+    .filter((body): body is string => Boolean(body))
+    .join('\n\n');
 }

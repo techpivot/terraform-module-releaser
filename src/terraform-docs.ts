@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { context } from '@/context';
-import type { TerraformModule } from '@/types';
+import type { TerraformModule } from '@/terraform-module';
 import { endGroup, info, startGroup } from '@actions/core';
 import which from 'which';
 
@@ -241,13 +241,13 @@ export function ensureTerraformDocsConfigDoesNotExist(): void {
  * for the specified module. It will sort the output by required fields.
  *
  * @param {TerraformModule} terraformModule - An object containing the module details, including:
- *   - `moduleName`: The name of the Terraform module.
+ *   - `name`: The name of the Terraform module.
  *   - `directory`: The directory path where the Terraform module is located.
  * @returns {Promise<string>} A promise that resolves with the generated Terraform documentation in Markdown format.
  * @throws {Error} Throws an error if the `terraform-docs` command fails or produces an error in the `stderr` output.
  */
-export async function generateTerraformDocs({ moduleName, directory }: TerraformModule) {
-  info(`Generating tf-docs for: ${moduleName}`);
+export async function generateTerraformDocs({ name, directory }: TerraformModule) {
+  info(`Generating tf-docs for: ${name}`);
 
   const terraformDocsPath = which.sync('terraform-docs');
 
@@ -258,10 +258,10 @@ export async function generateTerraformDocs({ moduleName, directory }: Terraform
   );
 
   if (stderr) {
-    throw new Error(`Terraform-docs generation failed for module: ${moduleName}\n${stderr}`);
+    throw new Error(`Terraform-docs generation failed for module: ${name}\n${stderr}`);
   }
 
-  info(`Finished tf-docs for: ${moduleName}`);
+  info(`Finished tf-docs for: ${name}`);
 
   return stdout;
 }

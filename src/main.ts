@@ -1,20 +1,14 @@
 import { getConfig } from '@/config';
 import { getContext } from '@/context';
+import { parseTerraformModules } from '@/parser';
 import { addPostReleaseComment, addReleasePlanComment, getPullRequestCommits, hasReleaseComment } from '@/pull-request';
-import { createTaggedRelease, deleteLegacyReleases, getAllReleases } from '@/releases';
-import { deleteLegacyTags, getAllTags } from '@/tags';
+import { createTaggedReleases, deleteReleases, getAllReleases } from '@/releases';
+import { deleteTags, getAllTags } from '@/tags';
 import { ensureTerraformDocsConfigDoesNotExist, installTerraformDocs } from '@/terraform-docs';
-import { getAllTerraformModules, getTerraformChangedModules, getTerraformModulesToRemove } from '@/terraform-module';
-import type {
-  Config,
-  Context,
-  GitHubRelease,
-  ReleasePlanCommentOptions,
-  TerraformChangedModule,
-  TerraformModule,
-} from '@/types';
-import { WikiStatus, checkoutWiki, commitAndPushWikiChanges, generateWikiFiles } from '@/wiki';
-import { endGroup, info, setFailed, setOutput, startGroup } from '@actions/core';
+import { TerraformModule } from '@/terraform-module';
+import type { Config, Context, GitHubRelease } from '@/types';
+import { checkoutWiki, commitAndPushWikiChanges, generateWikiFiles, getWikiStatus } from '@/wiki';
+import { info, setFailed } from '@actions/core';
 
 /**
  * Initializes and returns the configuration and context objects.
@@ -25,6 +19,7 @@ import { endGroup, info, setFailed, setOutput, startGroup } from '@actions/core'
 function initialize(): { config: Config; context: Context } {
   const configInstance = getConfig();
   const contextInstance = getContext();
+
   return { config: configInstance, context: contextInstance };
 }
 
@@ -32,40 +27,21 @@ function initialize(): { config: Config; context: Context } {
  * Handles wiki-related operations, including checkout, generating release plan comments,
  * and error handling for failures.
  *
- * @param {Config} config - The configuration object containing wiki and Terraform Docs settings.
- * @param {TerraformChangedModule[]} terraformChangedModules - List of changed Terraform modules.
- * @param {string[]} terraformModuleNamesToRemove - List of Terraform module names to remove.
+ * @param {TerraformModule[]} terraformModules - List of Terraform modules associated with this workspace.
+ * @param {GitHubRelease[]} releasesToDelete - List of Terraform releases to delete.
+ * @param {string[]} tagsToDelete - List of Terraform tags to remove.
  * @returns {Promise<void>} Resolves when wiki-related operations are completed.
  */
-async function handleReleasePlanComment(
-  config: Config,
-  terraformChangedModules: TerraformChangedModule[],
-  terraformModuleNamesToRemove: string[],
+async function handlePullRequestEvent(
+  terraformModules: TerraformModule[],
+  releasesToDelete: GitHubRelease[],
+  tagsToDelete: string[],
 ): Promise<void> {
-  let wikiStatus: WikiStatus = WikiStatus.DISABLED;
-  let failure: string | undefined;
-  let error: Error | undefined;
+  const wikiStatusResult = getWikiStatus();
+  await addReleasePlanComment(terraformModules, releasesToDelete, tagsToDelete, wikiStatusResult);
 
-  try {
-    if (!config.disableWiki) {
-      checkoutWiki();
-      wikiStatus = WikiStatus.SUCCESS;
-    }
-  } catch (err) {
-    const errorMessage = err instanceof Error ? err.message.split('\n')[0] : String(err).split('\n')[0];
-    wikiStatus = WikiStatus.FAILURE;
-    failure = errorMessage;
-    error = err as Error;
-  } finally {
-    const commentOptions: ReleasePlanCommentOptions = {
-      status: wikiStatus,
-      errorMessage: failure,
-    };
-    await addReleasePlanComment(terraformChangedModules, terraformModuleNamesToRemove, commentOptions);
-  }
-
-  if (error) {
-    throw error;
+  if (wikiStatusResult.error) {
+    throw wikiStatusResult.error;
   }
 }
 
@@ -74,26 +50,26 @@ async function handleReleasePlanComment(
  * and optionally generating Terraform Docs-based wiki documentation.
  *
  * @param {Config} config - The configuration object.
- * @param {TerraformChangedModule[]} terraformChangedModules - List of changed Terraform modules.
- * @param {string[]} terraformModuleNamesToRemove - List of Terraform module names to remove.
- * @param {TerraformModule[]} terraformModules - List of all Terraform modules in the repository.
- * @param {GitHubRelease[]} allReleases - List of all GitHub releases in the repository.
- * @param {string[]} allTags - List of all tags in the repository.
+ * @param {TerraformModule[]} terraformModules - List of Terraform modules associated with this workspace.
+ * @param {GitHubRelease[]} releasesToDelete - List of Terraform releases to delete.
+ * @param {string[]} tagsToDelete - List of Terraform tags to delete.
  * @returns {Promise<void>} Resolves when merge-event operations are complete.
  */
-async function handleMergeEvent(
+async function handlePullRequestMergedEvent(
   config: Config,
-  terraformChangedModules: TerraformChangedModule[],
-  terraformModuleNamesToRemove: string[],
   terraformModules: TerraformModule[],
-  allReleases: GitHubRelease[],
-  allTags: string[],
+  releasesToDelete: GitHubRelease[],
+  tagsToDelete: string[],
 ): Promise<void> {
-  const updatedModules = await createTaggedRelease(terraformChangedModules);
-  await addPostReleaseComment(updatedModules);
+  const releasedTerraformModules = await createTaggedReleases(terraformModules);
+  await addPostReleaseComment(releasedTerraformModules);
 
-  await deleteLegacyReleases(terraformModuleNamesToRemove, allReleases);
-  await deleteLegacyTags(terraformModuleNamesToRemove, allTags);
+  if (!config.deleteLegacyTags) {
+    info('Deletion of legacy tags/releases is disabled. Skipping.');
+  } else {
+    await deleteReleases(releasesToDelete);
+    await deleteTags(tagsToDelete); // Note: Ensure tag deletion takes place after release deletion
+  }
 
   if (config.disableWiki) {
     info('Wiki generation is disabled.');
@@ -153,23 +129,17 @@ export async function run(): Promise<void> {
     const commits = await getPullRequestCommits();
     const allTags = await getAllTags();
     const allReleases = await getAllReleases();
-    const terraformModules = getAllTerraformModules(commits, allTags, allReleases);
-    const terraformChangedModules = getTerraformChangedModules(terraformModules);
-    const terraformModuleNamesToRemove = getTerraformModulesToRemove(allTags, terraformModules);
+    const terraformModules = parseTerraformModules(commits, allTags, allReleases);
+    const releasesToDelete = TerraformModule.getReleasesToDelete(allReleases, terraformModules);
+    const tagsToDelete = TerraformModule.getTagsToDelete(allTags, terraformModules);
 
-    if (!context.isPrMergeEvent) {
-      await handleReleasePlanComment(config, terraformChangedModules, terraformModuleNamesToRemove);
+    if (context.isPrMergeEvent) {
+      await handlePullRequestMergedEvent(config, terraformModules, releasesToDelete, tagsToDelete);
     } else {
-      await handleMergeEvent(
-        config,
-        terraformChangedModules,
-        terraformModuleNamesToRemove,
-        terraformModules,
-        allReleases,
-        allTags,
-      );
+      await handlePullRequestEvent(terraformModules, releasesToDelete, tagsToDelete);
     }
 
+    /*
     // Set the outputs for the GitHub Action
     const changedModuleNames = terraformChangedModules.map((module) => module.moduleName);
     const changedModulePaths = terraformChangedModules.map((module) => module.directory);
@@ -215,6 +185,7 @@ export async function run(): Promise<void> {
     setOutput('all-module-names', allModuleNames);
     setOutput('all-module-paths', allModulePaths);
     setOutput('all-modules-map', allModulesMap);
+    */
   } catch (error) {
     if (error instanceof Error) {
       setFailed(error.message);

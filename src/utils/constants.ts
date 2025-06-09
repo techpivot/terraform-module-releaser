@@ -1,3 +1,33 @@
+/**
+ * Release type constants for semantic versioning
+ */
+export const RELEASE_TYPE = {
+  MAJOR: 'major',
+  MINOR: 'minor',
+  PATCH: 'patch',
+} as const;
+
+/**
+ * Release reason constants - why a module needs a release
+ */
+export const RELEASE_REASON = {
+  INITIAL: 'initial',
+  DIRECT_CHANGES: 'direct-changes',
+  LOCAL_DEPENDENCY_UPDATE: 'local-dependency-update',
+} as const;
+
+/**
+ * Wiki status constants - status of wiki operations
+ */
+export const WIKI_STATUS = {
+  SUCCESS: 'SUCCESS',
+  FAILURE: 'FAILURE',
+  DISABLED: 'DISABLED',
+} as const;
+export const WIKI_HOME_FILENAME = 'Home.md';
+export const WIKI_SIDEBAR_FILENAME = '_Sidebar.md';
+export const WIKI_FOOTER_FILENAME = '_Footer.md';
+
 export const GITHUB_ACTIONS_BOT_USER_ID = 41898282;
 export const GITHUB_ACTIONS_BOT_NAME = 'GitHub Actions';
 export const GITHUB_ACTIONS_BOT_EMAIL = '41898282+github-actions[bot]@users.noreply.github.com';

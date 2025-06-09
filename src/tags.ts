@@ -1,4 +1,3 @@
-import { config } from '@/config';
 import { context } from '@/context';
 import { debug, endGroup, info, startGroup } from '@actions/core';
 import type { RestEndpointMethodTypes } from '@octokit/plugin-rest-endpoint-methods';
@@ -64,38 +63,32 @@ export async function getAllTags(options: ListTagsParams = { per_page: 100, page
 }
 
 /**
- * Deletes legacy Terraform module tags.
+ * Deletes specified tags from the repository.
  *
- * This function takes an array of module names and all tags,
- * and deletes the tags that match the format {moduleName}/vX.Y.Z.
+ * This function takes an array of tag names and deletes them from the GitHub repository.
+ * It's a declarative approach where you simply specify which tags to delete.
  *
- * @param {string[]} terraformModuleNames - Array of Terraform module names to delete.
- * @param {string[]} allTags - Array of all tags in the repository.
- * @returns {Promise<void>}
+ * @param {string[]} tagsToDelete - Array of tag names to delete from the repository
+ * @returns {Promise<void>} A promise that resolves when all tags are deleted
+ * @throws {Error} When tag deletion fails due to permissions or API errors
+ *
+ * @example
+ * ```typescript
+ * await deleteTags(['v1.0.0', 'legacy-tag', 'module/v2.0.0']);
+ * ```
  */
-export async function deleteLegacyTags(terraformModuleNames: string[], allTags: string[]): Promise<void> {
-  if (!config.deleteLegacyTags) {
-    info('Deletion of legacy tags/releases is disabled. Skipping.');
-    return;
-  }
-
-  startGroup('Deleting legacy Terraform module tags');
-
-  // Filter tags that match the format {moduleName} or {moduleName}/vX.Y.Z
-  const tagsToDelete = allTags.filter((tag) => {
-    return terraformModuleNames.some((name) => new RegExp(`^${name}(?:/v\\d+\\.\\d+\\.\\d+)?$`).test(tag));
-  });
-
+export async function deleteTags(tagsToDelete: string[]): Promise<void> {
   if (tagsToDelete.length === 0) {
-    info('No legacy tags found to delete. Skipping.');
-    endGroup();
+    info('No tags found to delete. Skipping.');
     return;
   }
 
-  info(`Found ${tagsToDelete.length} legacy tag${tagsToDelete.length !== 1 ? 's' : ''} to delete.`);
+  startGroup('Deleting tags');
+
+  info(`Deleting ${tagsToDelete.length} tag${tagsToDelete.length !== 1 ? 's' : ''}`);
   info(JSON.stringify(tagsToDelete, null, 2));
 
-  console.time('Elapsed time deleting legacy tags');
+  console.time('Elapsed time deleting tags');
 
   const {
     octokit,
@@ -129,7 +122,7 @@ export async function deleteLegacyTags(terraformModuleNames: string[], allTags: 
       cause: error,
     });
   } finally {
-    console.timeEnd('Elapsed time deleting legacy tags');
+    console.timeEnd('Elapsed time deleting tags');
     endGroup();
   }
 }

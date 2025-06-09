@@ -1,15 +1,18 @@
 import { getPullRequestChangelog } from '@/changelog';
 import { config } from '@/config';
 import { context } from '@/context';
-import type { CommitDetails, GitHubRelease, ReleasePlanCommentOptions, TerraformChangedModule } from '@/types';
+import { TerraformModule } from '@/terraform-module';
+import type { CommitDetails, GitHubRelease, WikiStatusResult } from '@/types';
 import {
   BRANDING_COMMENT,
   GITHUB_ACTIONS_BOT_USER_ID,
   PROJECT_URL,
   PR_RELEASE_MARKER,
   PR_SUMMARY_MARKER,
+  WIKI_STATUS,
 } from '@/utils/constants';
-import { WikiStatus, getWikiLink } from '@/wiki';
+
+import { getWikiLink } from '@/wiki';
 import { debug, endGroup, info, startGroup } from '@actions/core';
 import { RequestError } from '@octokit/request-error';
 
@@ -184,34 +187,28 @@ export async function getPullRequestCommits(): Promise<CommitDetails[]> {
 
 /**
  * Comments on a pull request with a summary of the changes made to Terraform modules,
- * including details about the release plan and any modules that will be removed from the Wiki.
+ * including details about the release plan and any modules that will be removed.
  *
  * This function constructs a markdown table displaying the release plan for changed Terraform modules,
- * noting their release types and versions. It also handles modules that are no longer present in the source
- * and will be removed from the Wiki upon release.
+ * noting their release types and versions. It also handles tags belonging to modules that are
+ * no longer present in the source and will be removed upon release.
  *
- * @param {TerraformChangedModule[]} terraformChangedModules - An array of objects representing the
- * changed Terraform modules. Each object should contain the following properties:
- *   - {string} moduleName - The name of the Terraform module.
- *   - {string | null} currentTagVersion - The previous version of the module (or null if this is the initial release).
- *   - {string} nextTagVersion - The new version of the module to be released.
- *   - {string} releaseType - The type of release (e.g., major, minor, patch).
- *
- * @param {string[]} terraformModuleNamesToRemove - An array of module names that should be removed if
- * specified to remove via config.
- *
- * @param {WikiStatus} wikiStatus - The status of the Wiki check (success, failure, or disabled) and
- *                                  any relevant error messages if applicable.
- *
+ * @param {TerraformModule[]} terraformModules - An array of Terraform module objects containing
+ * module metadata, version information, and release status.
+ * @param {GitHubRelease[]} releasesToDelete - List of Terraform releases to delete.
+ * @param {string[]} tagsToDelete - List of Terraform tags to remove.
+ * @param {WikiStatusResult} wikiStatus - Object containing the status of the Wiki and any relevant
+ * error information if the Wiki check failed.
  * @returns {Promise<void>} A promise that resolves when the comment has been posted and previous
- * comments have been deleted.
- *
- * @throws {Error} Throws an error if the GitHub API call to create a comment or delete existing comments fails.
+ * summary comments have been deleted.
+ * @throws {Error} Throws an error if there are permission issues or other failures when posting
+ * to the GitHub API.
  */
 export async function addReleasePlanComment(
-  terraformChangedModules: TerraformChangedModule[],
-  terraformModuleNamesToRemove: string[],
-  wikiStatus: ReleasePlanCommentOptions,
+  terraformModules: TerraformModule[],
+  releasesToDelete: GitHubRelease[],
+  tagsToDelete: string[],
+  wikiStatus: WikiStatusResult,
 ): Promise<void> {
   console.time('Elapsed time commenting on pull request');
   startGroup('Adding pull request release plan comment');
@@ -223,25 +220,62 @@ export async function addReleasePlanComment(
       issueNumber: issue_number,
     } = context;
 
-    // Initialize the comment body as an array of strings
-    const commentBody: string[] = [PR_SUMMARY_MARKER, '\n# Release Plan\n'];
+    const terraformModulesToRelese = TerraformModule.getModulesNeedingRelease(terraformModules);
+
+    // Initialize the comment body as an array of strings with appropriate header based on wiki status
+    const commentBody: string[] = [PR_SUMMARY_MARKER];
+
+    if (wikiStatus.status === WIKI_STATUS.FAILURE) {
+      commentBody.push('\n# ⚠️ Release Plan\n');
+      commentBody.push('> ⚠️ **IMPORTANT**: _See Wiki Status error below._\n');
+    } else {
+      commentBody.push('\n# 📋 Release Plan\n');
+    }
 
     // Changed Modules
-    if (terraformChangedModules.length === 0) {
+    if (terraformModulesToRelese.length === 0) {
       commentBody.push('No terraform modules updated in this pull request.');
     } else {
-      commentBody.push('| Module | Release Type | Latest Version | New Version |', '|--|--|--|--|');
-      for (const { moduleName, latestTagVersion, nextTagVersion, releaseType } of terraformChangedModules) {
-        const initialRelease = latestTagVersion == null;
-        const existingVersion = initialRelease ? 'initial' : releaseType;
-        const latestTagDisplay = initialRelease ? '' : latestTagVersion;
-        commentBody.push(`| \`${moduleName}\` | ${existingVersion} | ${latestTagDisplay} | **${nextTagVersion}** |`);
+      commentBody.push(
+        '| Module | Type | Latest<br>Version | New<br>Version | Release<br>Details |',
+        '|--|--|--|--|--|',
+      );
+      for (const module of terraformModulesToRelese) {
+        // Prevent module name from wrapping on hyphens in table cells (Doesn't work reliabily)
+        const name = `<nobr><code>${module.name}</code></nobr>`;
+        const type = module.getReleaseType();
+        const latestVersion = module.getLatestTagVersion() ?? '';
+        const releaseTagVersion = module.getReleaseTagVersion();
+
+        // Generate simple reason labels with emojis
+        const reasonLabels = [];
+
+        for (const reason of module.getReleaseReasons()) {
+          switch (reason) {
+            case 'initial': {
+              reasonLabels.push('🆕 Initial Release');
+              break;
+            }
+            case 'direct-changes': {
+              reasonLabels.push('📝 Changed Files');
+              break;
+            }
+            //case 'local-dependency-update': {
+            //  reasonLabels.push('🔗 Local Dependency Updated');
+            //  break;
+            //}
+          }
+        }
+
+        commentBody.push(
+          `| ${name} | ${type} | ${latestVersion} | **${releaseTagVersion}** | ${reasonLabels.join('<br>')} |`,
+        );
       }
     }
 
     // Changelog
-    if (terraformChangedModules.length > 0) {
-      commentBody.push('\n# Changelog\n', getPullRequestChangelog(terraformChangedModules));
+    if (terraformModulesToRelese.length > 0) {
+      commentBody.push('\n# 📝 Changelog\n', getPullRequestChangelog(terraformModules));
     }
 
     // Wiki Status
@@ -249,16 +283,16 @@ export async function addReleasePlanComment(
       '\n<h2><sub>Wiki Status<sup title="Checks to ensure that the Wiki is enabled and properly initialized">ℹ️</sup></sub></h2>\n',
     );
     switch (wikiStatus.status) {
-      case WikiStatus.DISABLED:
+      case WIKI_STATUS.DISABLED:
         commentBody.push('🚫 Wiki generation **disabled** via `disable-wiki` flag.');
         break;
-      case WikiStatus.SUCCESS:
+      case WIKI_STATUS.SUCCESS:
         commentBody.push('✅ Enabled');
         break;
-      case WikiStatus.FAILURE:
+      case WIKI_STATUS.FAILURE:
         commentBody.push('**⚠️ Failed to checkout wiki:**');
         commentBody.push('```');
-        commentBody.push(`${wikiStatus.errorMessage}`);
+        commentBody.push(`${wikiStatus.errorSummary}`);
         commentBody.push('```');
         commentBody.push(
           `Please consult the [README.md](${PROJECT_URL}/blob/main/README.md#getting-started) for additional information (**Ensure the Wiki is initialized**).`,
@@ -268,7 +302,7 @@ export async function addReleasePlanComment(
 
     // Automated Tag Cleanup
     commentBody.push(
-      '\n<h2><sub>Automated Tag Cleanup<sup title="Controls whether obsolete tags and releases will be automatically deleted">ℹ️</sup></sub></h2>\n',
+      '\n<h2><sub>Automated Tag/Release Cleanup<sup title="Controls whether obsolete tags and releases will be automatically deleted">ℹ️</sup></sub></h2>\n',
     );
 
     // Modules to Remove
@@ -276,19 +310,27 @@ export async function addReleasePlanComment(
       commentBody.push(
         '⏸️ Existing tags and releases will be **preserved** as the `delete-legacy-tags` flag is disabled.',
       );
-    } else if (terraformModuleNamesToRemove.length === 0) {
+    } else if (tagsToDelete.length === 0 && releasesToDelete.length === 0) {
       commentBody.push('✅ All tags and releases are synchronized with the codebase. No cleanup required.');
     } else {
-      if (terraformModuleNamesToRemove.length === 1) {
+      if (releasesToDelete.length > 0) {
         commentBody.push(
-          '**⚠️ The following module no longer exists in source but has tags/releases. It will be automatically deleted.**',
+          `**⚠️ The following ${releasesToDelete.length === 1 ? 'release is' : 'releases are'} no longer referenced by any source Terraform modules. ${releasesToDelete.length === 1 ? 'It' : 'They'} will be automatically deleted.**`,
         );
-      } else {
-        commentBody.push(
-          '**⚠️ The following modules no longer exist in source but have tags/releases. They will be automatically deleted.**',
-        );
+        commentBody.push(` - ${releasesToDelete.map((release) => `\`${release.title}\``).join(', ')}`);
       }
-      commentBody.push(terraformModuleNamesToRemove.map((moduleName) => `- \`${moduleName}\``).join('\n'));
+
+      if (tagsToDelete.length > 0) {
+        // Add an extra newline if we already added releases content
+        if (releasesToDelete.length > 0) {
+          commentBody.push('');
+        }
+
+        commentBody.push(
+          `**⚠️ The following ${tagsToDelete.length === 1 ? 'tag is' : 'tags are'} no longer referenced by any source Terraform modules. ${tagsToDelete.length === 1 ? 'It' : 'They'} will be automatically deleted.**`,
+        );
+        commentBody.push(` - ${tagsToDelete.map((tag) => `\`${tag}\``).join(', ')}`);
+      }
     }
 
     // Branding
@@ -338,16 +380,15 @@ export async function addReleasePlanComment(
 }
 
 /**
- * Posts a PR comment with details about the releases created for the Terraform modules.
+ * Adds a comment to the pull request with details about the releases created as specified via the
+ * releasedTerraformModules.
  *
- * @param {Array<{ moduleName: string; release: GitHubRelease }>} updatedModules - An array of updated Terraform modules with release information.
+ * @param {TerraformModule[]} releasedTerraformModules - Array of released/updated Terraform modules.
  * @returns {Promise<void>}
  */
-export async function addPostReleaseComment(
-  updatedModules: { moduleName: string; release: GitHubRelease }[],
-): Promise<void> {
-  if (updatedModules.length === 0) {
-    info('No updated modules. Skipping post release PR comment.');
+export async function addPostReleaseComment(releasedTerraformModules: TerraformModule[]): Promise<void> {
+  if (releasedTerraformModules.length === 0) {
+    info('No released modules. Skipping post release PR comment.');
     return;
   }
 
@@ -369,13 +410,14 @@ export async function addPostReleaseComment(
       'The following Terraform modules have been released:\n',
     ];
 
-    for (const { moduleName, release } of updatedModules) {
-      const extra = [`[Release Notes](${repoUrl}/releases/tag/${release.title})`];
+    for (const terraformModule of releasedTerraformModules) {
+      const latestRelease: GitHubRelease = terraformModule.releases[0];
+      const extra = [`[Release Notes](${repoUrl}/releases/tag/${latestRelease.tagName})`];
       if (config.disableWiki === false) {
-        extra.push(`[Wiki/Usage](${getWikiLink(moduleName, false)})`);
+        extra.push(`[Wiki/Usage](${getWikiLink(terraformModule.name, false)})`);
       }
 
-      commentBody.push(`- **\`${release.title}\`** • ${extra.join(' • ')}`);
+      commentBody.push(`- **\`${latestRelease.title}\`** • ${extra.join(' • ')}`);
     }
 
     // Branding
