@@ -34,26 +34,6 @@ describe('utils/string', () => {
     });
   });
 
-  describe('removeTrailingDots (deprecated)', () => {
-    it('should remove all trailing dots from a string', () => {
-      expect(removeTrailingCharacters('hello...', ['.'])).toBe('hello');
-      expect(removeTrailingCharacters('module-name..', ['.'])).toBe('module-name');
-      expect(removeTrailingCharacters('test.....', ['.'])).toBe('test');
-    });
-
-    it('should preserve internal dots', () => {
-      expect(removeTrailingCharacters('hello.world', ['.'])).toBe('hello.world');
-      expect(removeTrailingCharacters('module.name.test', ['.'])).toBe('module.name.test');
-    });
-
-    it('should handle edge cases', () => {
-      expect(removeTrailingCharacters('', ['.'])).toBe('');
-      expect(removeTrailingCharacters('...', ['.'])).toBe('');
-      expect(removeTrailingCharacters('.', ['.'])).toBe('');
-      expect(removeTrailingCharacters('hello', ['.'])).toBe('hello');
-    });
-  });
-
   describe('removeTrailingCharacters', () => {
     it('should remove trailing dots', () => {
       expect(removeTrailingCharacters('hello...', ['.'])).toBe('hello');

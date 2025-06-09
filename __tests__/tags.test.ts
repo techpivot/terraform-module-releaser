@@ -1,6 +1,5 @@
-import { config } from '@/mocks/config';
 import { context } from '@/mocks/context';
-import { deleteLegacyTags, getAllTags } from '@/tags';
+import { deleteTags, getAllTags } from '@/tags';
 import { stubOctokitReturnData } from '@/tests/helpers/octokit';
 import { debug, endGroup, info, startGroup } from '@actions/core';
 import { RequestError } from '@octokit/request-error';
@@ -209,57 +208,58 @@ describe('tags', () => {
     });
   });
 
-  describe('deleteLegacyTags()', () => {
+  describe('deleteTags()', () => {
     const mockOwner = 'techpivot';
     const mockRepo = 'terraform-module-releaser';
-    const mockTerraformModuleNames = ['moduleA', 'moduleB'];
 
     beforeEach(() => {
       context.useMockOctokit();
     });
 
-    it('should do nothing when deleteLegacyTags is false', async () => {
-      config.set({ deleteLegacyTags: false });
-      await deleteLegacyTags([], []);
-      expect(info).toHaveBeenCalledWith('Deletion of legacy tags/releases is disabled. Skipping.');
+    it('should do nothing when no tags to delete', async () => {
+      await deleteTags([]);
+      expect(vi.mocked(info).mock.calls).toEqual([['No tags found to delete. Skipping.']]);
       expect(context.octokit.rest.git.deleteRef).not.toHaveBeenCalled();
       expect(startGroup).not.toHaveBeenCalled();
       expect(endGroup).not.toHaveBeenCalled();
     });
 
-    it('should do nothing when no tags to delete', async () => {
-      const allTags = ['moduleA/v1.0.0', 'moduleB/v1.0.0'];
-      config.set({ deleteLegacyTags: true });
-      await deleteLegacyTags([], allTags);
-      expect(vi.mocked(startGroup).mock.calls).toEqual([['Deleting legacy Terraform module tags']]);
-      expect(vi.mocked(info).mock.calls).toEqual([['No legacy tags found to delete. Skipping.']]);
-      expect(context.octokit.rest.git.deleteRef).not.toHaveBeenCalled();
-      expect(endGroup).toHaveBeenCalled();
-    });
+    it('should delete specified tags when they exist', async () => {
+      const tagsToDelete = ['v1.0.0', 'legacy-tag', 'moduleA/v2.0.0'];
 
-    it('should delete legacy tags when they exist', async () => {
-      const allTags = ['moduleA/v1.0.0', 'moduleB/v1.0.0', 'moduleC/v1.0.0'];
-      const expectedTagsToDelete = ['moduleA/v1.0.0', 'moduleB/v1.0.0'];
+      await deleteTags(tagsToDelete);
 
-      await deleteLegacyTags(mockTerraformModuleNames, allTags);
-
-      expect(context.octokit.rest.git.deleteRef).toHaveBeenCalledTimes(expectedTagsToDelete.length);
-      for (const tag of expectedTagsToDelete) {
+      expect(context.octokit.rest.git.deleteRef).toHaveBeenCalledTimes(tagsToDelete.length);
+      for (const tag of tagsToDelete) {
         expect(context.octokit.rest.git.deleteRef).toHaveBeenCalledWith({
           owner: mockOwner,
           repo: mockRepo,
           ref: `tags/${tag}`,
         });
       }
-      expect(info).toHaveBeenCalledWith('Found 2 legacy tags to delete.');
-      expect(info).toHaveBeenCalledWith(JSON.stringify(expectedTagsToDelete, null, 2));
+      expect(info).toHaveBeenCalledWith('Deleting 3 tags');
+      expect(info).toHaveBeenCalledWith(JSON.stringify(tagsToDelete, null, 2));
+      expect(endGroup).toHaveBeenCalled();
+    });
+
+    it('should handle singular tag in message', async () => {
+      const tagsToDelete = ['v1.0.0'];
+
+      await deleteTags(tagsToDelete);
+
+      expect(context.octokit.rest.git.deleteRef).toHaveBeenCalledTimes(1);
+      expect(context.octokit.rest.git.deleteRef).toHaveBeenCalledWith({
+        owner: mockOwner,
+        repo: mockRepo,
+        ref: 'tags/v1.0.0',
+      });
+      expect(info).toHaveBeenCalledWith('Deleting 1 tag');
+      expect(info).toHaveBeenCalledWith(JSON.stringify(tagsToDelete, null, 2));
       expect(endGroup).toHaveBeenCalled();
     });
 
     it('should handle permission errors with helpful message', async () => {
-      config.set({ deleteLegacyTags: true });
-      const moduleNames = ['module1'];
-      const allTags = ['module1/v1.0.0'];
+      const tagsToDelete = ['v1.0.0'];
 
       vi.mocked(context.octokit.rest.git.deleteRef).mockRejectedValueOnce(
         new RequestError('Resource not accessible by integration', 403, {
@@ -268,8 +268,8 @@ describe('tags', () => {
         }),
       );
 
-      await expect(deleteLegacyTags(moduleNames, allTags)).rejects.toThrow(
-        `Failed to delete repository tag: module1/v1.0.0 Resource not accessible by integration.
+      await expect(deleteTags(tagsToDelete)).rejects.toThrow(
+        `Failed to delete repository tag: v1.0.0 Resource not accessible by integration.
 Ensure that the GitHub Actions workflow has the correct permissions to delete tags by ensuring that your workflow YAML file has the following block under \"permissions\":
 
 permissions:
@@ -279,9 +279,7 @@ permissions:
     });
 
     it('should handle non-permission errors', async () => {
-      config.set({ deleteLegacyTags: true });
-      const moduleNames = ['module1'];
-      const allTags = ['module1/v1.0.0'];
+      const tagsToDelete = ['v1.0.0'];
 
       vi.mocked(context.octokit.rest.git.deleteRef).mockRejectedValueOnce(
         new RequestError('Not Found', 404, {
@@ -290,9 +288,7 @@ permissions:
         }),
       );
 
-      await expect(deleteLegacyTags(moduleNames, allTags)).rejects.toThrow(
-        'Failed to delete tag: [Status = 404] Not Found',
-      );
+      await expect(deleteTags(tagsToDelete)).rejects.toThrow('Failed to delete tag: [Status = 404] Not Found');
       expect(endGroup).toHaveBeenCalled();
     });
   });

@@ -1,17 +1,21 @@
 import { run } from '@/main';
 import { config } from '@/mocks/config';
 import { context } from '@/mocks/context';
-import { addPostReleaseComment, addReleasePlanComment, hasReleaseComment } from '@/pull-request';
-import { createTaggedRelease, deleteLegacyReleases } from '@/releases';
-import { deleteLegacyTags } from '@/tags';
+import { parseTerraformModules } from '@/parser';
+import { addPostReleaseComment, addReleasePlanComment, getPullRequestCommits, hasReleaseComment } from '@/pull-request';
+import { createTaggedReleases, deleteReleases, getAllReleases } from '@/releases';
+import { deleteTags, getAllTags } from '@/tags';
 import { ensureTerraformDocsConfigDoesNotExist, installTerraformDocs } from '@/terraform-docs';
-import { getAllTerraformModules, getTerraformChangedModules, getTerraformModulesToRemove } from '@/terraform-module';
-import type { GitHubRelease, TerraformChangedModule, TerraformModule } from '@/types';
-import { WikiStatus, checkoutWiki, commitAndPushWikiChanges, generateWikiFiles } from '@/wiki';
+import { TerraformModule } from '@/terraform-module';
+import type { ExecSyncError, GitHubRelease } from '@/types';
+import { WIKI_STATUS } from '@/utils/constants';
+import { checkoutWiki, commitAndPushWikiChanges, generateWikiFiles, getWikiStatus } from '@/wiki';
 import { info, setFailed } from '@actions/core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createMockTerraformModule } from './helpers/terraform-module';
 
 // Mock all required dependencies
+vi.mock('@/parser');
 vi.mock('@/pull-request');
 vi.mock('@/releases');
 vi.mock('@/tags');
@@ -21,36 +25,18 @@ vi.mock('@/wiki');
 
 describe('main', () => {
   // Mock module data
-  const mockRelease: GitHubRelease = {
-    id: 1,
-    title: 'Release v1.0.0',
-    body: 'Release notes',
-    tagName: 'modules/test-module/v1.0.0',
-  };
-
-  const mockChangedModule: TerraformChangedModule = {
-    moduleName: 'test-module',
+  const mockTerraformModule = createMockTerraformModule({
     directory: './modules/test-module',
     tags: ['modules/test-module/v1.0.0'],
-    releases: [mockRelease],
-    latestTag: 'modules/test-module/v1.0.0',
-    latestTagVersion: 'v1.0.0',
-    isChanged: true,
-    commitMessages: ['feat: new feature'],
-    releaseType: 'minor',
-    nextTag: 'modules/test-module/v1.1.0',
-    nextTagVersion: 'v1.1.0',
-  };
-
-  // Add mock for getAllTerraformModules
-  const mockTerraformModule: TerraformModule = {
-    moduleName: 'test-module',
-    directory: './modules/test-module',
-    tags: ['modules/test-module/v1.0.0'],
-    releases: [mockRelease],
-    latestTag: 'modules/test-module/v1.0.0',
-    latestTagVersion: 'v1.0.0',
-  };
+    releases: [
+      {
+        id: 1,
+        title: 'Release v1.0.0',
+        body: 'Release notes',
+        tagName: 'modules/test-module/v1.0.0',
+      },
+    ],
+  });
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -58,12 +44,17 @@ describe('main', () => {
     // Reset context and config before each test
     context.isPrMergeEvent = false;
     config.disableWiki = false;
+    config.deleteLegacyTags = true;
 
     // Reset mocks with default values
     vi.mocked(hasReleaseComment).mockResolvedValue(false);
-    vi.mocked(getTerraformChangedModules).mockReturnValue([mockChangedModule]);
-    vi.mocked(getAllTerraformModules).mockReturnValue([mockTerraformModule]);
-    vi.mocked(getTerraformModulesToRemove).mockReturnValue([]);
+    vi.mocked(getPullRequestCommits).mockResolvedValue([]);
+    vi.mocked(getAllTags).mockResolvedValue([]);
+    vi.mocked(getAllReleases).mockResolvedValue([]);
+    vi.mocked(parseTerraformModules).mockReturnValue([mockTerraformModule]);
+    vi.mocked(TerraformModule.getReleasesToDelete).mockReturnValue([]);
+    vi.mocked(TerraformModule.getTagsToDelete).mockReturnValue([]);
+    vi.mocked(getWikiStatus).mockReturnValue({ status: WIKI_STATUS.SUCCESS });
   });
 
   it('should exit early if release comment exists', async () => {
@@ -83,24 +74,25 @@ describe('main', () => {
   });
 
   it('should handle non-Error type being thrown', async () => {
-    // Mock hasReleaseComment to throw a string instead of an Error
-    vi.mocked(checkoutWiki).mockImplementationOnce(() => {
+    // Mock getWikiStatus to throw a string instead of an Error
+    vi.mocked(getWikiStatus).mockImplementationOnce(() => {
       throw 'string error message';
     });
 
     // Run the function
     await run();
 
-    // The setFailed function should not have been called with an error message
-    // since the error wasn't an instance of Error
-    expect(addReleasePlanComment).toHaveBeenCalledTimes(1);
+    // Since the error wasn't an instance of Error, setFailed should not be called
+    // and addReleasePlanComment should not be called either (due to the thrown string)
+    expect(addReleasePlanComment).not.toHaveBeenCalled();
     expect(setFailed).not.toHaveBeenCalled();
   });
 
-  it('should call checkoutWiki when wiki is enabled', async () => {
+  it('should call checkoutWiki when wiki is enabled during merge event', async () => {
     vi.mocked(hasReleaseComment).mockResolvedValue(false);
-    vi.mocked(getTerraformChangedModules).mockReturnValue([mockChangedModule]);
-    context.isPrMergeEvent = false;
+    vi.mocked(parseTerraformModules).mockReturnValue([mockTerraformModule]);
+    vi.mocked(createTaggedReleases).mockResolvedValue([mockTerraformModule]); // Mock the release creation
+    context.isPrMergeEvent = true; // Changed to merge event
     config.disableWiki = false;
 
     await run();
@@ -110,8 +102,9 @@ describe('main', () => {
 
   it('should not call checkoutWiki when wiki is disabled', async () => {
     vi.mocked(hasReleaseComment).mockResolvedValue(false);
-    vi.mocked(getTerraformChangedModules).mockReturnValue([mockChangedModule]);
-    context.isPrMergeEvent = false;
+    vi.mocked(parseTerraformModules).mockReturnValue([mockTerraformModule]);
+    vi.mocked(createTaggedReleases).mockResolvedValue([mockTerraformModule]);
+    context.isPrMergeEvent = true; // Set to merge event so checkoutWiki logic is evaluated
     config.disableWiki = true;
 
     await run();
@@ -119,27 +112,63 @@ describe('main', () => {
     expect(vi.mocked(checkoutWiki)).not.toHaveBeenCalled();
   });
 
-  // Wiki checkout error handling
-  it('should handle wiki checkout errors and add release plan comment', async () => {
-    vi.mocked(hasReleaseComment).mockResolvedValue(false);
-    context.isPrMergeEvent = false;
-    config.disableWiki = false;
-
-    const mockError = new Error('Wiki checkout failed\nAdditional error details');
-    vi.mocked(checkoutWiki).mockImplementationOnce(() => {
-      throw mockError;
+  describe('non-merge event handling', () => {
+    beforeEach(() => {
+      context.isPrMergeEvent = false;
+      vi.mocked(hasReleaseComment).mockResolvedValue(false);
+      vi.mocked(parseTerraformModules).mockReturnValue([mockTerraformModule]);
+      vi.mocked(TerraformModule.getReleasesToDelete).mockReturnValue([]);
+      vi.mocked(TerraformModule.getTagsToDelete).mockReturnValue([]);
     });
 
-    vi.mocked(getTerraformChangedModules).mockReturnValue([mockChangedModule]);
-    vi.mocked(getTerraformModulesToRemove).mockReturnValue(['old-module']);
+    it('should handle non-merge event (pull request event)', async () => {
+      vi.mocked(getWikiStatus).mockReturnValue({ status: WIKI_STATUS.SUCCESS });
 
-    await run();
+      await run();
 
-    expect(addReleasePlanComment).toHaveBeenCalledWith([mockChangedModule], ['old-module'], {
-      status: WikiStatus.FAILURE,
-      errorMessage: 'Wiki checkout failed',
+      // Should call addReleasePlanComment for non-merge events
+      expect(addReleasePlanComment).toHaveBeenCalledWith([mockTerraformModule], [], [], {
+        status: WIKI_STATUS.SUCCESS,
+      });
+
+      // Should NOT call merge-specific functions
+      expect(createTaggedReleases).not.toHaveBeenCalled();
+      expect(addPostReleaseComment).not.toHaveBeenCalled();
+      expect(deleteReleases).not.toHaveBeenCalled();
+      expect(deleteTags).not.toHaveBeenCalled();
+      expect(installTerraformDocs).not.toHaveBeenCalled();
+      expect(checkoutWiki).not.toHaveBeenCalled();
     });
-    expect(setFailed).toHaveBeenCalledWith('Wiki checkout failed\nAdditional error details');
+
+    it('should handle wiki checkout errors and add release plan comment', async () => {
+      const mockError: ExecSyncError = Object.assign(new Error('Wiki checkout failed\nAdditional error details'), {
+        name: 'ExecSyncError',
+        pid: 12345,
+        status: 1,
+        stdout: Buffer.from(''),
+        stderr: Buffer.from('Wiki checkout failed\nAdditional error details'),
+        signal: null,
+        error: new Error('Wiki checkout failed'),
+      });
+
+      vi.mocked(getWikiStatus).mockReturnValue({
+        status: WIKI_STATUS.FAILURE,
+        error: mockError,
+        errorSummary: 'Wiki checkout failed',
+      });
+
+      await run();
+
+      // Should call addReleasePlanComment with the error status
+      expect(addReleasePlanComment).toHaveBeenCalledWith([mockTerraformModule], [], [], {
+        status: WIKI_STATUS.FAILURE,
+        error: mockError,
+        errorSummary: 'Wiki checkout failed',
+      });
+
+      // Should call setFailed with the error message after the error is thrown from handlePullRequestEvent
+      expect(setFailed).toHaveBeenCalledWith('Wiki checkout failed\nAdditional error details');
+    });
   });
 
   describe('merge event handling', () => {
@@ -154,13 +183,8 @@ describe('main', () => {
       context.isPrMergeEvent = true;
 
       vi.mocked(hasReleaseComment).mockResolvedValue(false);
-      vi.mocked(getTerraformChangedModules).mockReturnValue([mockChangedModule]);
-      vi.mocked(createTaggedRelease).mockResolvedValue([
-        {
-          moduleName: mockChangedModule.moduleName,
-          release: mockReleaseResponse,
-        },
-      ]);
+      vi.mocked(parseTerraformModules).mockReturnValue([mockTerraformModule]);
+      vi.mocked(createTaggedReleases).mockResolvedValue([mockTerraformModule]);
     });
 
     it('should handle merge event with wiki enabled', async () => {
@@ -168,15 +192,10 @@ describe('main', () => {
 
       await run();
 
-      expect(createTaggedRelease).toHaveBeenCalledWith([mockChangedModule]);
-      expect(addPostReleaseComment).toHaveBeenCalledWith([
-        {
-          moduleName: mockChangedModule.moduleName,
-          release: mockReleaseResponse,
-        },
-      ]);
-      expect(deleteLegacyReleases).toHaveBeenCalled();
-      expect(deleteLegacyTags).toHaveBeenCalled();
+      expect(createTaggedReleases).toHaveBeenCalledWith([mockTerraformModule]);
+      expect(addPostReleaseComment).toHaveBeenCalledWith([mockTerraformModule]);
+      expect(deleteReleases).toHaveBeenCalledWith([]);
+      expect(deleteTags).toHaveBeenCalledWith([]);
       expect(installTerraformDocs).toHaveBeenCalledWith(config.terraformDocsVersion);
       expect(ensureTerraformDocsConfigDoesNotExist).toHaveBeenCalled();
       expect(checkoutWiki).toHaveBeenCalled();
@@ -189,15 +208,10 @@ describe('main', () => {
 
       await run();
 
-      expect(createTaggedRelease).toHaveBeenCalledWith([mockChangedModule]);
-      expect(addPostReleaseComment).toHaveBeenCalledWith([
-        {
-          moduleName: mockChangedModule.moduleName,
-          release: mockReleaseResponse,
-        },
-      ]);
-      expect(deleteLegacyReleases).toHaveBeenCalled();
-      expect(deleteLegacyTags).toHaveBeenCalled();
+      expect(createTaggedReleases).toHaveBeenCalledWith([mockTerraformModule]);
+      expect(addPostReleaseComment).toHaveBeenCalledWith([mockTerraformModule]);
+      expect(deleteReleases).toHaveBeenCalledWith([]);
+      expect(deleteTags).toHaveBeenCalledWith([]);
       expect(installTerraformDocs).not.toHaveBeenCalled();
       expect(ensureTerraformDocsConfigDoesNotExist).not.toHaveBeenCalled();
       expect(checkoutWiki).not.toHaveBeenCalled();
@@ -206,34 +220,47 @@ describe('main', () => {
       expect(info).toHaveBeenCalledWith('Wiki generation is disabled.');
     });
 
-    it('should handle merge event sequence correctly', async () => {
-      config.disableWiki = false;
-      const expectedTaggedRelease = {
-        moduleName: mockChangedModule.moduleName,
-        release: mockReleaseResponse,
-      };
-
-      vi.mocked(getTerraformChangedModules).mockReturnValue([mockChangedModule]);
-      vi.mocked(createTaggedRelease).mockResolvedValue([expectedTaggedRelease]);
+    it('should handle merge event with delete legacy tags disabled', async () => {
+      config.deleteLegacyTags = false;
 
       await run();
 
-      const createTaggedReleaseMock = vi.mocked(createTaggedRelease);
+      expect(createTaggedReleases).toHaveBeenCalledWith([mockTerraformModule]);
+      expect(addPostReleaseComment).toHaveBeenCalledWith([mockTerraformModule]);
+      expect(deleteReleases).not.toHaveBeenCalled();
+      expect(deleteTags).not.toHaveBeenCalled();
+      expect(info).toHaveBeenCalledWith('Deletion of legacy tags/releases is disabled. Skipping.');
+    });
+
+    it('should handle merge event sequence correctly', async () => {
+      config.disableWiki = false;
+      const mockReleasesToDelete = [mockReleaseResponse];
+      const mockTagsToDelete = ['old-tag/v1.0.0'];
+
+      vi.mocked(TerraformModule.getReleasesToDelete).mockReturnValue(mockReleasesToDelete);
+      vi.mocked(TerraformModule.getTagsToDelete).mockReturnValue(mockTagsToDelete);
+      vi.mocked(createTaggedReleases).mockResolvedValue([mockTerraformModule]);
+
+      await run();
+
+      const createTaggedReleasesMock = vi.mocked(createTaggedReleases);
       const addPostReleaseCommentMock = vi.mocked(addPostReleaseComment);
-      const deleteLegacyReleasesMock = vi.mocked(deleteLegacyReleases);
-      const deleteLegacyTagsMock = vi.mocked(deleteLegacyTags);
+      const deleteReleasesMock = vi.mocked(deleteReleases);
+      const deleteTagsMock = vi.mocked(deleteTags);
 
       // Verify correct arguments
-      expect(createTaggedReleaseMock).toHaveBeenCalledWith([mockChangedModule]);
-      expect(addPostReleaseCommentMock).toHaveBeenCalledWith([expectedTaggedRelease]);
+      expect(createTaggedReleasesMock).toHaveBeenCalledWith([mockTerraformModule]);
+      expect(addPostReleaseCommentMock).toHaveBeenCalledWith([mockTerraformModule]);
+      expect(deleteReleasesMock).toHaveBeenCalledWith(mockReleasesToDelete);
+      expect(deleteTagsMock).toHaveBeenCalledWith(mockTagsToDelete);
 
       // Verify sequence order
-      const createTaggedReleaseCallOrder = createTaggedReleaseMock.mock.invocationCallOrder[0];
-      const deleteLegacyReleasesCallOrder = deleteLegacyReleasesMock.mock.invocationCallOrder[0];
-      const deleteLegacyTagsCallOrder = deleteLegacyTagsMock.mock.invocationCallOrder[0];
+      const createTaggedReleasesCallOrder = createTaggedReleasesMock.mock.invocationCallOrder[0];
+      const deleteReleasesCallOrder = deleteReleasesMock.mock.invocationCallOrder[0];
+      const deleteTagsCallOrder = deleteTagsMock.mock.invocationCallOrder[0];
 
-      expect(createTaggedReleaseCallOrder).toBeLessThan(deleteLegacyReleasesCallOrder);
-      expect(deleteLegacyReleasesCallOrder).toBeLessThan(deleteLegacyTagsCallOrder);
+      expect(createTaggedReleasesCallOrder).toBeLessThan(deleteReleasesCallOrder);
+      expect(deleteReleasesCallOrder).toBeLessThan(deleteTagsCallOrder);
     });
   });
 });

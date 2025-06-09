@@ -3,578 +3,1476 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { config } from '@/mocks/config';
 import { context } from '@/mocks/context';
-import {
-  getAllTerraformModules,
-  getTerraformChangedModules,
-  getTerraformModulesToRemove,
-  isChangedModule,
-} from '@/terraform-module';
-import type { CommitDetails, GitHubRelease, TerraformChangedModule, TerraformModule } from '@/types';
+import { TerraformModule } from '@/terraform-module';
+import { createMockTerraformModule } from '@/tests/helpers/terraform-module';
+import type { CommitDetails, GitHubRelease } from '@/types';
+import { RELEASE_REASON, RELEASE_TYPE } from '@/utils/constants';
 import { endGroup, info, startGroup } from '@actions/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-describe('terraform-module', () => {
-  describe('isChangedModule()', () => {
-    it('should identify changed terraform modules correctly', () => {
-      const changedModule: TerraformChangedModule = {
-        moduleName: 'test-module',
-        directory: '/workspace/test-module',
-        tags: ['v1.0.0'],
-        releases: [],
-        latestTag: 'test-module/v1.0.0',
-        latestTagVersion: 'v1.0.0',
-        isChanged: true,
-        commitMessages: ['feat: new feature'],
-        releaseType: 'minor',
-        nextTag: 'test-module/v1.1.0',
-        nextTagVersion: 'v1.1.0',
-      };
+describe('TerraformModule', () => {
+  let tmpDir: string;
+  let moduleDir: string;
 
-      const unchangedModule: TerraformModule = {
-        moduleName: 'test-module-2',
-        directory: '/workspace/test-module-2',
-        tags: ['v1.0.0'],
-        releases: [],
-        latestTag: 'test-module-2/v1.0.0',
-        latestTagVersion: 'v1.0.0',
-      };
+  beforeEach(() => {
+    // Create a temporary directory with a random suffix
+    tmpDir = mkdtempSync(join(tmpdir(), 'terraform-test-'));
+    moduleDir = join(tmpDir, 'tf-modules', 'test-module');
+    mkdirSync(moduleDir, { recursive: true });
 
-      const notQuiteChangedModule = {
-        ...unchangedModule,
-        isChanged: false,
-      };
+    // Create a main.tf file in the module directory
+    writeFileSync(join(moduleDir, 'main.tf'), 'resource "aws_s3_bucket" "test" { bucket = "test-bucket" }');
 
-      expect(isChangedModule(changedModule)).toBe(true);
-      expect(isChangedModule(unchangedModule)).toBe(false);
-      expect(isChangedModule(notQuiteChangedModule)).toBe(false);
+    context.set({
+      workspaceDir: tmpDir,
+    });
+
+    config.set({
+      majorKeywords: ['BREAKING CHANGE', 'major change'],
+      minorKeywords: ['feat:', 'feature:'],
+      defaultFirstTag: 'v0.1.0',
+      moduleChangeExcludePatterns: [],
+      modulePathIgnore: [],
     });
   });
 
-  describe('getTerraformChangedModules()', () => {
-    it('should filter and return only changed modules', () => {
-      const modules: (TerraformModule | TerraformChangedModule)[] = [
-        {
-          moduleName: 'module1',
-          directory: '/workspace/module1',
-          tags: ['v1.0.0'],
-          releases: [],
-          latestTag: 'module1/v1.0.0',
-          latestTagVersion: 'v1.0.0',
-        },
-        {
-          moduleName: 'module2',
-          directory: '/workspace/module2',
-          tags: ['v0.1.0'],
-          releases: [],
-          latestTag: 'module2/v0.1.0',
-          latestTagVersion: 'v0.1.0',
-          isChanged: true,
-          commitMessages: ['fix: minor bug'],
-          releaseType: 'patch',
-          nextTag: 'module2/v0.1.1',
-          nextTagVersion: 'v0.1.1',
-        },
-      ];
+  afterEach(() => {
+    // Clean up the temporary directory and all its contents
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
 
-      const changedModules = getTerraformChangedModules(modules);
+  describe('constructor', () => {
+    it('should create a TerraformModule instance with correct properties', () => {
+      const module = new TerraformModule(moduleDir);
 
-      expect(changedModules).toHaveLength(1);
-      expect(changedModules[0].moduleName).toBe('module2');
-      expect(changedModules[0].isChanged).toBe(true);
+      expect(module.name).toBe('tf-modules/test-module');
+      expect(module.directory).toBe(moduleDir);
+      expect(module.commits).toEqual([]);
+      expect(module.tags).toEqual([]);
+      expect(module.releases).toEqual([]);
+    });
+
+    it('should generate correct module name from directory path', () => {
+      const specialDir = join(tmpDir, 'complex_module-name.with/chars');
+      mkdirSync(specialDir, { recursive: true });
+
+      const module = new TerraformModule(specialDir);
+      expect(module.name).toBe('complex_module-name-with/chars');
+    });
+
+    it('should handle nested directory paths', () => {
+      const nestedDir = join(tmpDir, 'infrastructure', 'modules', 'vpc', 'endpoints');
+      mkdirSync(nestedDir, { recursive: true });
+
+      const module = new TerraformModule(nestedDir);
+      expect(module.name).toBe('infrastructure/modules/vpc/endpoints');
+      expect(module.directory).toBe(nestedDir);
+    });
+
+    it('should handle root level modules', () => {
+      const rootDir = join(tmpDir, 'simple-module');
+      mkdirSync(rootDir, { recursive: true });
+
+      const module = new TerraformModule(rootDir);
+      expect(module.name).toBe('simple-module');
+      expect(module.directory).toBe(rootDir);
+    });
+
+    it('should handle module directory outside workspace directory', () => {
+      context.set({
+        workspaceDir: '/invalid/root/external',
+      });
+
+      const moduleDir = join(tmpDir, 'aws/s3-bucket');
+
+      // Create module with directory outside workspace
+      const module = new TerraformModule(moduleDir);
+
+      // Should fall back to using the directory directly instead of relative path
+      // because relative() would return '../../../external-module-xxx/aws/bucket'
+      expect(module.name).toBe(TerraformModule.getTerraformModuleNameFromRelativePath(moduleDir));
+      expect(module.directory).toBe(moduleDir);
     });
   });
 
-  describe('getAllTerraformModules() - with temporary directory', () => {
-    let tmpDir: string;
-    let moduleDir: string;
+  describe('commit management', () => {
+    let module: TerraformModule;
 
     beforeEach(() => {
-      // Create a temporary directory with a random suffix
-      tmpDir = mkdtempSync(join(tmpdir(), 'terraform-test-'));
-
-      // Create the module directory structure
-      moduleDir = join(tmpDir, 'tf-modules', 'test-module');
-      mkdirSync(moduleDir, { recursive: true });
-
-      // Create a main.tf file in the module directory
-      const mainTfContent = `
-        resource "aws_s3_bucket" "test" {
-          bucket = "test-bucket"
-        }
-      `;
-      writeFileSync(join(moduleDir, 'variables.tf'), mainTfContent);
-
-      context.set({
-        workspaceDir: tmpDir,
-      });
+      module = new TerraformModule(moduleDir);
     });
 
-    afterEach(() => {
-      // Clean up the temporary directory and all its contents
-      rmSync(tmpDir, { recursive: true, force: true });
-    });
-
-    it('should handle single module with no changes', () => {
-      const mockCommits: CommitDetails[] = [
-        {
-          message: 'docs: variables update',
-          sha: 'xyz789',
-          files: [`${moduleDir}/variables.tf`], // testing with absolute path which works also
-        },
-      ];
-      const mockTags: string[] = ['tf-modules/test-module/v1.0.0'];
-      const mockReleases: GitHubRelease[] = [];
-
-      config.set({ moduleChangeExcludePatterns: ['*.md'] });
-
-      const modules = getAllTerraformModules(mockCommits, mockTags, mockReleases);
-
-      expect(modules).toHaveLength(1);
-      expect(modules[0].moduleName).toBe('tf-modules/test-module');
-      expect('isChanged' in modules[0]).toBe(true);
-
-      // Just check that the important logs were called without checking all logs
-      expect(vi.mocked(info)).toHaveBeenCalledWith('Parsing commit xyz789: docs: variables update (Changed Files = 1)');
-      expect(vi.mocked(info)).toHaveBeenCalledWith(`Analyzing file: ${moduleDir}/variables.tf`);
-      expect(vi.mocked(info)).toHaveBeenCalledWith('Finished analyzing directory tree, terraform modules, and commits');
-      expect(vi.mocked(info)).toHaveBeenCalledWith('Found 1 terraform module.');
-      expect(vi.mocked(info)).toHaveBeenCalledWith('Found 1 changed Terraform module.');
-    });
-  });
-
-  describe('getAllTerraformModules', () => {
-    const workspaceDir = process.cwd();
-
-    // Type-safe mock data
-    const mockCommits: CommitDetails[] = [
-      {
-        message: 'feat: new feature\n\nBREAKING CHANGE: major update',
+    it('should add commits and prevent duplicates', () => {
+      const commit1: CommitDetails = {
         sha: 'abc123',
-        files: ['tf-modules/vpc-endpoint/main.tf', 'tf-modules/vpc-endpoint/variables.tf'],
-      },
-    ];
+        message: 'feat: add feature',
+        files: ['main.tf'],
+      };
+      const commit2: CommitDetails = {
+        sha: 'def456',
+        message: 'fix: bug fix',
+        files: ['variables.tf'],
+      };
+      const duplicateCommit: CommitDetails = {
+        sha: 'abc123',
+        message: 'different message', // Same SHA, different message
+        files: ['other.tf'],
+      };
 
-    const mockTags: string[] = [
-      'tf-modules/vpc-endpoint/v1.0.0',
-      'tf-modules/vpc-endpoint/v1.1.0',
-      'tf-modules/s3-bucket-object/v0.1.0',
-      'tf-modules/test/v1.0.0',
-    ];
+      module.addCommit(commit1);
+      module.addCommit(commit2);
+      module.addCommit(duplicateCommit); // Should not be added
 
-    const mockReleases: GitHubRelease[] = [
-      {
-        id: 1,
-        title: 'tf-modules/vpc-endpoint/v1.0.0',
-        tagName: 'tf-modules/vpc-endpoint/v1.0.0',
-        body: 'Initial release',
-      },
-    ];
+      expect(module.commits).toHaveLength(2);
+      expect(module.commits[0].sha).toBe('abc123');
+      expect(module.commits[0].message).toBe('feat: add feature'); // Original message preserved
+      expect(module.commits[1].sha).toBe('def456');
+    });
+
+    it('should return commit messages correctly', () => {
+      const commits: CommitDetails[] = [
+        { sha: 'abc123', message: 'feat: add feature', files: ['main.tf'] },
+        { sha: 'def456', message: 'fix: bug fix', files: ['variables.tf'] },
+      ];
+
+      for (const commit of commits) {
+        module.addCommit(commit);
+      }
+
+      expect(module.commitMessages).toEqual(['feat: add feature', 'fix: bug fix']);
+    });
+
+    it('should handle commits with same SHA but different content', () => {
+      const commit1: CommitDetails = {
+        sha: 'abc123',
+        message: 'feat: add new feature',
+        files: ['main.tf'],
+      };
+
+      const commit2: CommitDetails = {
+        sha: 'abc123',
+        message: 'feat: updated feature',
+        files: ['variables.tf'],
+      };
+
+      module.addCommit(commit1);
+      module.addCommit(commit2);
+
+      expect(module.commits).toHaveLength(1);
+      expect(module.commits[0]).toEqual(commit1); // First one wins
+    });
+
+    it('should clear all commits when clearCommits is called', () => {
+      const commits: CommitDetails[] = [
+        { sha: 'abc123', message: 'feat: add feature', files: ['main.tf'] },
+        { sha: 'def456', message: 'fix: bug fix', files: ['variables.tf'] },
+        { sha: 'ghi789', message: 'docs: update readme', files: ['README.md'] },
+      ];
+
+      // Add multiple commits
+      for (const commit of commits) {
+        module.addCommit(commit);
+      }
+
+      expect(module.commits).toHaveLength(3);
+      expect(module.commitMessages).toEqual(['feat: add feature', 'fix: bug fix', 'docs: update readme']);
+
+      // Clear all commits
+      module.clearCommits();
+
+      expect(module.commits).toHaveLength(0);
+      expect(module.commitMessages).toHaveLength(0);
+    });
+
+    it('should not fail when clearing commits on an empty module', () => {
+      expect(module.commits).toHaveLength(0);
+
+      // Should not throw any error
+      expect(() => module.clearCommits()).not.toThrow();
+
+      expect(module.commits).toHaveLength(0);
+    });
+  });
+
+  describe('tag management', () => {
+    let module: TerraformModule;
 
     beforeEach(() => {
-      context.set({
-        workspaceDir,
-      });
+      module = new TerraformModule(moduleDir);
     });
 
-    it('should identify terraform modules and track their changes', () => {
-      const modules = getAllTerraformModules(mockCommits, mockTags, mockReleases);
-
-      expect(modules.length).toBeGreaterThan(0);
-      expect(startGroup).toHaveBeenCalledWith('Finding all Terraform modules with corresponding changes');
-      expect(endGroup).toHaveBeenCalledTimes(1);
-      // Use a general matcher for flexible module count as the codebase may have local modules
-      expect(vi.mocked(info)).toHaveBeenCalledWith(expect.stringMatching(/Found \d+ terraform modules./));
-
-      // Find the specific modules we're looking for
-      const s3Module = modules.find((m) => m.moduleName === 'tf-modules/s3-bucket-object');
-      const vpcModule = modules.find((m) => m.moduleName === 'tf-modules/vpc-endpoint');
-
-      expect(s3Module).toBeDefined();
-      expect(vpcModule).toBeDefined();
-
-      expect(s3Module).toMatchObject({
-        moduleName: 'tf-modules/s3-bucket-object',
-        directory: expect.stringContaining('tf-modules/s3-bucket-object'),
-        latestTag: 'tf-modules/s3-bucket-object/v0.1.0',
-        latestTagVersion: 'v0.1.0',
-        tags: ['tf-modules/s3-bucket-object/v0.1.0'],
-        releases: [],
-      });
-
-      expect(vpcModule).toMatchObject({
-        moduleName: 'tf-modules/vpc-endpoint',
-        directory: expect.stringContaining('tf-modules/vpc-endpoint'),
-        latestTag: 'tf-modules/vpc-endpoint/v1.1.0',
-        latestTagVersion: 'v1.1.0',
-        tags: ['tf-modules/vpc-endpoint/v1.1.0', 'tf-modules/vpc-endpoint/v1.0.0'],
-        releases: [
-          {
-            id: 1,
-            title: 'tf-modules/vpc-endpoint/v1.0.0',
-            tagName: 'tf-modules/vpc-endpoint/v1.0.0',
-            body: 'Initial release',
-          },
-        ],
-        isChanged: true,
-        commitMessages: ['feat: new feature\n\nBREAKING CHANGE: major update'],
-        releaseType: 'major',
-        nextTag: 'tf-modules/vpc-endpoint/v2.0.0',
-        nextTagVersion: 'v2.0.0',
-      });
-    });
-
-    it('should handle modules with no changes', () => {
-      const noChangeCommits: CommitDetails[] = [];
-      const modules = getAllTerraformModules(noChangeCommits, mockTags, mockReleases);
-
-      // Instead of checking the exact count, check that we have at least the 2 modules we expect
-      const s3Module = modules.find((m) => m.moduleName === 'tf-modules/s3-bucket-object');
-      const vpcModule = modules.find((m) => m.moduleName === 'tf-modules/vpc-endpoint');
-
-      expect(s3Module).toBeDefined();
-      expect(vpcModule).toBeDefined();
-
-      // Check the s3 module specifically
-      if (s3Module) {
-        expect('isChanged' in s3Module).toBe(false);
-        expect(s3Module.latestTag).toBeDefined();
-        expect(s3Module.latestTagVersion).toBeDefined();
-      }
-      // Check the vpc module specifically
-      if (vpcModule) {
-        expect('isChanged' in vpcModule).toBe(false);
-        expect(vpcModule.latestTag).toBeDefined();
-        expect(vpcModule.latestTagVersion).toBeDefined();
-      }
-    });
-
-    it('should handle excluded files based on patterns', () => {
-      const commitsWithExcludedFiles: CommitDetails[] = [
-        {
-          message: 'docs: update readme',
-          sha: 'xyz789',
-          files: ['tf-modules/vpc-endpoint/README.md'],
-        },
-      ];
-      config.set({ moduleChangeExcludePatterns: ['*.md'] });
-
-      // Ensure vpc-endpoint has tags so it's not auto-marked as changed due to initial release logic
-      // This is already covered by mockTags which includes vpc-endpoint tags
-      const modules = getAllTerraformModules(commitsWithExcludedFiles, mockTags, mockReleases);
-
-      const vpcModule = modules.find((m) => m.moduleName === 'tf-modules/vpc-endpoint');
-      expect(vpcModule).toBeDefined();
-      // Fix: Remove the non-null assertion and check if vpcModule exists first
-      if (vpcModule) {
-        expect('isChanged' in vpcModule).toBe(false);
-      }
-
-      // Check for specific log messages without checking the full array
-      expect(vi.mocked(info)).toHaveBeenCalledWith('Parsing commit xyz789: docs: update readme (Changed Files = 1)');
-      expect(vi.mocked(info)).toHaveBeenCalledWith('Analyzing file: tf-modules/vpc-endpoint/README.md');
-      expect(vi.mocked(info)).toHaveBeenCalledWith(
-        '  (skipping) ➜ Matches module-change-exclude-pattern for path `tf-modules/vpc-endpoint`',
-      );
-      expect(vi.mocked(info)).toHaveBeenCalledWith('Finished analyzing directory tree, terraform modules, and commits');
-      expect(vi.mocked(info)).toHaveBeenCalledWith(expect.stringMatching(/Found \d+ terraform modules./));
-      expect(vi.mocked(info)).toHaveBeenCalledWith(
-        `Marking module 'tf-modules/kms' for initial release (no existing tags found)`,
-      );
-      expect(vi.mocked(info)).toHaveBeenCalledWith('Found 1 changed Terraform module.');
-    });
-
-    it('should handle excluded files based on patterns and changed terraform-files', () => {
-      const commitsWithExcludedFiles: CommitDetails[] = [
-        {
-          message: 'docs: update readme',
-          sha: 'xyz789',
-          files: ['tf-modules/vpc-endpoint/README.md', 'tf-modules/vpc-endpoint/main.tf'],
-        },
-      ];
-      config.set({ moduleChangeExcludePatterns: ['*.md'] });
-      const modules = getAllTerraformModules(commitsWithExcludedFiles, mockTags, mockReleases);
-      expect(modules).toHaveLength(3);
-      for (const module of modules) {
-        if (module.moduleName === 'tf-modules/vpc-endpoint') {
-          expect('isChanged' in module).toBe(true);
-        }
-      }
-      expect(info).toHaveBeenCalledWith(
-        '  (skipping) ➜ Matches module-change-exclude-pattern for path `tf-modules/vpc-endpoint`',
-      );
-    });
-
-    it('should properly sort releases in descending order for modules', () => {
-      const mockCommits: CommitDetails[] = [
-        {
-          message: 'feat: update module',
-          sha: 'abc123',
-          files: ['tf-modules/vpc-endpoint/main.tf'],
-        },
+    it('should set and sort tags by semantic version descending', () => {
+      const tags = [
+        'tf-modules/test-module/v1.0.0',
+        'tf-modules/test-module/v2.1.0',
+        'tf-modules/test-module/v1.2.0',
+        'tf-modules/test-module/v2.0.0',
+        'tf-modules/test-module/v1.1.0',
       ];
 
-      const mockTags: string[] = [
-        'tf-modules/vpc-endpoint/v1.0.0',
-        'tf-modules/vpc-endpoint/v1.1.0',
-        'tf-modules/vpc-endpoint/v2.0.0',
+      module.setTags(tags);
+
+      expect(module.tags).toEqual([
+        'tf-modules/test-module/v2.1.0',
+        'tf-modules/test-module/v2.0.0',
+        'tf-modules/test-module/v1.2.0',
+        'tf-modules/test-module/v1.1.0',
+        'tf-modules/test-module/v1.0.0',
+      ]);
+    });
+
+    it('should get latest tag correctly', () => {
+      const tags = ['tf-modules/test-module/v1.0.0', 'tf-modules/test-module/v2.0.0', 'tf-modules/test-module/v1.5.0'];
+
+      module.setTags(tags);
+
+      expect(module.getLatestTag()).toBe('tf-modules/test-module/v2.0.0');
+    });
+
+    it('should return null for latest tag when no tags exist', () => {
+      expect(module.getLatestTag()).toBeNull();
+    });
+
+    it('should get latest tag version correctly', () => {
+      const tags = ['tf-modules/test-module/v1.0.0', 'tf-modules/test-module/v2.0.0'];
+
+      module.setTags(tags);
+
+      expect(module.getLatestTagVersion()).toBe('v2.0.0');
+    });
+
+    it('should return null for latest tag version when no tags exist', () => {
+      expect(module.getLatestTagVersion()).toBeNull();
+    });
+
+    it('should handle complex version sorting', () => {
+      const tags = [
+        'tf-modules/test-module/v1.2.10',
+        'tf-modules/test-module/v1.2.2',
+        'tf-modules/test-module/v1.10.0',
+        'tf-modules/test-module/v2.0.0',
+        'tf-modules/test-module/v1.2.11',
       ];
 
-      // Deliberately provide releases in incorrect version order
-      const mockReleases: GitHubRelease[] = [
+      module.setTags(tags);
+
+      expect(module.tags).toEqual([
+        'tf-modules/test-module/v2.0.0',
+        'tf-modules/test-module/v1.10.0',
+        'tf-modules/test-module/v1.2.11',
+        'tf-modules/test-module/v1.2.10',
+        'tf-modules/test-module/v1.2.2',
+      ]);
+    });
+
+    it('should handle single tag', () => {
+      module.setTags(['tf-modules/test-module/v1.0.0']);
+
+      expect(module.getLatestTag()).toBe('tf-modules/test-module/v1.0.0');
+      expect(module.getLatestTagVersion()).toBe('v1.0.0');
+    });
+  });
+
+  describe('release management', () => {
+    let module: TerraformModule;
+
+    beforeEach(() => {
+      module = new TerraformModule(moduleDir);
+    });
+
+    it('should set and sort releases by semantic version descending', () => {
+      const releases: GitHubRelease[] = [
         {
           id: 1,
-          title: 'tf-modules/vpc-endpoint/v1.0.0',
-          tagName: 'tf-modules/vpc-endpoint/v1.0.0',
+          title: 'tf-modules/test-module/v1.0.0',
+          tagName: 'tf-modules/test-module/v1.0.0',
           body: 'Initial release',
         },
         {
           id: 3,
-          title: 'tf-modules/vpc-endpoint/v2.0.0',
-          tagName: 'tf-modules/vpc-endpoint/v2.0.0',
+          title: 'tf-modules/test-module/v2.0.0',
+          tagName: 'tf-modules/test-module/v2.0.0',
           body: 'Major release',
         },
         {
           id: 2,
-          title: 'tf-modules/vpc-endpoint/v1.1.0',
-          tagName: 'tf-modules/vpc-endpoint/v1.1.0',
-          body: 'Feature update',
+          title: 'tf-modules/test-module/v1.1.0',
+          tagName: 'tf-modules/test-module/v1.1.0',
+          body: 'Minor release',
         },
       ];
 
-      const modules = getAllTerraformModules(mockCommits, mockTags, mockReleases);
+      module.setReleases(releases);
 
-      // Find the vpc-endpoint module
-      const vpcModule = modules.find((module) => module.moduleName === 'tf-modules/vpc-endpoint');
-      expect(vpcModule).toBeDefined();
-      expect(vpcModule?.releases).toHaveLength(3);
-
-      // Verify releases are properly sorted in descending order
-      expect(vpcModule?.releases[0].title).toBe('tf-modules/vpc-endpoint/v2.0.0');
-      expect(vpcModule?.releases[1].title).toBe('tf-modules/vpc-endpoint/v1.1.0');
-      expect(vpcModule?.releases[2].title).toBe('tf-modules/vpc-endpoint/v1.0.0');
+      expect(module.releases).toHaveLength(3);
+      expect(module.releases[0].title).toBe('tf-modules/test-module/v2.0.0');
+      expect(module.releases[1].title).toBe('tf-modules/test-module/v1.1.0');
+      expect(module.releases[2].title).toBe('tf-modules/test-module/v1.0.0');
     });
 
-    it('should skip files not associated with any terraform module', () => {
-      const commits: CommitDetails[] = [
+    it('should handle complex version sorting for releases', () => {
+      const releases: GitHubRelease[] = [
         {
-          message: 'root level file change',
-          sha: 'root23452',
+          id: 1,
+          title: 'tf-modules/test-module/v1.2.10',
+          tagName: 'tf-modules/test-module/v1.2.10',
+          body: 'Patch release 10',
+        },
+        {
+          id: 2,
+          title: 'tf-modules/test-module/v1.2.2',
+          tagName: 'tf-modules/test-module/v1.2.2',
+          body: 'Patch release 2',
+        },
+        {
+          id: 3,
+          title: 'tf-modules/test-module/v1.10.0',
+          tagName: 'tf-modules/test-module/v1.10.0',
+          body: 'Minor release 10',
+        },
+        {
+          id: 4,
+          title: 'tf-modules/test-module/v2.0.0',
+          tagName: 'tf-modules/test-module/v2.0.0',
+          body: 'Major release',
+        },
+        {
+          id: 5,
+          title: 'tf-modules/test-module/v1.2.11',
+          tagName: 'tf-modules/test-module/v1.2.11',
+          body: 'Patch release 11',
+        },
+        {
+          id: 6,
+          title: 'tf-modules/test-module/v10.0.0',
+          tagName: 'tf-modules/test-module/v10.0.0',
+          body: 'Major release 10',
+        },
+      ];
+
+      module.setReleases(releases);
+
+      // Should be sorted by semantic version (newest first)
+      expect(module.releases).toHaveLength(6);
+      expect(module.releases.map((r) => r.title)).toEqual([
+        'tf-modules/test-module/v10.0.0', // Major 10
+        'tf-modules/test-module/v2.0.0', // Major 2
+        'tf-modules/test-module/v1.10.0', // Minor 10
+        'tf-modules/test-module/v1.2.11', // Patch 11
+        'tf-modules/test-module/v1.2.10', // Patch 10
+        'tf-modules/test-module/v1.2.2', // Patch 2
+      ]);
+    });
+
+    it('should handle edge cases in version sorting for releases', () => {
+      const releases: GitHubRelease[] = [
+        {
+          id: 1,
+          title: 'tf-modules/test-module/v1.0.0',
+          tagName: 'tf-modules/test-module/v1.0.0',
+          body: 'Standard version',
+        },
+        {
+          id: 2,
+          title: 'tf-modules/test-module/v1.0', // Missing patch version
+          tagName: 'tf-modules/test-module/v1.0',
+          body: 'Missing patch',
+        },
+        {
+          id: 3,
+          title: 'tf-modules/test-module/v1', // Only major version
+          tagName: 'tf-modules/test-module/v1',
+          body: 'Major only',
+        },
+        {
+          id: 4,
+          title: 'tf-modules/test-module/v2.0.0',
+          tagName: 'tf-modules/test-module/v2.0.0',
+          body: 'Higher major',
+        },
+        {
+          id: 5,
+          title: 'tf-modules/test-module/v1.5.3',
+          tagName: 'tf-modules/test-module/v1.5.3',
+          body: 'Higher minor',
+        },
+      ];
+
+      module.setReleases(releases);
+
+      // Should be sorted by semantic version (newest first)
+      // v2.0.0 > v1.5.3 > v1.0.0 > v1.0 (NaN becomes 0) > v1 (NaN becomes 0)
+      expect(module.releases).toHaveLength(5);
+      expect(module.releases.map((r) => r.title)).toEqual([
+        'tf-modules/test-module/v2.0.0', // 2.0.0
+        'tf-modules/test-module/v1.5.3', // 1.5.3
+        'tf-modules/test-module/v1.0.0', // 1.0.0
+        'tf-modules/test-module/v1.0', // 1.0.NaN (treated as 1.0.0)
+        'tf-modules/test-module/v1', // 1.NaN.NaN (treated as 1.0.0)
+      ]);
+    });
+
+    it('should handle releases with non-numeric version components', () => {
+      const releases: GitHubRelease[] = [
+        {
+          id: 1,
+          title: 'tf-modules/test-module/v1.0.0',
+          tagName: 'tf-modules/test-module/v1.0.0',
+          body: 'Standard version',
+        },
+        {
+          id: 2,
+          title: 'tf-modules/test-module/vbeta.1.0', // Non-numeric major
+          tagName: 'tf-modules/test-module/vbeta.1.0',
+          body: 'Beta version',
+        },
+        {
+          id: 3,
+          title: 'tf-modules/test-module/v1.alpha.0', // Non-numeric minor
+          tagName: 'tf-modules/test-module/v1.alpha.0',
+          body: 'Alpha version',
+        },
+      ];
+
+      module.setReleases(releases);
+
+      // Non-numeric components become NaN, which when subtracted become NaN
+      // The || operator will handle this and continue to next comparison
+      expect(module.releases).toHaveLength(3);
+
+      // When NaN values are involved, sorting order is unpredictable
+      // We just verify that all releases are present, not their specific order
+      const releasesTitles = module.releases.map((r) => r.title);
+      expect(releasesTitles).toContain('tf-modules/test-module/v1.0.0');
+      expect(releasesTitles).toContain('tf-modules/test-module/vbeta.1.0');
+      expect(releasesTitles).toContain('tf-modules/test-module/v1.alpha.0');
+    });
+
+    it('should handle identical version numbers in releases', () => {
+      const releases: GitHubRelease[] = [
+        {
+          id: 1,
+          title: 'tf-modules/test-module/v1.0.0',
+          tagName: 'tf-modules/test-module/v1.0.0',
+          body: 'First release',
+        },
+        {
+          id: 2,
+          title: 'tf-modules/test-module/v1.0.0',
+          tagName: 'tf-modules/test-module/v1.0.0',
+          body: 'Duplicate release',
+        },
+        {
+          id: 3,
+          title: 'tf-modules/test-module/v2.0.0',
+          tagName: 'tf-modules/test-module/v2.0.0',
+          body: 'Higher version',
+        },
+      ];
+
+      module.setReleases(releases);
+
+      // Should maintain stable sort for identical versions
+      expect(module.releases).toHaveLength(3);
+      expect(module.releases[0].title).toBe('tf-modules/test-module/v2.0.0');
+      // The two v1.0.0 releases should maintain their relative order (stable sort)
+      expect(module.releases[1].body).toBe('First release');
+      expect(module.releases[2].body).toBe('Duplicate release');
+    });
+
+    it('should handle empty releases array', () => {
+      const releases: GitHubRelease[] = [];
+
+      module.setReleases(releases);
+
+      expect(module.releases).toHaveLength(0);
+      expect(module.releases).toEqual([]);
+    });
+
+    it('should handle single release', () => {
+      const releases: GitHubRelease[] = [
+        {
+          id: 1,
+          title: 'tf-modules/test-module/v1.0.0',
+          tagName: 'tf-modules/test-module/v1.0.0',
+          body: 'Single release',
+        },
+      ];
+
+      module.setReleases(releases);
+
+      expect(module.releases).toHaveLength(1);
+      expect(module.releases[0].title).toBe('tf-modules/test-module/v1.0.0');
+    });
+  });
+
+  describe('release determination', () => {
+    let module: TerraformModule;
+
+    beforeEach(() => {
+      module = new TerraformModule(moduleDir);
+    });
+
+    describe('needsRelease()', () => {
+      it('should return true for initial release (no tags)', () => {
+        expect(module.needsRelease()).toBe(true);
+      });
+
+      it('should return true when module has direct changes', () => {
+        // Set tags so it's not initial release
+        module.setTags(['tf-modules/test-module/v1.0.0']);
+
+        // Add a commit (direct change)
+        module.addCommit({
+          sha: 'abc123',
+          message: 'feat: add feature',
           files: ['main.tf'],
-        },
-      ];
-      getAllTerraformModules(commits, mockTags, mockReleases);
-      expect(info).toHaveBeenCalledWith('Analyzing file: main.tf');
-    });
+        });
 
-    it('should handle nested terraform modules', () => {
-      config.set({ moduleChangeExcludePatterns: [] });
-      const nestedModuleCommit: CommitDetails[] = [
-        {
-          message: 'feat: update nested module',
-          sha: 'nested123',
-          files: ['tf-modules/s3-bucket-object/tests/README.md'],
-        },
-      ];
-
-      const modules = getAllTerraformModules(nestedModuleCommit, mockTags, mockReleases);
-
-      for (const module of modules) {
-        if (module.moduleName === 'tf-modules/s3-bucket-object') {
-          expect('isChanged' in module).toBe(true);
-          break;
-        }
-      }
-    });
-
-    it('should handle modulePathIgnore patterns when processing changed files', () => {
-      // Set up a modulePathIgnore pattern
-      config.set({
-        modulePathIgnore: ['**/examples/**'],
-        moduleChangeExcludePatterns: [],
+        expect(module.needsRelease()).toBe(true);
       });
 
-      const commitsWithIgnoredPath: CommitDetails[] = [
-        {
-          message: 'feat: update example',
-          sha: 'example123',
-          files: ['tf-modules/kms/examples/complete/main.tf'],
-        },
-      ];
+      it('should return false when module has no changes and existing tags', () => {
+        // Set tags so it's not initial release
+        module.setTags(['tf-modules/test-module/v1.0.0']);
 
-      // Add a tag for the kms module to prevent it from being auto-marked as changed for initial release
-      const tagsWithKms = [...mockTags, 'tf-modules/kms/v1.0.0'];
+        // No commits added (no direct changes)
+        // No dependency triggers
 
-      const modules = getAllTerraformModules(commitsWithIgnoredPath, tagsWithKms, mockReleases);
-
-      // The module shouldn't be marked as changed even though there are changes in the examples directory
-      const kmsModule = modules.find((m) => m.moduleName === 'tf-modules/kms');
-      expect(kmsModule).toBeDefined();
-      if (kmsModule) {
-        expect('isChanged' in kmsModule).toBe(false);
-      }
-
-      // Verify the ignore message was logged
-      expect(info).toHaveBeenCalledWith(
-        '  (skipping) ➜ Matches module-path-ignore pattern for path `tf-modules/kms/examples/complete`',
-      );
+        expect(module.needsRelease()).toBe(false);
+      });
     });
 
-    it('should respect modulePathIgnore for multiple patterns', () => {
-      // Set multiple ignore patterns
-      config.set({
-        modulePathIgnore: ['**/examples/**', '**/test/**', '**/docs/**'],
-        moduleChangeExcludePatterns: [],
+    describe('getReleaseType()', () => {
+      it('should return patch for initial release', () => {
+        expect(module.getReleaseType()).toBe(RELEASE_TYPE.PATCH);
       });
 
-      const commitsWithMultipleIgnoredPaths: CommitDetails[] = [
-        {
-          message: 'docs: update documentation',
-          sha: 'multiple123',
-          files: [
-            'tf-modules/kms/examples/complete/main.tf', // exists
-            'tf-modules/kms/examples/test.tf', // non-existent
-            'tf-modules/vpc-endpoint/docs/README.md',
-            'tf-modules/vpc-endpoint/main.tf', // This file should still trigger a change
-          ],
-        },
-      ];
+      it('should return major when commit contains major keywords', () => {
+        module.setTags(['tf-modules/test-module/v1.0.0']); // Not initial
+        module.addCommit({
+          sha: 'abc123',
+          message: 'BREAKING CHANGE: major update',
+          files: ['main.tf'],
+        });
 
-      const modules = getAllTerraformModules(commitsWithMultipleIgnoredPaths, mockTags, mockReleases);
+        expect(module.getReleaseType()).toBe(RELEASE_TYPE.MAJOR);
+      });
 
-      expect(modules.length).toBe(3);
+      it('should return minor when commit contains minor keywords', () => {
+        module.setTags(['tf-modules/test-module/v1.0.0']); // Not initial
+        module.addCommit({
+          sha: 'abc123',
+          message: 'feat: add new feature',
+          files: ['main.tf'],
+        });
 
-      // The module should be marked as changed due to main.tf, despite the other ignored files
-      const vpcModule = modules.find((m) => m.moduleName === 'tf-modules/vpc-endpoint');
-      expect(vpcModule).toBeDefined();
-      if (vpcModule) {
-        expect('isChanged' in vpcModule).toBe(true);
-      }
+        expect(module.getReleaseType()).toBe(RELEASE_TYPE.MINOR);
+      });
 
-      // Verify the ignore messages were logged for each ignored path
-      expect(info).toHaveBeenCalledWith(
-        '  (skipping) ➜ Matches module-path-ignore pattern for path `tf-modules/kms/examples/complete`',
-      );
+      it('should return patch for regular commits', () => {
+        module.setTags(['tf-modules/test-module/v1.0.0']); // Not initial
+        module.addCommit({
+          sha: 'abc123',
+          message: 'fix: bug fix',
+          files: ['main.tf'],
+        });
+
+        expect(module.getReleaseType()).toBe(RELEASE_TYPE.PATCH);
+      });
+
+      it('should return highest release type from multiple commits', () => {
+        module.setTags(['tf-modules/test-module/v1.0.0']); // Not initial
+        module.addCommit({
+          sha: 'abc123',
+          message: 'fix: bug fix', // patch
+          files: ['main.tf'],
+        });
+        module.addCommit({
+          sha: 'def456',
+          message: 'feat: new feature', // minor
+          files: ['variables.tf'],
+        });
+        module.addCommit({
+          sha: 'ghi789',
+          message: 'docs: update readme', // patch
+          files: ['README.md'],
+        });
+
+        expect(module.getReleaseType()).toBe(RELEASE_TYPE.MINOR);
+      });
+
+      it('should return null when no release is needed', () => {
+        module.setTags(['tf-modules/test-module/v1.0.0']); // Not initial
+        // No commits, no dependency triggers
+
+        expect(module.getReleaseType()).toBeNull();
+      });
+
+      it('should be case insensitive for keywords', () => {
+        module.setTags(['tf-modules/test-module/v1.0.0']); // Not initial
+        module.addCommit({
+          sha: 'abc123',
+          message: 'breaking change: major update',
+          files: ['main.tf'],
+        });
+
+        expect(module.getReleaseType()).toBe(RELEASE_TYPE.MAJOR);
+      });
+
+      it('should handle mixed case features', () => {
+        module.setTags(['tf-modules/test-module/v1.0.0']); // Not initial
+        module.addCommit({
+          sha: 'abc123',
+          message: 'FEAT: add new feature',
+          files: ['main.tf'],
+        });
+
+        expect(module.getReleaseType()).toBe(RELEASE_TYPE.MINOR);
+      });
     });
 
-    describe('getAllTerraformModules', () => {
-      it('should sort module releases correctly by semantic version', () => {
-        const moduleName = 'tf-modules/vpc-endpoint';
-        const commits: CommitDetails[] = [];
-        const tags = [
-          `${moduleName}/v1.0.0`,
-          `${moduleName}/v2.0.0`,
-          `${moduleName}/v2.1.0`,
-          `${moduleName}/v2.2.0`,
-          `${moduleName}/v2.2.1`,
-          `${moduleName}/v2.2.2`,
-        ];
+    describe('getReleaseReasons()', () => {
+      it('should return initial reason for new module', () => {
+        expect(module.getReleaseReasons()).toEqual([RELEASE_REASON.INITIAL]);
+      });
 
-        const releases: GitHubRelease[] = [
-          {
-            id: 1,
-            title: `${moduleName}/v1.0.0`,
-            tagName: `${moduleName}/v1.0.0`,
-            body: 'Initial release',
-          },
-          {
-            id: 4,
-            title: `${moduleName}/v2.2.0`,
-            tagName: `${moduleName}/v2.2.0`,
-            body: 'Another minor release',
-          },
-          {
-            id: 2,
-            title: `${moduleName}/v2.0.0`,
-            tagName: `${moduleName}/v2.0.0`,
-            body: 'Major release',
-          },
-          {
-            id: 6,
-            title: `${moduleName}/v2.2.2`,
-            tagName: `${moduleName}/v2.2.2`,
-            body: 'Another patch release',
-          },
-          {
-            id: 3,
-            title: `${moduleName}/v2.1.0`,
-            tagName: `${moduleName}/v2.1.0`,
-            body: 'Minor release',
-          },
-          {
-            id: 5,
-            title: `${moduleName}/v2.2.1`,
-            tagName: `${moduleName}/v2.2.1`,
-            body: 'Patch release',
-          },
-        ];
+      it('should return direct changes reason when commits exist', () => {
+        module.setTags(['tf-modules/test-module/v1.0.0']); // Not initial
+        module.addCommit({
+          sha: 'abc123',
+          message: 'feat: add feature',
+          files: ['main.tf'],
+        });
 
-        const modules = getAllTerraformModules(commits, tags, releases);
-        const testModule = modules.find((m) => m.moduleName === moduleName);
+        expect(module.getReleaseReasons()).toEqual([RELEASE_REASON.DIRECT_CHANGES]);
+      });
 
-        expect(testModule).toBeDefined();
-        expect(testModule?.releases.map((r) => r.title)).toEqual([
-          `${moduleName}/v2.2.2`,
-          `${moduleName}/v2.2.1`,
-          `${moduleName}/v2.2.0`,
-          `${moduleName}/v2.1.0`,
-          `${moduleName}/v2.0.0`,
-          `${moduleName}/v1.0.0`,
-        ]);
+      it('should return empty array when no release is needed', () => {
+        module.setTags(['tf-modules/test-module/v1.0.0']); // Not initial
+        // No commits, no dependency triggers
+
+        expect(module.getReleaseReasons()).toEqual([]);
+      });
+
+      it('should return multiple reasons when applicable', () => {
+        // Module with both initial and direct changes
+        module.addCommit({
+          sha: 'abc123',
+          message: 'feat: add feature',
+          files: ['main.tf'],
+        });
+
+        const reasons = module.getReleaseReasons();
+        expect(reasons).toContain(RELEASE_REASON.INITIAL);
+        expect(reasons).toContain(RELEASE_REASON.DIRECT_CHANGES);
+        expect(reasons).toHaveLength(2);
+      });
+    });
+
+    describe('getReleaseTagVersion()', () => {
+      it('should return default first tag for initial release', () => {
+        expect(module.getReleaseTagVersion()).toBe('v0.1.0');
+      });
+
+      it('should increment major version correctly', () => {
+        module.setTags(['tf-modules/test-module/v1.2.3']);
+        module.addCommit({
+          sha: 'abc123',
+          message: 'BREAKING CHANGE: major update',
+          files: ['main.tf'],
+        });
+
+        expect(module.getReleaseTagVersion()).toBe('v2.0.0');
+      });
+
+      it('should increment minor version correctly', () => {
+        module.setTags(['tf-modules/test-module/v1.2.3']);
+        module.addCommit({
+          sha: 'abc123',
+          message: 'feat: new feature',
+          files: ['main.tf'],
+        });
+
+        expect(module.getReleaseTagVersion()).toBe('v1.3.0');
+      });
+
+      it('should increment patch version correctly', () => {
+        module.setTags(['tf-modules/test-module/v1.2.3']);
+        module.addCommit({
+          sha: 'abc123',
+          message: 'fix: bug fix',
+          files: ['main.tf'],
+        });
+
+        expect(module.getReleaseTagVersion()).toBe('v1.2.4');
+      });
+
+      it('should return null when no release is needed', () => {
+        module.setTags(['tf-modules/test-module/v1.0.0']); // Not initial
+        // No commits, no dependency triggers
+
+        expect(module.getReleaseTagVersion()).toBeNull();
+      });
+
+      it('should handle malformed version tags', () => {
+        module.setTags(['tf-modules/test-module/invalid-version']);
+        module.addCommit({
+          sha: 'abc123',
+          message: 'fix: bug fix',
+          files: ['main.tf'],
+        });
+
+        expect(module.getReleaseTagVersion()).toBe('v0.1.0'); // Falls back to default
+      });
+
+      it('should handle versions without v prefix in tags', () => {
+        module.setTags(['tf-modules/test-module/1.2.3']);
+        module.addCommit({
+          sha: 'abc123',
+          message: 'fix: bug fix',
+          files: ['main.tf'],
+        });
+
+        expect(module.getReleaseTagVersion()).toBe('v1.2.4');
+      });
+
+      it('should fall back to default when tag format is invalid', () => {
+        module.setTags(['tf-modules/test-module/invalid-version']);
+        module.addCommit({
+          sha: 'abc123',
+          message: 'fix: bug fix',
+          files: ['main.tf'],
+        });
+
+        expect(module.getReleaseTagVersion()).toBe('v0.1.0');
+      });
+    });
+
+    describe('getReleaseTag()', () => {
+      it('should return full release tag for initial release', () => {
+        expect(module.getReleaseTag()).toBe('tf-modules/test-module/v0.1.0');
+      });
+
+      it('should return full release tag with incremented version', () => {
+        module.setTags(['tf-modules/test-module/v1.0.0']);
+        module.addCommit({
+          sha: 'abc123',
+          message: 'feat: new feature',
+          files: ['main.tf'],
+        });
+
+        expect(module.getReleaseTag()).toBe('tf-modules/test-module/v1.1.0');
+      });
+
+      it('should return null when no release is needed', () => {
+        module.setTags(['tf-modules/test-module/v1.0.0']); // Not initial
+        // No commits, no dependency triggers
+
+        expect(module.getReleaseTag()).toBeNull();
       });
     });
   });
 
-  describe('getTerraformModulesToRemove()', () => {
-    it('should identify modules to remove', () => {
-      const existingModules: TerraformModule[] = [
-        {
-          moduleName: 'module1',
-          directory: '/workspace/module1',
-          tags: ['module1/v1.0.0', 'module1/v1.1.0'],
-          releases: [],
-          latestTag: 'module1/v1.1.0',
-          latestTagVersion: 'v1.1.0',
-        },
-      ];
-      const mockTags = ['module1/v1.0.0', 'module1/v1.1.0', 'module2/v1.0.0', 'module3/v1.0.0'];
+  describe('toString()', () => {
+    let module: TerraformModule;
 
-      const modulesToRemove = getTerraformModulesToRemove(mockTags, existingModules);
-
-      expect(modulesToRemove).toHaveLength(2);
-      expect(modulesToRemove).toContain('module2');
-      expect(modulesToRemove).toContain('module3');
-      expect(startGroup).toHaveBeenCalledWith('Finding all Terraform modules that should be removed');
+    beforeEach(() => {
+      module = new TerraformModule(moduleDir);
     });
 
-    it('should handle empty tags list', () => {
-      const modulesToRemove = getTerraformModulesToRemove([], []);
-      expect(modulesToRemove).toHaveLength(0);
+    it('should format module without changes correctly', () => {
+      module.setTags(['tf-modules/test-module/v1.0.0']);
+
+      const output = module.toString();
+
+      expect(output).toContain('📦 [tf-modules/test-module]');
+      expect(output).toContain(`Directory: ${moduleDir}`);
+      expect(output).toContain('Tags:');
+      expect(output).toContain('- tf-modules/test-module/v1.0.0');
+      expect(output).not.toContain('Release Type:');
     });
 
-    it('should handle case with no modules to remove', () => {
-      const existingModules: TerraformModule[] = [
+    it('should format module with changes correctly', () => {
+      module.setTags(['tf-modules/test-module/v1.0.0']);
+      module.addCommit({
+        sha: 'abc1234567',
+        message: 'feat: add new feature\nDetailed description',
+        files: ['main.tf'],
+      });
+
+      const output = module.toString();
+
+      expect(output).toContain('📦 [tf-modules/test-module]');
+      expect(output).toContain('Commits:');
+      expect(output).toContain('- [abc1234] feat: add new feature'); // Short SHA + first line
+      expect(output).toContain('Release Type: minor');
+      expect(output).toContain('Release Reasons: direct-changes');
+    });
+
+    it('should format module with releases correctly', () => {
+      const releases: GitHubRelease[] = [
         {
-          moduleName: 'module1',
-          directory: '/workspace/module1',
-          tags: ['v1.0.0'],
-          releases: [],
-          latestTag: 'module1/v1.0.0',
-          latestTagVersion: 'v1.0.0',
-        },
-        {
-          moduleName: 'module2',
-          directory: '/workspace/module2',
-          tags: ['v0.1.0'],
-          releases: [],
-          latestTag: 'module2/v0.1.0',
-          latestTagVersion: 'v0.1.0',
+          id: 123,
+          title: 'tf-modules/test-module/v1.0.0',
+          tagName: 'tf-modules/test-module/v1.0.0',
+          body: 'Initial release',
         },
       ];
+      module.setReleases(releases);
 
-      const tagsWithNoExtras = ['module1/v1.0.0', 'module2/v0.1.0'];
+      const output = module.toString();
 
-      const modulesToRemove = getTerraformModulesToRemove(tagsWithNoExtras, existingModules);
-      expect(modulesToRemove).toHaveLength(0);
+      expect(output).toContain('Releases:');
+      expect(output).toContain('- [#123] tf-modules/test-module/v1.0.0  (tag: tf-modules/test-module/v1.0.0)');
+    });
+
+    it('should handle multi-line commit messages', () => {
+      module.addCommit({
+        sha: 'abc1234567',
+        message: 'feat: add feature\n\nThis is a detailed description\nwith multiple lines',
+        files: ['main.tf'],
+      });
+
+      const output = module.toString();
+
+      expect(output).toContain('[abc1234] feat: add feature'); // Only first line shown
+      expect(output).not.toContain('This is a detailed description');
+      expect(output).not.toContain('with multiple lines');
+    });
+  });
+
+  describe('static utilities', () => {
+    describe('getTerraformModuleNameFromRelativePath()', () => {
+      it('should generate valid module names from paths', () => {
+        expect(TerraformModule.getTerraformModuleNameFromRelativePath('tf-modules/simple-module')).toBe(
+          'tf-modules/simple-module',
+        );
+
+        expect(TerraformModule.getTerraformModuleNameFromRelativePath('complex_module-name.with/chars')).toBe(
+          'complex_module-name-with/chars',
+        );
+
+        expect(TerraformModule.getTerraformModuleNameFromRelativePath('/leading/slash/')).toBe('leading/slash');
+
+        expect(TerraformModule.getTerraformModuleNameFromRelativePath('module...with...dots')).toBe('module-with-dots');
+      });
+
+      it('should handle leading and trailing slashes', () => {
+        expect(TerraformModule.getTerraformModuleNameFromRelativePath('/test-module/')).toBe('test-module');
+      });
+
+      it('should handle multiple consecutive slashes', () => {
+        expect(TerraformModule.getTerraformModuleNameFromRelativePath('tf-modules//vpc//endpoint')).toBe(
+          'tf-modules/vpc/endpoint',
+        );
+      });
+
+      it('should handle whitespace', () => {
+        expect(TerraformModule.getTerraformModuleNameFromRelativePath('  test module  ')).toBe('test-module');
+      });
+
+      it('should convert to lowercase', () => {
+        expect(TerraformModule.getTerraformModuleNameFromRelativePath('Test-Module')).toBe('test-module');
+      });
+
+      it('should clean up invalid characters', () => {
+        expect(TerraformModule.getTerraformModuleNameFromRelativePath('test@module!#$')).toBe('test-module');
+      });
+
+      it('should remove trailing special characters', () => {
+        expect(TerraformModule.getTerraformModuleNameFromRelativePath('test-module-.')).toBe('test-module');
+      });
+    });
+
+    describe('isModuleAssociatedWithTag()', () => {
+      it('should correctly identify associated tags', () => {
+        expect(TerraformModule.isModuleAssociatedWithTag('my-module', 'my-module/v1.0.0')).toBe(true);
+        expect(TerraformModule.isModuleAssociatedWithTag('my-module', 'other-module/v1.0.0')).toBe(false);
+        expect(TerraformModule.isModuleAssociatedWithTag('my-module', 'my-module-extended/v1.0.0')).toBe(false);
+        expect(TerraformModule.isModuleAssociatedWithTag('my-module', 'my-module/v2.1.0')).toBe(true);
+      });
+
+      it('should return false for invalid tag format', () => {
+        expect(TerraformModule.isModuleAssociatedWithTag('my-module', 'my-module/invalid')).toBe(false);
+        expect(TerraformModule.isModuleAssociatedWithTag('my-module', 'invalid-format')).toBe(false);
+      });
+    });
+
+    describe('getTagsForModule()', () => {
+      it('should filter tags for specific module', () => {
+        const allTags = ['module-a/v1.0.0', 'module-a/v1.1.0', 'module-b/v1.0.0', 'module-c/v2.0.0'];
+
+        expect(TerraformModule.getTagsForModule('module-a', allTags)).toEqual(['module-a/v1.0.0', 'module-a/v1.1.0']);
+
+        expect(TerraformModule.getTagsForModule('module-b', allTags)).toEqual(['module-b/v1.0.0']);
+
+        expect(TerraformModule.getTagsForModule('non-existent', allTags)).toEqual([]);
+      });
+    });
+
+    describe('getReleasesForModule()', () => {
+      it('should filter releases for specific module', () => {
+        const allReleases: GitHubRelease[] = [
+          {
+            id: 1,
+            title: 'module-a/v1.0.0',
+            tagName: 'module-a/v1.0.0',
+            body: 'Release 1',
+          },
+          {
+            id: 2,
+            title: 'module-b/v1.0.0',
+            tagName: 'module-b/v1.0.0',
+            body: 'Release 2',
+          },
+          {
+            id: 3,
+            title: 'module-a/v1.1.0',
+            tagName: 'module-a/v1.1.0',
+            body: 'Release 3',
+          },
+        ];
+
+        const moduleAReleases = TerraformModule.getReleasesForModule('module-a', allReleases);
+        expect(moduleAReleases).toHaveLength(2);
+        expect(moduleAReleases.map((r) => r.tagName)).toEqual(['module-a/v1.0.0', 'module-a/v1.1.0']);
+
+        const moduleBReleases = TerraformModule.getReleasesForModule('module-b', allReleases);
+        expect(moduleBReleases).toHaveLength(1);
+        expect(moduleBReleases[0].tagName).toBe('module-b/v1.0.0');
+      });
+    });
+
+    describe('getModulesNeedingRelease()', () => {
+      it('should filter modules that need release', () => {
+        const module1 = new TerraformModule(join(tmpDir, 'module1'));
+        const module2 = new TerraformModule(join(tmpDir, 'module2'));
+        const module3 = new TerraformModule(join(tmpDir, 'module3'));
+
+        // module1: initial release (no tags)
+        // module2: has changes
+        module2.setTags(['module2/v1.0.0']);
+        module2.addCommit({
+          sha: 'abc123',
+          message: 'feat: new feature',
+          files: ['main.tf'],
+        });
+
+        // module3: no changes, has tags
+        module3.setTags(['module3/v1.0.0']);
+
+        const modules = [module1, module2, module3];
+        const needingRelease = TerraformModule.getModulesNeedingRelease(modules);
+
+        expect(needingRelease).toHaveLength(2);
+        expect(needingRelease).toContain(module1); // Initial release
+        expect(needingRelease).toContain(module2); // Has changes
+        expect(needingRelease).not.toContain(module3); // No changes
+      });
+    });
+
+    describe('getTagsToDelete()', () => {
+      beforeEach(() => {
+        vi.mocked(startGroup).mockClear();
+        vi.mocked(info).mockClear();
+        vi.mocked(endGroup).mockClear();
+      });
+
+      it('should return an empty array if no tags need to be removed', () => {
+        const allTags = ['module-a/v1.0.0', 'module-b/v1.1.0'];
+        const existingModules = [
+          createMockTerraformModule({ directory: join(tmpDir, 'module-a') }),
+          createMockTerraformModule({ directory: join(tmpDir, 'module-b') }),
+        ];
+
+        const tagsToDelete = TerraformModule.getTagsToDelete(allTags, existingModules);
+
+        expect(tagsToDelete).toEqual([]);
+        expect(startGroup).toHaveBeenCalledWith('Finding all Terraform tags that should be deleted');
+        expect(info).toHaveBeenCalledWith('Terraform tags to delete:');
+        expect(info).toHaveBeenCalledWith('[]');
+        expect(endGroup).toHaveBeenCalled();
+      });
+
+      it('should return tags for modules that no longer exist', () => {
+        const allTags = [
+          'module-a/v1.0.0',
+          'module-b/v1.1.0',
+          'module-c/v2.0.0', // This module no longer exists
+          'module-d/v1.0.0', // This module no longer exists
+        ];
+        const existingModules = [
+          createMockTerraformModule({ directory: join(tmpDir, 'module-a') }),
+          createMockTerraformModule({ directory: join(tmpDir, 'module-b') }),
+        ];
+
+        const tagsToDelete = TerraformModule.getTagsToDelete(allTags, existingModules);
+
+        expect(tagsToDelete).toEqual(['module-c/v2.0.0', 'module-d/v1.0.0']);
+        expect(info).toHaveBeenCalledWith(JSON.stringify(['module-c/v2.0.0', 'module-d/v1.0.0'], null, 2));
+      });
+
+      it('should handle tags with different version formats', () => {
+        const allTags = [
+          'module-x/v1.0.0',
+          'module-y/v1.2.3-beta', // Module Y doesn't exist
+          'module-z/v1', // Module Z doesn't exist
+        ];
+        const existingModules = [createMockTerraformModule({ directory: join(tmpDir, 'module-x') })];
+
+        const tagsToDelete = TerraformModule.getTagsToDelete(allTags, existingModules);
+
+        expect(tagsToDelete).toEqual(['module-y/v1.2.3-beta', 'module-z/v1']);
+      });
+
+      it('should return an empty array if allTags is empty', () => {
+        const allTags: string[] = [];
+        const existingModules = [new TerraformModule(join(tmpDir, 'module-a'))];
+
+        const tagsToDelete = TerraformModule.getTagsToDelete(allTags, existingModules);
+
+        expect(tagsToDelete).toEqual([]);
+        expect(info).toHaveBeenCalledWith('[]');
+      });
+
+      it('should return all tags if terraformModules is empty', () => {
+        const allTags = ['module-a/v1.0.0', 'module-b/v1.1.0'];
+        const terraformModules: TerraformModule[] = [];
+
+        const tagsToDelete = TerraformModule.getTagsToDelete(allTags, terraformModules);
+
+        expect(tagsToDelete).toEqual(['module-a/v1.0.0', 'module-b/v1.1.0']);
+        expect(info).toHaveBeenCalledWith(JSON.stringify(['module-a/v1.0.0', 'module-b/v1.1.0'], null, 2));
+      });
+
+      it('should correctly identify tags for modules that have changed their base name format', () => {
+        const allTags = [
+          'old-module-name/v1.0.0', // Old name, should be removed
+          'new-module-name/v1.0.0', // New name, should be kept
+        ];
+        const existingModules = [createMockTerraformModule({ directory: join(tmpDir, 'new-module-name') })];
+
+        const tagsToDelete = TerraformModule.getTagsToDelete(allTags, existingModules);
+
+        expect(tagsToDelete).toEqual(['old-module-name/v1.0.0']);
+      });
+
+      it('should handle tags that do not conform to the expected module/vX.Y.Z pattern', () => {
+        const allTags = [
+          'module-a/v1.0.0',
+          'non-standard-tag', // Should be removed as it won't match any module name
+          'another-module', // Should be removed
+        ];
+        const existingModules = [new TerraformModule(join(tmpDir, 'module-a'))];
+
+        Object.defineProperty(existingModules[0], 'name', {
+          value: 'module-a',
+          writable: false,
+        });
+
+        const tagsToDelete = TerraformModule.getTagsToDelete(allTags, existingModules);
+
+        expect(tagsToDelete).toEqual(['another-module', 'non-standard-tag']);
+      });
+
+      it('should sort the returned tags alphabetically', () => {
+        const allTags = ['zebra-module/v1.0.0', 'apple-module/v1.0.0', 'banana-module/v1.0.0'];
+        const terraformModules: TerraformModule[] = []; // No modules, so all tags are removed
+
+        const tagsToDelete = TerraformModule.getTagsToDelete(allTags, terraformModules);
+
+        expect(tagsToDelete).toEqual(['apple-module/v1.0.0', 'banana-module/v1.0.0', 'zebra-module/v1.0.0']);
+      });
+    });
+
+    describe('getReleasesToDelete()', () => {
+      beforeEach(() => {
+        vi.mocked(startGroup).mockClear();
+        vi.mocked(info).mockClear();
+        vi.mocked(endGroup).mockClear();
+      });
+
+      it('should return an empty array if no releases need to be removed', () => {
+        const allReleases: GitHubRelease[] = [
+          {
+            id: 1,
+            title: 'module-a/v1.0.0',
+            tagName: 'module-a/v1.0.0',
+            body: 'Release 1',
+          },
+          {
+            id: 2,
+            title: 'module-b/v1.1.0',
+            tagName: 'module-b/v1.1.0',
+            body: 'Release 2',
+          },
+        ];
+        const existingModules = [
+          createMockTerraformModule({ directory: join(tmpDir, 'module-a') }),
+          createMockTerraformModule({ directory: join(tmpDir, 'module-b') }),
+        ];
+
+        const releasesToDelete = TerraformModule.getReleasesToDelete(allReleases, existingModules);
+
+        expect(releasesToDelete).toEqual([]);
+        expect(startGroup).toHaveBeenCalledWith('Finding all Terraform releases that should be deleted');
+        expect(info).toHaveBeenCalledWith('Terraform releases to delete:');
+        expect(info).toHaveBeenCalledWith('[]');
+        expect(endGroup).toHaveBeenCalled();
+      });
+
+      it('should return releases for modules that no longer exist', () => {
+        const allReleases: GitHubRelease[] = [
+          {
+            id: 1,
+            title: 'module-a/v1.0.0',
+            tagName: 'module-a/v1.0.0',
+            body: 'Release 1',
+          },
+          {
+            id: 2,
+            title: 'module-b/v1.1.0',
+            tagName: 'module-b/v1.1.0',
+            body: 'Release 2',
+          },
+          {
+            id: 3,
+            title: 'module-c/v2.0.0',
+            tagName: 'module-c/v2.0.0',
+            body: 'Release 3', // This module no longer exists
+          },
+          {
+            id: 4,
+            title: 'module-d/v1.0.0',
+            tagName: 'module-d/v1.0.0',
+            body: 'Release 4', // This module no longer exists
+          },
+        ];
+        const existingModules = [
+          createMockTerraformModule({ directory: join(tmpDir, 'module-a') }),
+          createMockTerraformModule({ directory: join(tmpDir, 'module-b') }),
+        ];
+
+        const releasesToDelete = TerraformModule.getReleasesToDelete(allReleases, existingModules);
+
+        expect(releasesToDelete).toHaveLength(2);
+        expect(releasesToDelete[0].tagName).toBe('module-c/v2.0.0');
+        expect(releasesToDelete[1].tagName).toBe('module-d/v1.0.0');
+        expect(info).toHaveBeenCalledWith(JSON.stringify(['module-c/v2.0.0', 'module-d/v1.0.0'], null, 2));
+      });
+
+      it('should handle releases with different version formats', () => {
+        const allReleases: GitHubRelease[] = [
+          {
+            id: 1,
+            title: 'module-x/v1.0.0',
+            tagName: 'module-x/v1.0.0',
+            body: 'Release 1',
+          },
+          {
+            id: 2,
+            title: 'module-y/v1.2.3-beta',
+            tagName: 'module-y/v1.2.3-beta',
+            body: 'Release 2', // Module Y doesn't exist
+          },
+          {
+            id: 3,
+            title: 'module-z/v1',
+            tagName: 'module-z/v1',
+            body: 'Release 3', // Module Z doesn't exist
+          },
+        ];
+        const existingModules = [createMockTerraformModule({ directory: join(tmpDir, 'module-x') })];
+
+        const releasesToDelete = TerraformModule.getReleasesToDelete(allReleases, existingModules);
+
+        expect(releasesToDelete).toHaveLength(2);
+        expect(releasesToDelete[0].tagName).toBe('module-y/v1.2.3-beta');
+        expect(releasesToDelete[1].tagName).toBe('module-z/v1');
+      });
+
+      it('should return an empty array if allReleases is empty', () => {
+        const allReleases: GitHubRelease[] = [];
+        const existingModules = [createMockTerraformModule({ directory: join(tmpDir, 'module-a') })];
+
+        const releasesToDelete = TerraformModule.getReleasesToDelete(allReleases, existingModules);
+
+        expect(releasesToDelete).toEqual([]);
+        expect(info).toHaveBeenCalledWith('[]');
+      });
+
+      it('should return all releases if terraformModules is empty', () => {
+        const allReleases: GitHubRelease[] = [
+          {
+            id: 1,
+            title: 'module-a/v1.0.0',
+            tagName: 'module-a/v1.0.0',
+            body: 'Release 1',
+          },
+          {
+            id: 2,
+            title: 'module-b/v1.1.0',
+            tagName: 'module-b/v1.1.0',
+            body: 'Release 2',
+          },
+        ];
+        const terraformModules: TerraformModule[] = [];
+
+        const releasesToDelete = TerraformModule.getReleasesToDelete(allReleases, terraformModules);
+
+        expect(releasesToDelete).toHaveLength(2);
+        expect(releasesToDelete[0].tagName).toBe('module-a/v1.0.0');
+        expect(releasesToDelete[1].tagName).toBe('module-b/v1.1.0');
+        expect(info).toHaveBeenCalledWith(JSON.stringify(['module-a/v1.0.0', 'module-b/v1.1.0'], null, 2));
+      });
+
+      it('should correctly identify releases for modules that have changed their base name format', () => {
+        const allReleases: GitHubRelease[] = [
+          {
+            id: 1,
+            title: 'old-module-name/v1.0.0',
+            tagName: 'old-module-name/v1.0.0',
+            body: 'Old release', // Old name, should be removed
+          },
+          {
+            id: 2,
+            title: 'new-module-name/v1.0.0',
+            tagName: 'new-module-name/v1.0.0',
+            body: 'New release', // New name, should be kept
+          },
+        ];
+        const existingModules = [createMockTerraformModule({ directory: join(tmpDir, 'new-module-name') })];
+
+        const releasesToDelete = TerraformModule.getReleasesToDelete(allReleases, existingModules);
+
+        expect(releasesToDelete).toHaveLength(1);
+        expect(releasesToDelete[0].tagName).toBe('old-module-name/v1.0.0');
+      });
+
+      it('should handle releases that do not conform to the expected module/vX.Y.Z pattern', () => {
+        const allReleases: GitHubRelease[] = [
+          {
+            id: 1,
+            title: 'module-a/v1.0.0',
+            tagName: 'module-a/v1.0.0',
+            body: 'Valid release',
+          },
+          {
+            id: 2,
+            title: 'non-standard-release',
+            tagName: 'non-standard-tag',
+            body: 'Invalid release', // Should be removed as it won't match any module name
+          },
+          {
+            id: 3,
+            title: 'another-module',
+            tagName: 'another-module',
+            body: 'Another invalid release', // Should be removed
+          },
+        ];
+        const existingModules = [createMockTerraformModule({ directory: join(tmpDir, 'module-a') })];
+
+        const releasesToDelete = TerraformModule.getReleasesToDelete(allReleases, existingModules);
+
+        expect(releasesToDelete).toHaveLength(2);
+        expect(releasesToDelete[0].tagName).toBe('another-module');
+        expect(releasesToDelete[1].tagName).toBe('non-standard-tag');
+      });
+
+      it('should sort the returned releases alphabetically by tag name', () => {
+        const allReleases: GitHubRelease[] = [
+          {
+            id: 1,
+            title: 'zebra-module/v1.0.0',
+            tagName: 'zebra-module/v1.0.0',
+            body: 'Zebra release',
+          },
+          {
+            id: 2,
+            title: 'apple-module/v1.0.0',
+            tagName: 'apple-module/v1.0.0',
+            body: 'Apple release',
+          },
+          {
+            id: 3,
+            title: 'banana-module/v1.0.0',
+            tagName: 'banana-module/v1.0.0',
+            body: 'Banana release',
+          },
+        ];
+        const terraformModules: TerraformModule[] = []; // No modules, so all releases are removed
+
+        const releasesToDelete = TerraformModule.getReleasesToDelete(allReleases, terraformModules);
+
+        expect(releasesToDelete).toHaveLength(3);
+        expect(releasesToDelete[0].tagName).toBe('apple-module/v1.0.0');
+        expect(releasesToDelete[1].tagName).toBe('banana-module/v1.0.0');
+        expect(releasesToDelete[2].tagName).toBe('zebra-module/v1.0.0');
+      });
+
+      it('should handle multiple releases for the same module that no longer exists', () => {
+        const allReleases: GitHubRelease[] = [
+          {
+            id: 1,
+            title: 'existing-module/v1.0.0',
+            tagName: 'existing-module/v1.0.0',
+            body: 'Existing release 1',
+          },
+          {
+            id: 2,
+            title: 'existing-module/v1.1.0',
+            tagName: 'existing-module/v1.1.0',
+            body: 'Existing release 2',
+          },
+          {
+            id: 3,
+            title: 'removed-module/v1.0.0',
+            tagName: 'removed-module/v1.0.0',
+            body: 'Removed release 1',
+          },
+          {
+            id: 4,
+            title: 'removed-module/v1.1.0',
+            tagName: 'removed-module/v1.1.0',
+            body: 'Removed release 2',
+          },
+          {
+            id: 5,
+            title: 'removed-module/v2.0.0',
+            tagName: 'removed-module/v2.0.0',
+            body: 'Removed release 3',
+          },
+        ];
+
+        const existingModules = [createMockTerraformModule({ directory: join(tmpDir, 'existing-module') })];
+
+        const releasesToDelete = TerraformModule.getReleasesToDelete(allReleases, existingModules);
+
+        expect(releasesToDelete).toHaveLength(3);
+        expect(releasesToDelete.map((r) => r.tagName)).toEqual([
+          'removed-module/v1.0.0',
+          'removed-module/v1.1.0',
+          'removed-module/v2.0.0',
+        ]);
+      });
+
+      it('should not remove releases for modules that exist in terraformModules', () => {
+        const allReleases: GitHubRelease[] = [
+          {
+            id: 1,
+            title: 'module-a/v1.0.0',
+            tagName: 'module-a/v1.0.0',
+            body: 'Module A release',
+          },
+          {
+            id: 2,
+            title: 'module-b/v2.0.0',
+            tagName: 'module-b/v2.0.0',
+            body: 'Module B release',
+          },
+          {
+            id: 3,
+            title: 'module-c/v1.5.0',
+            tagName: 'module-c/v1.5.0',
+            body: 'Module C release',
+          },
+        ];
+
+        const existingModules = [
+          createMockTerraformModule({ directory: join(tmpDir, 'module-a') }),
+          createMockTerraformModule({ directory: join(tmpDir, 'module-b') }),
+          createMockTerraformModule({ directory: join(tmpDir, 'module-c') }),
+        ];
+
+        const releasesToDelete = TerraformModule.getReleasesToDelete(allReleases, existingModules);
+
+        expect(releasesToDelete).toHaveLength(0);
+      });
+
+      it('should preserve releases for existing modules while removing releases for non-existing modules', () => {
+        const allReleases: GitHubRelease[] = [
+          {
+            id: 1,
+            title: 'existing-module/v1.0.0',
+            tagName: 'existing-module/v1.0.0',
+            body: 'Existing module release',
+          },
+          {
+            id: 2,
+            title: 'another-existing/v2.0.0',
+            tagName: 'another-existing/v2.0.0',
+            body: 'Another existing module release',
+          },
+          {
+            id: 3,
+            title: 'removed-module/v1.0.0',
+            tagName: 'removed-module/v1.0.0',
+            body: 'Removed module release',
+          },
+          {
+            id: 4,
+            title: 'deleted-module/v3.0.0',
+            tagName: 'deleted-module/v3.0.0',
+            body: 'Deleted module release',
+          },
+        ];
+
+        const existingModules = [
+          createMockTerraformModule({ directory: join(tmpDir, 'existing-module') }),
+          createMockTerraformModule({ directory: join(tmpDir, 'another-existing') }),
+        ];
+
+        const releasesToDelete = TerraformModule.getReleasesToDelete(allReleases, existingModules);
+
+        expect(releasesToDelete).toHaveLength(2);
+        expect(releasesToDelete.map((r) => r.tagName)).toEqual(['deleted-module/v3.0.0', 'removed-module/v1.0.0']);
+      });
+
+      it('should handle mixed case where some releases belong to existing modules and others do not', () => {
+        const allReleases: GitHubRelease[] = [
+          {
+            id: 1,
+            title: 'web-module/v1.0.0',
+            tagName: 'web-module/v1.0.0',
+            body: 'Web module v1.0.0',
+          },
+          {
+            id: 2,
+            title: 'web-module/v1.1.0',
+            tagName: 'web-module/v1.1.0',
+            body: 'Web module v1.1.0',
+          },
+          {
+            id: 3,
+            title: 'api-module/v2.0.0',
+            tagName: 'api-module/v2.0.0',
+            body: 'API module v2.0.0',
+          },
+          {
+            id: 4,
+            title: 'legacy-module/v1.0.0',
+            tagName: 'legacy-module/v1.0.0',
+            body: 'Legacy module v1.0.0',
+          },
+          {
+            id: 5,
+            title: 'legacy-module/v1.2.0',
+            tagName: 'legacy-module/v1.2.0',
+            body: 'Legacy module v1.2.0',
+          },
+        ];
+
+        const existingModules = [
+          createMockTerraformModule({ directory: join(tmpDir, 'web-module') }),
+          createMockTerraformModule({ directory: join(tmpDir, 'api-module') }),
+        ];
+
+        const releasesToDelete = TerraformModule.getReleasesToDelete(allReleases, existingModules);
+
+        expect(releasesToDelete).toHaveLength(2);
+        expect(releasesToDelete.map((r) => r.tagName)).toEqual(['legacy-module/v1.0.0', 'legacy-module/v1.2.0']);
+      });
     });
   });
 });
