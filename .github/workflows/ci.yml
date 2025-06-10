@@ -80,7 +80,7 @@ jobs:
               (to_entries[] | 
                 "• \(.key):",
                 "  - Path: \(.value.path)",
-                "  - Current Tag: \(.value.currentTag)",
+                "  - Latest Tag: \(.value.latestTag)",
                 "  - Next Tag: \(.value.nextTag)",
                 "  - Release Type: \(.value.releaseType)"
               )

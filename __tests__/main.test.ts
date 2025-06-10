@@ -7,26 +7,30 @@ import { createTaggedReleases, deleteReleases, getAllReleases } from '@/releases
 import { deleteTags, getAllTags } from '@/tags';
 import { ensureTerraformDocsConfigDoesNotExist, installTerraformDocs } from '@/terraform-docs';
 import { TerraformModule } from '@/terraform-module';
+import { createMockTerraformModule } from '@/tests/helpers/terraform-module';
 import type { ExecSyncError, GitHubRelease } from '@/types';
 import { WIKI_STATUS } from '@/utils/constants';
 import { checkoutWiki, commitAndPushWikiChanges, generateWikiFiles, getWikiStatus } from '@/wiki';
-import { info, setFailed } from '@actions/core';
+import { info, setFailed, setOutput } from '@actions/core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createMockTerraformModule } from './helpers/terraform-module';
 
-// Mock all required dependencies
+// Mock most dependencies that are tested elsewhere
+// Note: NOT mocking @/terraform-module to allow real instances for testing
 vi.mock('@/parser');
 vi.mock('@/pull-request');
 vi.mock('@/releases');
 vi.mock('@/tags');
 vi.mock('@/terraform-docs');
-vi.mock('@/terraform-module');
 vi.mock('@/wiki');
 
 describe('main', () => {
+  context.set({
+    workspaceDir: '/workspace',
+  });
+
   // Mock module data
   const mockTerraformModule = createMockTerraformModule({
-    directory: './modules/test-module',
+    directory: '/workspace/modules/test-module',
     tags: ['modules/test-module/v1.0.0'],
     releases: [
       {
@@ -36,6 +40,20 @@ describe('main', () => {
         tagName: 'modules/test-module/v1.0.0',
       },
     ],
+  });
+
+  const mockTerraformModuleNeedingRelease = createMockTerraformModule({
+    directory: '/workspace/modules/changed-module',
+    tags: ['modules/changed-module/v1.0.0'],
+    releases: [
+      {
+        id: 2,
+        title: 'Release v1.0.0',
+        body: 'Release notes',
+        tagName: 'modules/changed-module/v1.0.0',
+      },
+    ],
+    commitMessages: ['feat: add new feature'], // Add a commit to make it need a release
   });
 
   beforeEach(() => {
@@ -52,8 +70,9 @@ describe('main', () => {
     vi.mocked(getAllTags).mockResolvedValue([]);
     vi.mocked(getAllReleases).mockResolvedValue([]);
     vi.mocked(parseTerraformModules).mockReturnValue([mockTerraformModule]);
-    vi.mocked(TerraformModule.getReleasesToDelete).mockReturnValue([]);
-    vi.mocked(TerraformModule.getTagsToDelete).mockReturnValue([]);
+    vi.spyOn(TerraformModule, 'getReleasesToDelete').mockReturnValue([]);
+    vi.spyOn(TerraformModule, 'getTagsToDelete').mockReturnValue([]);
+    vi.spyOn(TerraformModule, 'getModulesNeedingRelease').mockReturnValue([]);
     vi.mocked(getWikiStatus).mockReturnValue({ status: WIKI_STATUS.SUCCESS });
   });
 
@@ -63,6 +82,7 @@ describe('main', () => {
     await run();
 
     expect(info).toHaveBeenCalledWith('Release comment found. Exiting.');
+    expect(setOutput).not.toHaveBeenCalled();
   });
 
   it('should handle errors', async () => {
@@ -112,6 +132,93 @@ describe('main', () => {
     expect(vi.mocked(checkoutWiki)).not.toHaveBeenCalled();
   });
 
+  describe('setActionOutputs', () => {
+    it('should set GitHub Action outputs with no modules needing release', async () => {
+      vi.mocked(parseTerraformModules).mockReturnValue([mockTerraformModule]);
+      vi.mocked(TerraformModule.getModulesNeedingRelease).mockReturnValue([]);
+
+      await run();
+
+      // Verify changed module outputs (should be empty)
+      expect(setOutput).toHaveBeenCalledWith('changed-module-names', []);
+      expect(setOutput).toHaveBeenCalledWith('changed-module-paths', []);
+      expect(setOutput).toHaveBeenCalledWith('changed-modules-map', {});
+
+      // Verify all module outputs
+      expect(setOutput).toHaveBeenCalledWith('all-module-names', ['modules/test-module']);
+      expect(setOutput).toHaveBeenCalledWith('all-module-paths', ['/workspace/modules/test-module']);
+      expect(setOutput).toHaveBeenCalledWith('all-modules-map', {
+        'modules/test-module': {
+          path: '/workspace/modules/test-module',
+          latestTag: 'modules/test-module/v1.0.0',
+          latestTagVersion: 'v1.0.0',
+        },
+      });
+    });
+
+    it('should set GitHub Action outputs with modules needing release', async () => {
+      vi.mocked(parseTerraformModules).mockReturnValue([mockTerraformModule, mockTerraformModuleNeedingRelease]);
+      vi.mocked(TerraformModule.getModulesNeedingRelease).mockReturnValue([mockTerraformModuleNeedingRelease]);
+
+      await run();
+
+      // Verify changed module outputs
+      expect(setOutput).toHaveBeenCalledWith('changed-module-names', ['modules/changed-module']);
+      expect(setOutput).toHaveBeenCalledWith('changed-module-paths', ['/workspace/modules/changed-module']);
+      expect(setOutput).toHaveBeenCalledWith('changed-modules-map', {
+        'modules/changed-module': {
+          path: '/workspace/modules/changed-module',
+          latestTag: 'modules/changed-module/v1.0.0',
+          releaseTag: 'modules/changed-module/v1.1.0',
+          releaseType: 'minor',
+        },
+      });
+
+      // Verify all module outputs
+      expect(setOutput).toHaveBeenCalledWith('all-module-names', ['modules/test-module', 'modules/changed-module']);
+      expect(setOutput).toHaveBeenCalledWith('all-module-paths', [
+        '/workspace/modules/test-module',
+        '/workspace/modules/changed-module',
+      ]);
+      expect(setOutput).toHaveBeenCalledWith('all-modules-map', {
+        'modules/test-module': {
+          path: '/workspace/modules/test-module',
+          latestTag: 'modules/test-module/v1.0.0',
+          latestTagVersion: 'v1.0.0',
+        },
+        'modules/changed-module': {
+          path: '/workspace/modules/changed-module',
+          latestTag: 'modules/changed-module/v1.0.0',
+          latestTagVersion: 'v1.0.0',
+        },
+      });
+    });
+
+    it('should call setOutput exactly 6 times for all outputs', async () => {
+      vi.mocked(parseTerraformModules).mockReturnValue([mockTerraformModule]);
+      vi.mocked(TerraformModule.getModulesNeedingRelease).mockReturnValue([]);
+
+      await run();
+
+      // Verify setOutput is called exactly 6 times (lines 134-139)
+      expect(setOutput).toHaveBeenCalledTimes(6);
+
+      // Verify the specific calls
+      expect(setOutput).toHaveBeenNthCalledWith(1, 'changed-module-names', []);
+      expect(setOutput).toHaveBeenNthCalledWith(2, 'changed-module-paths', []);
+      expect(setOutput).toHaveBeenNthCalledWith(3, 'changed-modules-map', {});
+      expect(setOutput).toHaveBeenNthCalledWith(4, 'all-module-names', ['modules/test-module']);
+      expect(setOutput).toHaveBeenNthCalledWith(5, 'all-module-paths', ['/workspace/modules/test-module']);
+      expect(setOutput).toHaveBeenNthCalledWith(6, 'all-modules-map', {
+        'modules/test-module': {
+          path: '/workspace/modules/test-module',
+          latestTag: 'modules/test-module/v1.0.0',
+          latestTagVersion: 'v1.0.0',
+        },
+      });
+    });
+  });
+
   describe('non-merge event handling', () => {
     beforeEach(() => {
       context.isPrMergeEvent = false;
@@ -138,6 +245,9 @@ describe('main', () => {
       expect(deleteTags).not.toHaveBeenCalled();
       expect(installTerraformDocs).not.toHaveBeenCalled();
       expect(checkoutWiki).not.toHaveBeenCalled();
+
+      // Should still set outputs
+      expect(setOutput).toHaveBeenCalled();
     });
 
     it('should handle wiki checkout errors and add release plan comment', async () => {
@@ -201,6 +311,9 @@ describe('main', () => {
       expect(checkoutWiki).toHaveBeenCalled();
       expect(generateWikiFiles).toHaveBeenCalledWith([mockTerraformModule]);
       expect(commitAndPushWikiChanges).toHaveBeenCalled();
+
+      // Should still set outputs
+      expect(setOutput).toHaveBeenCalled();
     });
 
     it('should handle merge event with wiki disabled', async () => {
@@ -218,6 +331,9 @@ describe('main', () => {
       expect(generateWikiFiles).not.toHaveBeenCalled();
       expect(commitAndPushWikiChanges).not.toHaveBeenCalled();
       expect(info).toHaveBeenCalledWith('Wiki generation is disabled.');
+
+      // Should still set outputs
+      expect(setOutput).toHaveBeenCalled();
     });
 
     it('should handle merge event with delete legacy tags disabled', async () => {
@@ -230,6 +346,9 @@ describe('main', () => {
       expect(deleteReleases).not.toHaveBeenCalled();
       expect(deleteTags).not.toHaveBeenCalled();
       expect(info).toHaveBeenCalledWith('Deletion of legacy tags/releases is disabled. Skipping.');
+
+      // Should still set outputs
+      expect(setOutput).toHaveBeenCalled();
     });
 
     it('should handle merge event sequence correctly', async () => {
@@ -261,6 +380,9 @@ describe('main', () => {
 
       expect(createTaggedReleasesCallOrder).toBeLessThan(deleteReleasesCallOrder);
       expect(deleteReleasesCallOrder).toBeLessThan(deleteTagsCallOrder);
+
+      // Should still set outputs
+      expect(setOutput).toHaveBeenCalled();
     });
   });
 });

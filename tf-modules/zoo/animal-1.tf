@@ -5,9 +5,7 @@ module "animal-1" {
 }
 
 module "test" {
-  source   = "cloudposse/label/null"
-  # Cloud Posse recommends pinning every module to a specific version
-  # version = "x.x.x"
+  source = "github.com/cloudposse/terraform-null-label.git?ref=0123456789abcdef0123456789abcdef01234567"
 
   namespace  = "eg"
   stage      = "prod"
