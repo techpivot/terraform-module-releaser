@@ -388,9 +388,6 @@ export class TerraformModule {
     if (this.hasDirectChanges()) {
       reasons.push(RELEASE_REASON.DIRECT_CHANGES);
     }
-    //if (this.hasLocalDependencyUpdates()) {
-    //  reasons.push(RELEASE_REASON.DEPENDENCY_UPDATES);
-    //}
     return reasons;
   }
 
