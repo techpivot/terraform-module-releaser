@@ -3,13 +3,7 @@ import { config } from '@/config';
 import { context } from '@/context';
 import { TerraformModule } from '@/terraform-module';
 import type { CommitDetails, GitHubRelease, WikiStatusResult } from '@/types';
-import {
-  BRANDING_COMMENT,
-  PROJECT_URL,
-  PR_RELEASE_MARKER,
-  PR_SUMMARY_MARKER,
-  WIKI_STATUS,
-} from '@/utils/constants';
+import { BRANDING_COMMENT, PROJECT_URL, PR_RELEASE_MARKER, PR_SUMMARY_MARKER, WIKI_STATUS } from '@/utils/constants';
 
 import { getWikiLink } from '@/wiki';
 import { debug, endGroup, info, startGroup } from '@actions/core';

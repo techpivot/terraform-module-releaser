@@ -5,12 +5,7 @@ import type { TerraformModule } from '@/terraform-module';
 import { stubOctokitImplementation, stubOctokitReturnData } from '@/tests/helpers/octokit';
 import { createMockTerraformModule } from '@/tests/helpers/terraform-module';
 import type { GitHubRelease } from '@/types';
-import {
-  BRANDING_COMMENT,
-  PR_RELEASE_MARKER,
-  PR_SUMMARY_MARKER,
-  WIKI_STATUS,
-} from '@/utils/constants';
+import { BRANDING_COMMENT, PR_RELEASE_MARKER, PR_SUMMARY_MARKER, WIKI_STATUS } from '@/utils/constants';
 import { debug, endGroup, info, startGroup } from '@actions/core';
 import { RequestError } from '@octokit/request-error';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -54,7 +49,6 @@ describe('pull-request', () => {
       context.useMockOctokit();
     });
 
-
     it('should return true when release marker is found in comments', async () => {
       stubOctokitReturnData('issues.listComments', {
         data: [
@@ -64,7 +58,7 @@ describe('pull-request', () => {
         ],
       });
       expect(await hasReleaseComment()).toBe(true);
-    })
+    });
 
     it('should return false when no release marker is found', async () => {
       stubOctokitReturnData('issues.listComments', {

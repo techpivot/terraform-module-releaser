@@ -583,11 +583,11 @@ export async function commitAndPushWikiChanges(): Promise<void> {
 
     if (status !== null && status.toString().trim() !== '') {
       // There are changes, commit and push
-      const botEmail = await getGitHubActionsBotEmail();
-      
+      const githubActionsBotEmail = await getGitHubActionsBotEmail();
+
       for (const cmd of [
         ['config', '--local', 'user.name', GITHUB_ACTIONS_BOT_NAME],
-        ['config', '--local', 'user.email', botEmail],
+        ['config', '--local', 'user.email', githubActionsBotEmail],
         ['add', '.'],
         ['commit', '-m', commitMessage.trim()],
         ['push', 'origin'],

@@ -19,6 +19,7 @@ type EndpointNames = {
   issues: 'createComment' | 'deleteComment' | 'listComments';
   pulls: 'listCommits' | 'listFiles';
   repos: 'getCommit' | 'listTags' | 'listReleases' | 'createRelease' | 'deleteRelease';
+  users: 'getByUsername';
 };
 
 // Type guard that ensures the method name is valid for the given namespace K.
@@ -164,12 +165,26 @@ export function resetMockStore() {
           headers: {},
         },
       },
+      users: {
+        getByUsername: {
+          data: {
+            login: 'github-actions[bot]',
+            id: 41898282,
+            type: 'Bot',
+            site_admin: false,
+          },
+          status: 200,
+          url: 'https://api.github.com/users/github-actions[bot]',
+          headers: {},
+        },
+      },
     },
     implementations: {
       git: {},
       issues: {},
       pulls: {},
       repos: {},
+      users: {},
     },
   };
 }
@@ -301,6 +316,9 @@ export function createDefaultOctokitMock(): OctokitRestApi {
         listReleases: createPaginatedMockImplementation('repos.listReleases', '/releases'),
         createRelease: vi.fn().mockImplementation(() => getMockResponse('repos.createRelease')),
         deleteRelease: vi.fn().mockImplementation(() => getMockResponse('repos.deleteRelease')),
+      },
+      users: {
+        getByUsername: vi.fn().mockImplementation((params) => getMockResponse('users.getByUsername', params)),
       },
     },
     paginate: {

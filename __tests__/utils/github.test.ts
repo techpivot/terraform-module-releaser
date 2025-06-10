@@ -1,6 +1,6 @@
 import { context } from '@/mocks/context';
 import { getGitHubActionsBotEmail } from '@/utils/github';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 
 describe('utils/github', () => {
   describe('getGitHubActionsBotEmail - real API queries', () => {
@@ -11,15 +11,10 @@ describe('utils/github', () => {
       await context.useRealOctokit();
     });
 
-    afterAll(() => {
-      context.useMockOctokit();
-    });
-
     it('should return the correct email format for GitHub.com public API', async () => {
       // This test uses the real GitHub API and expects the standard GitHub.com user ID
       // for the github-actions[bot] user, which is 41898282
-      
-      // Act
+
       const result = await getGitHubActionsBotEmail();
 
       // Assert
