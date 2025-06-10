@@ -2,7 +2,7 @@ import { relative } from 'node:path';
 import { config } from '@/config';
 import { context } from '@/context';
 import type { CommitDetails, GitHubRelease, ReleaseReason, ReleaseType } from '@/types';
-import { RELEASE_REASON, RELEASE_TYPE, VERSION_TAG_REGEX } from '@/utils/constants';
+import { MODULE_TAG_REGEX, RELEASE_REASON, RELEASE_TYPE, VERSION_TAG_REGEX } from '@/utils/constants';
 import { removeTrailingCharacters } from '@/utils/string';
 import { endGroup, info, startGroup } from '@actions/core';
 
@@ -419,7 +419,7 @@ export class TerraformModule {
     // Note: At this point, we'll always have a valid format either 'v1.2.3' or '1.2.3' based on how we validate
     // via the setTags() and setReleases(). But we'll check anyways for robustness.
 
-    const versionMatch = latestTagVersion.match(VERSION_TAG_REGEX);
+    const versionMatch = VERSION_TAG_REGEX.exec(latestTagVersion);
     if (!versionMatch) {
       // We should not reach here due to our validation, so throw an error instead of returning default tag
       throw new Error(`Invalid version format: '${latestTagVersion}'. Expected v#.#.# or #.#.# format.`);
@@ -699,10 +699,9 @@ export class TerraformModule {
     // Filter tags that belong to modules no longer in the current module list
     const tagsToRemove = allTags
       .filter((tag) => {
-        // Extract module name from tag by removing the version suffix
-        // Handle both versioned tags (module-name/vX.Y.Z) and non-versioned tags
-        const versionMatch = tag.match(/^(.+)\/v.+$/);
-        const moduleName = versionMatch ? versionMatch[1] : tag;
+        // Extract the Terraform module name from tag by removing the version suffix
+        const match = MODULE_TAG_REGEX.exec(tag);
+        const moduleName = match ? match[1] : tag;
         return !moduleNamesFromModules.has(moduleName);
       })
       .sort((a, b) => a.localeCompare(b));
@@ -743,10 +742,9 @@ export class TerraformModule {
     // Filter releases that belong to modules no longer in the current module list
     const releasesToRemove = allReleases
       .filter((release) => {
-        // Extract module name from versioned release tag by removing the version suffix
-        // Handle both versioned tags (module-name/vX.Y.Z) and non-versioned tags
-        const versionMatch = release.tagName.match(/^(.+)\/v.+$/);
-        const moduleName = versionMatch ? versionMatch[1] : release.tagName;
+        // Extract module name from versioned release tag
+        const match = MODULE_TAG_REGEX.exec(release.tagName);
+        const moduleName = match ? match[1] : release.tagName;
         return !moduleNamesFromModules.has(moduleName);
       })
       .sort((a, b) => a.tagName.localeCompare(b.tagName));

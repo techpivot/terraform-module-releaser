@@ -11,6 +11,12 @@
 export const VERSION_TAG_REGEX = /^v?(\d+)\.(\d+)\.(\d+)$/;
 
 /**
+ * Matches a Terraform module tag in the format: module-name/v1.2.3 or module-name/1.2.3
+ * Group 1: module name, Group 2: version (with or without 'v' prefix)
+ */
+export const MODULE_TAG_REGEX = /^(.+)\/(v?\d+\.\d+\.\d+)$/;
+
+/**
  * Release type constants for semantic versioning
  */
 export const RELEASE_TYPE = {
