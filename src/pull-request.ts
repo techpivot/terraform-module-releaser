@@ -317,7 +317,7 @@ export async function addReleasePlanComment(
         const releaseText = releasesToDelete.length === 1 ? 'release is' : 'releases are';
         const pronounText = releasesToDelete.length === 1 ? 'It' : 'They';
         const releaseList = releasesToDelete.map((release) => `\`${release.title}\``).join(', ');
-        
+
         commentBody.push(
           `**⚠️ The following ${releaseText} no longer referenced by any source Terraform modules. ${pronounText} will be automatically deleted.**`,
         );

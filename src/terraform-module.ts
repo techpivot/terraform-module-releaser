@@ -145,7 +145,7 @@ export class TerraformModule {
    * in descending order (newest first). Tags must follow the format `{moduleName}/v{x.y.z}` or `{moduleName}/x.y.z`.
    * This method replaces any previously set tags. Throws if any tag is invalid.
    *
-   * @param {string[]} tags - Array of Git tag strings to associate with this module
+   * @param {ReadonlyArray<string>} tags - Array of Git tag strings to associate with this module
    * @throws {Error} If any tag does not match the required format
    * @returns {void}
    *
@@ -160,7 +160,7 @@ export class TerraformModule {
    * // Tags will be automatically sorted: v2.0.0, v1.1.0, v1.0.0
    * ```
    */
-  public setTags(tags: string[]): void {
+  public setTags(tags: ReadonlyArray<string>): void {
     // Extract versions once and validate during the process
     const tagVersionMap = new Map<string, string>();
 
@@ -169,8 +169,8 @@ export class TerraformModule {
       tagVersionMap.set(tag, this.extractVersionFromTag(tag));
     }
 
-    // Second pass: Sort using pre-extracted versions
-    this._tags = tags.sort((a, b) => {
+    // Second pass: Sort using pre-extracted versions (create copy to avoid mutating input)
+    this._tags = [...tags].sort((a, b) => {
       const aVersion = tagVersionMap.get(a);
       const bVersion = tagVersionMap.get(b);
       if (!aVersion || !bVersion) {
@@ -232,7 +232,7 @@ export class TerraformModule {
    * `{moduleName}/v{x.y.z}` or `{moduleName}/x.y.z`. Throws if any release is invalid.
    * This method replaces any previously set releases.
    *
-   * @param {GitHubRelease[]} releases - Array of GitHub release objects to associate with this module
+   * @param {ReadonlyArray<GitHubRelease>} releases - Array of GitHub release objects to associate with this module
    * @throws {Error} If any release tagName does not match the required format
    * @returns {void}
    *
@@ -246,7 +246,7 @@ export class TerraformModule {
    * // Releases will be automatically sorted by version (newest first)
    * ```
    */
-  public setReleases(releases: GitHubRelease[]): void {
+  public setReleases(releases: ReadonlyArray<GitHubRelease>): void {
     // Extract versions once and validate during the process
     const releaseVersionMap = new Map<GitHubRelease, string>();
 
@@ -256,7 +256,9 @@ export class TerraformModule {
     }
 
     // Second pass: Sort using pre-extracted versions
-    this._releases = releases.sort((a, b) => {
+
+    // Second pass: Sort using pre-extracted versions (create copy to avoid mutating input)
+    this._releases = [...releases].sort((a, b) => {
       const aVersion = releaseVersionMap.get(a);
       const bVersion = releaseVersionMap.get(b);
       if (!aVersion || !bVersion) {
