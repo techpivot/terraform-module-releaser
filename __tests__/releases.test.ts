@@ -458,8 +458,9 @@ describe('releases', () => {
       const releaseCall = vi.mocked(mockTerraformModule.setReleases).mock.calls[0][0];
       const newRelease = releaseCall[0];
 
-      // Verify the name is used but body falls back to generated changelog
-      expect(newRelease.title).toBe('Custom Release Name'); // Should use the provided name
+      // With secure version extraction, custom names are not sorted as versions.
+      // Just check that the fallback for body works and the title is set as provided.
+      expect(newRelease.title).toBe('Custom Release Name');
       expect(newRelease.body).toContain('v1.1.0'); // Should fall back to generated changelog since body is null
       expect(newRelease.body).toContain('feat: Add new feature'); // Should contain the commit message
       expect(endGroup).toHaveBeenCalled();

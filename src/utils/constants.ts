@@ -1,4 +1,16 @@
 /**
+ * Regular expression that matches version tags in the format of semantic versioning.
+ * This regex validates version strings like "1.2.3" or "v1.2.3" and includes capture groups.
+ * Group 1: Major version number
+ * Group 2: Minor version number
+ * Group 3: Patch version number
+ *
+ * It allows either a numerical portion (e.g., "1.2.3") or one prefixed with 'v' (e.g., "v1.2.3"),
+ * which is the proper semver default format.
+ */
+export const VERSION_TAG_REGEX = /^v?(\d+)\.(\d+)\.(\d+)$/;
+
+/**
  * Release type constants for semantic versioning
  */
 export const RELEASE_TYPE = {

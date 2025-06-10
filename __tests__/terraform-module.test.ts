@@ -271,6 +271,98 @@ describe('TerraformModule', () => {
       expect(module.getLatestTag()).toBe('tf-modules/test-module/v1.0.0');
       expect(module.getLatestTagVersion()).toBe('v1.0.0');
     });
+
+    it('should throw error for tag with no slash (invalid format)', () => {
+      const tags = ['v1.2.3'];
+      expect(() => module.setTags(tags)).toThrow(
+        "Invalid tag format: 'v1.2.3'. Expected format: 'tf-modules/test-module/v#.#.#' or 'tf-modules/test-module/#.#.#' for module.",
+      );
+    });
+
+    it('should throw error for tag with incorrect module name', () => {
+      const tags = ['foo/bar/v9.8.7'];
+      expect(() => module.setTags(tags)).toThrow(
+        "Invalid tag format: 'foo/bar/v9.8.7'. Expected format: 'tf-modules/test-module/v#.#.#' or 'tf-modules/test-module/#.#.#' for module.",
+      );
+    });
+
+    it('should accept valid tags with v prefix', () => {
+      const tags = ['tf-modules/test-module/v1.2.3', 'tf-modules/test-module/v2.0.1'];
+      module.setTags(tags);
+
+      expect(module.tags).toHaveLength(2);
+      expect(module.tags[0]).toBe('tf-modules/test-module/v2.0.1'); // Sorted descending
+      expect(module.tags[1]).toBe('tf-modules/test-module/v1.2.3');
+    });
+
+    it('should accept valid tags without v prefix', () => {
+      const tags = ['tf-modules/test-module/1.2.3', 'tf-modules/test-module/2.0.1'];
+      module.setTags(tags);
+
+      expect(module.tags).toHaveLength(2);
+      expect(module.tags[0]).toBe('tf-modules/test-module/2.0.1'); // Sorted descending
+      expect(module.tags[1]).toBe('tf-modules/test-module/1.2.3');
+    });
+
+    // Add tests for extractVersionFromTag
+    describe('extractVersionFromTag()', () => {
+      let module: TerraformModule;
+
+      beforeEach(() => {
+        module = new TerraformModule(moduleDir);
+      });
+
+      it('should handle tags with slashes correctly', () => {
+        // Testing through public interface that uses it internally
+        module.setTags(['tf-modules/test-module/v1.2.3', 'tf-modules/test-module/v2.0.0']);
+        expect(module.tags[0]).toBe('tf-modules/test-module/v2.0.0');
+        expect(module.tags[1]).toBe('tf-modules/test-module/v1.2.3');
+      });
+
+      it('should handle version string without slashes correctly', () => {
+        // Create a module where we can test the version extraction logic
+        // Since extractVersionFromTag now validates the full tag format,
+        // we need to test it with valid tags that match the module name
+        const moduleB = new TerraformModule(join(moduleDir, 'subdir'));
+        // @ts-expect-error - Accessing private for testing
+        const extractVersionFn = moduleB.extractVersionFromTag.bind(moduleB);
+
+        // Test with valid full tags that match the module name
+        expect(extractVersionFn('tf-modules/test-module/subdir/v1.2.3')).toBe('1.2.3');
+        expect(extractVersionFn('tf-modules/test-module/subdir/1.2.3')).toBe('1.2.3');
+      });
+    });
+
+    it('should throw internal error when version lookup fails during tag sorting', () => {
+      const tags = ['tf-modules/test-module/v1.0.0', 'tf-modules/test-module/v2.0.0'];
+
+      // Create a spy on tagVersionMap to simulate missing version
+      const mapSpy = vi.spyOn(Map.prototype, 'get').mockImplementationOnce(() => undefined);
+
+      expect(() => module.setTags(tags)).toThrow('Internal error: version not found in map');
+
+      // Clean up
+      mapSpy.mockRestore();
+    });
+
+    it('should throw error for invalid version format during release tag versioning', () => {
+      // Set up a tag with valid format first
+      module.setTags(['tf-modules/test-module/v1.0.0']);
+
+      // Force the internal latestTagVersion to be invalid
+      vi.spyOn(module, 'getLatestTagVersion').mockReturnValue('invalid-format');
+
+      // Add a commit to trigger release tag version calculation
+      module.addCommit({
+        sha: 'abc123',
+        message: 'fix: bug fix',
+        files: ['main.tf'],
+      });
+
+      expect(() => module.getReleaseTagVersion()).toThrow(
+        "Invalid version format: 'invalid-format'. Expected v#.#.# or #.#.# format.",
+      );
+    });
   });
 
   describe('release management', () => {
@@ -364,7 +456,7 @@ describe('TerraformModule', () => {
       ]);
     });
 
-    it('should handle edge cases in version sorting for releases', () => {
+    it('should throw error for releases with invalid tag formats', () => {
       const releases: GitHubRelease[] = [
         {
           id: 1,
@@ -374,45 +466,18 @@ describe('TerraformModule', () => {
         },
         {
           id: 2,
-          title: 'tf-modules/test-module/v1.0', // Missing patch version
+          title: 'tf-modules/test-module/v1.0', // Missing patch version - invalid
           tagName: 'tf-modules/test-module/v1.0',
           body: 'Missing patch',
         },
-        {
-          id: 3,
-          title: 'tf-modules/test-module/v1', // Only major version
-          tagName: 'tf-modules/test-module/v1',
-          body: 'Major only',
-        },
-        {
-          id: 4,
-          title: 'tf-modules/test-module/v2.0.0',
-          tagName: 'tf-modules/test-module/v2.0.0',
-          body: 'Higher major',
-        },
-        {
-          id: 5,
-          title: 'tf-modules/test-module/v1.5.3',
-          tagName: 'tf-modules/test-module/v1.5.3',
-          body: 'Higher minor',
-        },
       ];
 
-      module.setReleases(releases);
-
-      // Should be sorted by semantic version (newest first)
-      // v2.0.0 > v1.5.3 > v1.0.0 > v1.0 (NaN becomes 0) > v1 (NaN becomes 0)
-      expect(module.releases).toHaveLength(5);
-      expect(module.releases.map((r) => r.title)).toEqual([
-        'tf-modules/test-module/v2.0.0', // 2.0.0
-        'tf-modules/test-module/v1.5.3', // 1.5.3
-        'tf-modules/test-module/v1.0.0', // 1.0.0
-        'tf-modules/test-module/v1.0', // 1.0.NaN (treated as 1.0.0)
-        'tf-modules/test-module/v1', // 1.NaN.NaN (treated as 1.0.0)
-      ]);
+      expect(() => module.setReleases(releases)).toThrow(
+        "Invalid tag format: 'tf-modules/test-module/v1.0'. Expected format: 'tf-modules/test-module/v#.#.#' or 'tf-modules/test-module/#.#.#' for module.",
+      );
     });
 
-    it('should handle releases with non-numeric version components', () => {
+    it('should throw error for releases with non-numeric version components', () => {
       const releases: GitHubRelease[] = [
         {
           id: 1,
@@ -422,30 +487,15 @@ describe('TerraformModule', () => {
         },
         {
           id: 2,
-          title: 'tf-modules/test-module/vbeta.1.0', // Non-numeric major
+          title: 'tf-modules/test-module/vbeta.1.0', // Non-numeric major - invalid
           tagName: 'tf-modules/test-module/vbeta.1.0',
           body: 'Beta version',
         },
-        {
-          id: 3,
-          title: 'tf-modules/test-module/v1.alpha.0', // Non-numeric minor
-          tagName: 'tf-modules/test-module/v1.alpha.0',
-          body: 'Alpha version',
-        },
       ];
 
-      module.setReleases(releases);
-
-      // Non-numeric components become NaN, which when subtracted become NaN
-      // The || operator will handle this and continue to next comparison
-      expect(module.releases).toHaveLength(3);
-
-      // When NaN values are involved, sorting order is unpredictable
-      // We just verify that all releases are present, not their specific order
-      const releasesTitles = module.releases.map((r) => r.title);
-      expect(releasesTitles).toContain('tf-modules/test-module/v1.0.0');
-      expect(releasesTitles).toContain('tf-modules/test-module/vbeta.1.0');
-      expect(releasesTitles).toContain('tf-modules/test-module/v1.alpha.0');
+      expect(() => module.setReleases(releases)).toThrow(
+        "Invalid tag format: 'tf-modules/test-module/vbeta.1.0'. Expected format: 'tf-modules/test-module/v#.#.#' or 'tf-modules/test-module/#.#.#' for module.",
+      );
     });
 
     it('should handle identical version numbers in releases', () => {
@@ -715,37 +765,28 @@ describe('TerraformModule', () => {
         expect(module.getReleaseTagVersion()).toBeNull();
       });
 
-      it('should handle malformed version tags', () => {
-        module.setTags(['tf-modules/test-module/invalid-version']);
-        module.addCommit({
-          sha: 'abc123',
+      it('should throw error for malformed version tags', () => {
+        // Set up a tag with valid format first
+        module.setTags(['tf-modules/test-module/v1.0.0']);
+
+        // Mock the internal behavior to test error cases
+        const testModule = new TerraformModule(moduleDir);
+        testModule.setTags(['tf-modules/test-module/v1.0.0']);
+
+        vi.spyOn(testModule, 'getLatestTagVersion').mockReturnValue('invalid-format');
+        // @ts-expect-error - Accessing private for testing
+        vi.spyOn(testModule, 'hasDirectChanges').mockReturnValue(true);
+
+        // Add a commit to trigger release tag version calculation
+        testModule.addCommit({
+          sha: 'def456',
           message: 'fix: bug fix',
-          files: ['main.tf'],
+          files: ['test.tf'],
         });
 
-        expect(module.getReleaseTagVersion()).toBe('v0.1.0'); // Falls back to default
-      });
-
-      it('should handle versions without v prefix in tags', () => {
-        module.setTags(['tf-modules/test-module/1.2.3']);
-        module.addCommit({
-          sha: 'abc123',
-          message: 'fix: bug fix',
-          files: ['main.tf'],
-        });
-
-        expect(module.getReleaseTagVersion()).toBe('v1.2.4');
-      });
-
-      it('should fall back to default when tag format is invalid', () => {
-        module.setTags(['tf-modules/test-module/invalid-version']);
-        module.addCommit({
-          sha: 'abc123',
-          message: 'fix: bug fix',
-          files: ['main.tf'],
-        });
-
-        expect(module.getReleaseTagVersion()).toBe('v0.1.0');
+        expect(() => testModule.getReleaseTagVersion()).toThrow(
+          "Invalid version format: 'invalid-format'. Expected v#.#.# or #.#.# format.",
+        );
       });
     });
 
@@ -886,16 +927,43 @@ describe('TerraformModule', () => {
     });
 
     describe('isModuleAssociatedWithTag()', () => {
-      it('should correctly identify associated tags', () => {
+      it('should correctly identify associated tags with v prefix', () => {
         expect(TerraformModule.isModuleAssociatedWithTag('my-module', 'my-module/v1.0.0')).toBe(true);
         expect(TerraformModule.isModuleAssociatedWithTag('my-module', 'other-module/v1.0.0')).toBe(false);
         expect(TerraformModule.isModuleAssociatedWithTag('my-module', 'my-module-extended/v1.0.0')).toBe(false);
         expect(TerraformModule.isModuleAssociatedWithTag('my-module', 'my-module/v2.1.0')).toBe(true);
       });
 
+      it('should correctly identify associated tags without v prefix', () => {
+        expect(TerraformModule.isModuleAssociatedWithTag('my-module', 'my-module/1.0.0')).toBe(true);
+        expect(TerraformModule.isModuleAssociatedWithTag('my-module', 'other-module/1.0.0')).toBe(false);
+        expect(TerraformModule.isModuleAssociatedWithTag('my-module', 'my-module-extended/1.0.0')).toBe(false);
+        expect(TerraformModule.isModuleAssociatedWithTag('my-module', 'my-module/2.1.0')).toBe(true);
+      });
+
       it('should return false for invalid tag format', () => {
         expect(TerraformModule.isModuleAssociatedWithTag('my-module', 'my-module/invalid')).toBe(false);
         expect(TerraformModule.isModuleAssociatedWithTag('my-module', 'invalid-format')).toBe(false);
+        expect(TerraformModule.isModuleAssociatedWithTag('my-module', 'my-module/v1.0')).toBe(false); // Missing patch
+        expect(TerraformModule.isModuleAssociatedWithTag('my-module', 'my-module/v1')).toBe(false); // Missing minor and patch
+        expect(TerraformModule.isModuleAssociatedWithTag('my-module', 'my-module/vbeta.1.0')).toBe(false); // Non-numeric
+      });
+
+      it('should handle complex module names', () => {
+        expect(
+          TerraformModule.isModuleAssociatedWithTag('tf-modules/vpc-endpoint', 'tf-modules/vpc-endpoint/v1.0.0'),
+        ).toBe(true);
+        expect(
+          TerraformModule.isModuleAssociatedWithTag('tf-modules/vpc-endpoint', 'tf-modules/vpc-endpoint/1.0.0'),
+        ).toBe(true);
+        expect(TerraformModule.isModuleAssociatedWithTag('tf-modules/vpc-endpoint', 'tf-modules/vpc/v1.0.0')).toBe(
+          false,
+        );
+      });
+
+      it('should be case sensitive', () => {
+        expect(TerraformModule.isModuleAssociatedWithTag('my-module', 'My-Module/v1.0.0')).toBe(false);
+        expect(TerraformModule.isModuleAssociatedWithTag('my-module', 'my-module/V1.0.0')).toBe(false);
       });
     });
 
@@ -1065,11 +1133,6 @@ describe('TerraformModule', () => {
           'another-module', // Should be removed
         ];
         const existingModules = [new TerraformModule(join(tmpDir, 'module-a'))];
-
-        Object.defineProperty(existingModules[0], 'name', {
-          value: 'module-a',
-          writable: false,
-        });
 
         const tagsToDelete = TerraformModule.getTagsToDelete(allTags, existingModules);
 
@@ -1473,6 +1536,109 @@ describe('TerraformModule', () => {
         expect(releasesToDelete).toHaveLength(2);
         expect(releasesToDelete.map((r) => r.tagName)).toEqual(['legacy-module/v1.0.0', 'legacy-module/v1.2.0']);
       });
+    });
+
+    // Test private helper methods via the public interface
+    describe('extractVersionFromTag()', () => {
+      let module: TerraformModule;
+
+      beforeEach(() => {
+        module = new TerraformModule(moduleDir);
+      });
+
+      it('should handle tags with slashes correctly', () => {
+        // We can test this via the public methods that use it internally
+        module.setTags(['tf-modules/test-module/v1.2.3', 'tf-modules/test-module/v2.0.0']);
+
+        // The sorting is done using extractVersionFromTag internally
+        expect(module.tags[0]).toBe('tf-modules/test-module/v2.0.0'); // Higher version first
+        expect(module.tags[1]).toBe('tf-modules/test-module/v1.2.3');
+      });
+
+      it('should handle version string without slashes correctly', () => {
+        const moduleA = new TerraformModule(moduleDir);
+        const moduleB = new TerraformModule(join(moduleDir, 'subdir'));
+
+        // Use the public setTags method but mock the internal compareSemanticVersions to check the extracted versions
+        // @ts-expect-error - Accessing private for testing
+        const compareSpy = vi.spyOn(moduleA, 'compareSemanticVersions');
+
+        // When setting tags with multiple items, extractVersionFromTag is used and compareSemanticVersions is called for sorting
+        moduleA.setTags(['tf-modules/test-module/v1.2.3', 'tf-modules/test-module/v2.0.0']);
+
+        // Verify it was called with the expected extracted versions
+        expect(compareSpy).toHaveBeenCalled();
+
+        // Test that the method properly validates tag format and throws for invalid tags
+        // @ts-expect-error - Accessing private for testing
+        const extractVersionFn = moduleB.extractVersionFromTag.bind(moduleB);
+
+        // Test that raw version strings (no module name) are properly rejected
+        expect(() => extractVersionFn('v1.2.3')).toThrow('Invalid tag format');
+        expect(() => extractVersionFn('1.2.3')).toThrow('Invalid tag format');
+      });
+    });
+  });
+
+  describe('error handling', () => {
+    let module: TerraformModule;
+
+    beforeEach(() => {
+      module = new TerraformModule(moduleDir);
+    });
+
+    it('should throw error when version lookup fails during release sorting', () => {
+      const releases: GitHubRelease[] = [
+        {
+          id: 1,
+          title: 'tf-modules/test-module/v1.0.0',
+          tagName: 'tf-modules/test-module/v1.0.0',
+          body: 'Release 1',
+        },
+        {
+          id: 2,
+          title: 'tf-modules/test-module/v2.0.0',
+          tagName: 'tf-modules/test-module/v2.0.0',
+          body: 'Release 2',
+        },
+      ];
+
+      // Create a mock Map to simulate version lookup failure
+      const mockMap = new Map();
+      mockMap.set = vi.fn().mockImplementation(() => mockMap);
+      mockMap.get = vi.fn().mockReturnValueOnce('1.0.0').mockReturnValueOnce(undefined);
+
+      const mapSpy = vi.spyOn(global, 'Map').mockImplementation(() => mockMap);
+
+      expect(() => module.setReleases(releases)).toThrow('Internal error: version not found in map');
+
+      mapSpy.mockRestore();
+    });
+
+    it('should throw error for invalid version format in getReleaseTagVersion', () => {
+      // Create a module with initial state
+      const testModule = createMockTerraformModule({
+        directory: moduleDir,
+        tags: ['tf-modules/test-module/v1.0.0'],
+      });
+
+      // Mock internal methods to force version validation
+      vi.spyOn(testModule, 'getLatestTagVersion').mockReturnValue('bad-version');
+
+      // @ts-expect-error - Accessing private for testing
+      vi.spyOn(testModule, 'hasDirectChanges').mockReturnValue(true);
+
+      // Add a commit to ensure getReleaseTagVersion processes the version
+      testModule.addCommit({
+        sha: 'def456',
+        message: 'fix: test commit',
+        files: ['test.tf'],
+      });
+
+      // Verify it throws the expected error
+      expect(() => testModule.getReleaseTagVersion()).toThrow(
+        "Invalid version format: 'bad-version'. Expected v#.#.# or #.#.# format.",
+      );
     });
   });
 });

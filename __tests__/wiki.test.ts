@@ -30,12 +30,12 @@ describe('wiki', async () => {
 
   // Grab the original set of modules by moving the workspaceDir to tf-modules
   context.workspaceDir = join(process.cwd(), '/tf-modules');
-  
+
   // Configure to include all modules by setting modulePathIgnore to empty
   config.set({
     modulePathIgnore: [],
   });
-  
+
   const terraformModules = parseTerraformModules(
     [
       {
@@ -217,7 +217,7 @@ describe('wiki', async () => {
       expect(files.length).toBe(9);
 
       // Verify the specific files that should be generated
-      const fileBasenames = files.map(f => basename(f)).sort();
+      const fileBasenames = files.map((f) => basename(f)).sort();
       expect(fileBasenames).toEqual([
         'Home.md',
         '_Footer.md',
@@ -227,7 +227,7 @@ describe('wiki', async () => {
         'kms∕examples∕complete.md',
         's3‒bucket‒object.md',
         'vpc‒endpoint.md',
-        'zoo.md'
+        'zoo.md',
       ]);
 
       // Verify that the files actually exist and have content
@@ -433,7 +433,7 @@ describe('wiki', async () => {
     it('should handle ExecSyncError with complex error messages', () => {
       const mockError = new Error('Git clone failed\nAdditional details') as ExecSyncError;
       mockError.status = 1;
-      
+
       vi.mocked(execFileSync).mockImplementationOnce(() => {
         throw mockError;
       });

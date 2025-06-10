@@ -174,15 +174,15 @@ describe('changelog', () => {
         releases: [
           {
             id: 1,
-            title: 'aws/vpc/v1.0.0',
+            title: 'modules/aws/vpc/v1.0.0',
             body: 'Release 1 content',
-            tagName: 'aws/vpc/v1.0.0',
+            tagName: 'modules/aws/vpc/v1.0.0',
           },
           {
             id: 2,
-            title: 'aws/vpc/v1.1.0',
+            title: 'modules/aws/vpc/v1.1.0',
             body: 'Release 2 content',
-            tagName: 'aws/vpc/v1.1.0',
+            tagName: 'modules/aws/vpc/v1.1.0',
           },
         ],
       });
@@ -205,9 +205,9 @@ describe('changelog', () => {
         releases: [
           {
             id: 1,
-            title: 'aws/vpc/v1.0.0',
+            title: 'modules/aws/vpc/v1.0.0',
             body: 'Single release content',
-            tagName: 'aws/vpc/v1.0.0',
+            tagName: 'modules/aws/vpc/v1.0.0',
           },
         ],
       });

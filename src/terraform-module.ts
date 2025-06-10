@@ -2,7 +2,7 @@ import { relative } from 'node:path';
 import { config } from '@/config';
 import { context } from '@/context';
 import type { CommitDetails, GitHubRelease, ReleaseReason, ReleaseType } from '@/types';
-import { RELEASE_REASON, RELEASE_TYPE } from '@/utils/constants';
+import { RELEASE_REASON, RELEASE_TYPE, VERSION_TAG_REGEX } from '@/utils/constants';
 import { removeTrailingCharacters } from '@/utils/string';
 import { endGroup, info, startGroup } from '@actions/core';
 
@@ -142,10 +142,11 @@ export class TerraformModule {
    * Sets the Git tags associated with this Terraform module.
    *
    * Accepts an array of tag strings and automatically sorts them by semantic version
-   * in descending order (newest first). Tags should follow the format `{moduleName}/v{x.y.z}`.
-   * This method replaces any previously set tags.
+   * in descending order (newest first). Tags must follow the format `{moduleName}/v{x.y.z}` or `{moduleName}/x.y.z`.
+   * This method replaces any previously set tags. Throws if any tag is invalid.
    *
    * @param {string[]} tags - Array of Git tag strings to associate with this module
+   * @throws {Error} If any tag does not match the required format
    * @returns {void}
    *
    * @example
@@ -160,10 +161,22 @@ export class TerraformModule {
    * ```
    */
   public setTags(tags: string[]): void {
+    // Extract versions once and validate during the process
+    const tagVersionMap = new Map<string, string>();
+
+    // First pass: validate all tags and extract versions
+    for (const tag of tags) {
+      tagVersionMap.set(tag, this.extractVersionFromTag(tag));
+    }
+
+    // Second pass: Sort using pre-extracted versions
     this._tags = tags.sort((a, b) => {
-      const aVersion = a.replace(/.*\/v/, '').split('.').map(Number);
-      const bVersion = b.replace(/.*\/v/, '').split('.').map(Number);
-      return bVersion[0] - aVersion[0] || bVersion[1] - aVersion[1] || bVersion[2] - aVersion[2];
+      const aVersion = tagVersionMap.get(a);
+      const bVersion = tagVersionMap.get(b);
+      if (!aVersion || !bVersion) {
+        throw new Error('Internal error: version not found in map');
+      }
+      return this.compareSemanticVersions(bVersion, aVersion); // Descending
     });
   }
 
@@ -197,7 +210,7 @@ export class TerraformModule {
    *
    * Preserves any version prefixes (such as "v") that may be present or configured.
    *
-   * @returns {string | null} The version string including any prefixes (e.g., 'v1.2.3'), or null if no tags exist.
+   * @returns {string | null} The version string including any prefixes (e.g., 'v1.2.3' or '1.2.3'), or null if no tags exist.
    */
   public getLatestTagVersion(): string | null {
     if (this.tags.length === 0) {
@@ -215,10 +228,12 @@ export class TerraformModule {
    * Sets the GitHub releases associated with this Terraform module.
    *
    * Accepts an array of GitHub release objects and automatically sorts them by semantic version
-   * in descending order (newest first). Releases should have titles following the format
-   * `{moduleName}/v{x.y.z}`. This method replaces any previously set releases.
+   * in descending order (newest first). Releases must have tagName following the format
+   * `{moduleName}/v{x.y.z}` or `{moduleName}/x.y.z`. Throws if any release is invalid.
+   * This method replaces any previously set releases.
    *
    * @param {GitHubRelease[]} releases - Array of GitHub release objects to associate with this module
+   * @throws {Error} If any release tagName does not match the required format
    * @returns {void}
    *
    * @example
@@ -232,10 +247,22 @@ export class TerraformModule {
    * ```
    */
   public setReleases(releases: GitHubRelease[]): void {
+    // Extract versions once and validate during the process
+    const releaseVersionMap = new Map<GitHubRelease, string>();
+
+    // First pass: validate all releases and extract versions
+    for (const release of releases) {
+      releaseVersionMap.set(release, this.extractVersionFromTag(release.tagName));
+    }
+
+    // Second pass: Sort using pre-extracted versions
     this._releases = releases.sort((a, b) => {
-      const aVersion = a.title.replace(/.*\/v/, '').split('.').map(Number);
-      const bVersion = b.title.replace(/.*\/v/, '').split('.').map(Number);
-      return bVersion[0] - aVersion[0] || bVersion[1] - aVersion[1] || bVersion[2] - aVersion[2];
+      const aVersion = releaseVersionMap.get(a);
+      const bVersion = releaseVersionMap.get(b);
+      if (!aVersion || !bVersion) {
+        throw new Error('Internal error: version not found in map');
+      }
+      return this.compareSemanticVersions(bVersion, aVersion); // Descending
     });
   }
 
@@ -360,19 +387,18 @@ export class TerraformModule {
       reasons.push(RELEASE_REASON.DIRECT_CHANGES);
     }
     //if (this.hasLocalDependencyUpdates()) {
-    //  reasons.push(RELEASE_REASON.LOCAL_DEPENDENCY_UPDATE);
+    //  reasons.push(RELEASE_REASON.DEPENDENCY_UPDATES);
     //}
-
     return reasons;
   }
 
   /**
-   * Returns the version part of the release tag that would be created for this module.
+   * Computes the next release tag version for this module based on its current state.
    *
-   * Computes the next semantic version based on the module's current state and changes.
-   * Preserves version prefixes (such as "v") as configured. Returns null if no release is needed.
+   * Analyzes the latest tag and determines the next version number according to the
+   * computed release type (major, minor, or patch). Returns null if no release is needed.
    *
-   * @returns {string | null} The version string including any prefixes (e.g., 'v1.2.3'), or null if no release is needed.
+   * @returns {string | null} The next release tag version (e.g., 'v1.2.3' or '1.2.3'), or null if no release is needed.
    *
    * @example
    * ```typescript
@@ -391,10 +417,13 @@ export class TerraformModule {
       return config.defaultFirstTag;
     }
 
-    // Extract the numerical part. This could be "v1.2.1" or in the future something else.
-    const versionMatch = latestTagVersion.match(/(\d+)\.(\d+)\.(\d+)/);
+    // Note: At this point, we'll always have a valid format either 'v1.2.3' or '1.2.3' based on how we validate
+    // via the setTags() and setReleases(). But we'll check anyways for robustness.
+
+    const versionMatch = latestTagVersion.match(VERSION_TAG_REGEX);
     if (!versionMatch) {
-      return config.defaultFirstTag;
+      // We should not reach here due to our validation, so throw an error instead of returning default tag
+      throw new Error(`Invalid version format: '${latestTagVersion}'. Expected v#.#.# or #.#.# format.`);
     }
 
     const [, major, minor, patch] = versionMatch;
@@ -441,6 +470,60 @@ export class TerraformModule {
   //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   // Helper
   //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  /**
+   * Safely extracts the numerical version string from a tag, avoiding regex vulnerabilities.
+   * Handles tags in format: moduleName/vX.Y.Z or moduleName/X.Y.Z
+   * Also validates that tag format matches expected pattern and returns only the numerical part.
+   *
+   * @param {string} tag - The tag string to extract version from
+   * @returns {string} The numerical version string (e.g., "1.2.3")
+   * @throws {Error} If the tag does not match the required format
+   */
+  private extractVersionFromTag(tag: string): string {
+    // Validate tag format - must start with module name followed by slash
+    if (!tag.startsWith(`${this.name}/`)) {
+      throw new Error(
+        `Invalid tag format: '${tag}'. Expected format: '${this.name}/v#.#.#' or '${this.name}/#.#.#' for module.`,
+      );
+    }
+
+    // Extract everything after the last slash
+    const versionPart = tag.substring(tag.lastIndexOf('/') + 1);
+
+    // Validate that the version part matches the expected format
+    if (!VERSION_TAG_REGEX.test(versionPart)) {
+      throw new Error(
+        `Invalid tag format: '${tag}'. Expected format: '${this.name}/v#.#.#' or '${this.name}/#.#.#' for module.`,
+      );
+    }
+
+    // Return only the numerical part, stripping the 'v' prefix if present
+    return versionPart.startsWith('v') ? versionPart.substring(1) : versionPart;
+  }
+
+  /**
+   * Compares two semantic version strings safely.
+   *
+   * @param {string} versionA - First version string in format "#.#.#" (e.g., "1.2.3")
+   * @param {string} versionB - Second version string in format "#.#.#" (e.g., "1.2.4")
+   * @returns {number} Negative if A < B, positive if A > B, zero if equal
+   *
+   * @note Both parameters are guaranteed to be in numerical format "#.#.#" without any prefix,
+   *       as they are processed through extractVersionFromTag which strips any 'v' prefix.
+   */
+  private compareSemanticVersions(versionA: string, versionB: string): number {
+    const parseVersion = (version: string): number[] => {
+      const parts = version.split('.');
+      return [Number(parts[0]), Number(parts[1]), Number(parts[2])];
+    };
+
+    const [majorA, minorA, patchA] = parseVersion(versionA);
+    const [majorB, minorB, patchB] = parseVersion(versionB);
+
+    if (majorA !== majorB) return majorA - majorB;
+    if (minorA !== minorB) return minorA - minorB;
+    return patchA - patchB;
+  }
 
   /**
    * Returns a formatted string representation of the module for debugging and logging.
@@ -546,13 +629,23 @@ export class TerraformModule {
 
   /**
    * Static utility to check if a tag is associated with a given module name.
+   * Supports both versioned tags ({moduleName}/v#.#.#) and non-versioned tags ({moduleName}/#.#.#).
    *
    * @param {string} moduleName - The Terraform module name
    * @param {string} tag - The tag to check
-   * @returns {boolean} True if the tag belongs to the module
+   * @returns {boolean} True if the tag belongs to the module and has valid version format
    */
   public static isModuleAssociatedWithTag(moduleName: string, tag: string): boolean {
-    return tag.startsWith(`${moduleName}/v`);
+    // Check if tag starts with exactly the module name followed by a slash
+    if (!tag.startsWith(`${moduleName}/`)) {
+      return false;
+    }
+
+    // Extract the version part after the module name and slash
+    const versionPart = tag.substring(moduleName.length + 1);
+
+    // Check if version part matches either v#.#.# or #.#.# format
+    return VERSION_TAG_REGEX.test(versionPart);
   }
 
   /**
