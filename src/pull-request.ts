@@ -314,10 +314,14 @@ export async function addReleasePlanComment(
       commentBody.push('✅ All tags and releases are synchronized with the codebase. No cleanup required.');
     } else {
       if (releasesToDelete.length > 0) {
+        const releaseText = releasesToDelete.length === 1 ? 'release is' : 'releases are';
+        const pronounText = releasesToDelete.length === 1 ? 'It' : 'They';
+        const releaseList = releasesToDelete.map((release) => `\`${release.title}\``).join(', ');
+        
         commentBody.push(
-          `**⚠️ The following ${releasesToDelete.length === 1 ? 'release is' : 'releases are'} no longer referenced by any source Terraform modules. ${releasesToDelete.length === 1 ? 'It' : 'They'} will be automatically deleted.**`,
+          `**⚠️ The following ${releaseText} no longer referenced by any source Terraform modules. ${pronounText} will be automatically deleted.**`,
         );
-        commentBody.push(` - ${releasesToDelete.map((release) => `\`${release.title}\``).join(', ')}`);
+        commentBody.push(` - ${releaseList}`);
       }
 
       if (tagsToDelete.length > 0) {
@@ -326,10 +330,14 @@ export async function addReleasePlanComment(
           commentBody.push('');
         }
 
+        const tagText = tagsToDelete.length === 1 ? 'tag is' : 'tags are';
+        const pronounText = tagsToDelete.length === 1 ? 'It' : 'They';
+        const tagList = tagsToDelete.map((tag) => `\`${tag}\``).join(', ');
+
         commentBody.push(
-          `**⚠️ The following ${tagsToDelete.length === 1 ? 'tag is' : 'tags are'} no longer referenced by any source Terraform modules. ${tagsToDelete.length === 1 ? 'It' : 'They'} will be automatically deleted.**`,
+          `**⚠️ The following ${tagText} no longer referenced by any source Terraform modules. ${pronounText} will be automatically deleted.**`,
         );
-        commentBody.push(` - ${tagsToDelete.map((tag) => `\`${tag}\``).join(', ')}`);
+        commentBody.push(` - ${tagList}`);
       }
     }
 
