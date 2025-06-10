@@ -21,6 +21,8 @@ MD030:
 MD033:
   allowed_elements:
     - sup
+    - sub
+    - br
     - b
     - p
     - img

@@ -1,10 +1,17 @@
 import { config } from '@/mocks/config';
 import { context } from '@/mocks/context';
 import { addPostReleaseComment, addReleasePlanComment, getPullRequestCommits, hasReleaseComment } from '@/pull-request';
+import type { TerraformModule } from '@/terraform-module';
 import { stubOctokitImplementation, stubOctokitReturnData } from '@/tests/helpers/octokit';
-import type { GitHubRelease, TerraformChangedModule } from '@/types';
-import { BRANDING_COMMENT, GITHUB_ACTIONS_BOT_USER_ID, PR_RELEASE_MARKER, PR_SUMMARY_MARKER } from '@/utils/constants';
-import { WikiStatus } from '@/wiki';
+import { createMockTerraformModule } from '@/tests/helpers/terraform-module';
+import type { GitHubRelease } from '@/types';
+import {
+  BRANDING_COMMENT,
+  GITHUB_ACTIONS_BOT_USER_ID,
+  PR_RELEASE_MARKER,
+  PR_SUMMARY_MARKER,
+  WIKI_STATUS,
+} from '@/utils/constants';
 import { debug, endGroup, info, startGroup } from '@actions/core';
 import { RequestError } from '@octokit/request-error';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -362,47 +369,34 @@ describe('pull-request', () => {
   });
 
   describe('addReleasePlanComment()', () => {
-    const terraformChangedModules: TerraformChangedModule[] = [
-      {
-        moduleName: 'module1',
+    const terraformModules: TerraformModule[] = [
+      createMockTerraformModule({
         directory: '/module1',
-        tags: [],
-        releases: [],
-        latestTag: 'module1/v1.0.0',
-        latestTagVersion: 'v1.0.0',
-        isChanged: true,
-        commitMessages: ['message1'],
-        releaseType: 'minor',
-        nextTag: 'module1/v1.1.0',
-        nextTagVersion: 'v1.1.0',
-      },
-      {
-        moduleName: 'module2',
+        tags: ['module1/v1.0.0'],
+        commits: [{ sha: 'abc123', message: 'message1', files: ['file1.tf'] }],
+      }),
+      createMockTerraformModule({
         directory: '/module2',
-        tags: [],
-        releases: [],
-        latestTag: 'module2/v1.5.0',
-        latestTagVersion: 'v1.5.0',
-        isChanged: true,
-        commitMessages: ['commit message 1'],
-        releaseType: 'major',
-        nextTag: 'module2/v2.0.0',
-        nextTagVersion: 'v2.0.0',
-      },
-      {
-        moduleName: 'new-module',
+        tags: ['module2/v1.5.0'],
+        commits: [{ sha: 'def456', message: 'commit message 1', files: ['file2.tf'] }],
+      }),
+      createMockTerraformModule({
         directory: '/new-module1',
         tags: [],
-        releases: [],
-        latestTag: null,
-        latestTagVersion: null,
-        isChanged: true,
-        commitMessages: ['message1'],
-        releaseType: 'patch',
-        nextTag: 'new-module/v1.0.0',
-        nextTagVersion: 'v1.0.0',
+        commits: [{ sha: 'ghi789', message: 'message1', files: ['file3.tf'] }],
+      }),
+    ];
+
+    const mockReleasesToDelete: GitHubRelease[] = [
+      {
+        id: 123,
+        title: 'legacy-module/v1.0.0',
+        body: 'Release notes',
+        tagName: 'legacy-module/v1.0.0',
       },
     ];
+
+    const mockTagsToDelete = ['legacy-module/v1.0.0', 'old-module/v2.0.0'];
 
     beforeEach(() => {
       context.useMockOctokit();
@@ -416,7 +410,9 @@ describe('pull-request', () => {
       });
       stubOctokitReturnData('issues.listComments', { data: [] });
 
-      await addReleasePlanComment(terraformChangedModules, [], { status: WikiStatus.SUCCESS });
+      await addReleasePlanComment(terraformModules, mockReleasesToDelete, mockTagsToDelete, {
+        status: WIKI_STATUS.SUCCESS,
+      });
 
       expect(context.octokit.rest.issues.createComment).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -438,24 +434,26 @@ describe('pull-request', () => {
         data: { id: newCommentId, html_url: 'https://github.com/org/repo/pull/1#issuecomment-1' },
       });
 
-      await addReleasePlanComment(terraformChangedModules, terraformModuleNamesToRemove, {
-        status: WikiStatus.SUCCESS,
+      await addReleasePlanComment(terraformModules, [], terraformModuleNamesToRemove, {
+        status: WIKI_STATUS.SUCCESS,
       });
 
       expect(context.octokit.rest.issues.createComment).toHaveBeenCalledWith(
         expect.objectContaining({
-          body: expect.stringContaining('**⚠️ The following module no longer exists in source but has tags/releases.'),
+          body: expect.stringContaining(
+            '**⚠️ The following tag is no longer referenced by any source Terraform modules. It will be automatically deleted.**',
+          ),
         }),
       );
       expect(context.octokit.rest.issues.createComment).toHaveBeenCalledWith(
         expect.objectContaining({
-          body: expect.stringContaining('It will be automatically deleted.'),
+          body: expect.stringContaining('`aws/module1`'),
         }),
       );
 
       config.set({ deleteLegacyTags: false });
-      await addReleasePlanComment(terraformChangedModules, terraformModuleNamesToRemove, {
-        status: WikiStatus.SUCCESS,
+      await addReleasePlanComment(terraformModules, [], terraformModuleNamesToRemove, {
+        status: WIKI_STATUS.SUCCESS,
       });
 
       expect(context.octokit.rest.issues.createComment).toHaveBeenCalledWith(
@@ -466,10 +464,12 @@ describe('pull-request', () => {
     });
 
     it('should handle initial release', async () => {
-      await addReleasePlanComment(terraformChangedModules, [], { status: WikiStatus.SUCCESS });
+      await addReleasePlanComment(terraformModules, mockReleasesToDelete, mockTagsToDelete, {
+        status: WIKI_STATUS.SUCCESS,
+      });
       expect(context.octokit.rest.issues.createComment).toHaveBeenCalledWith(
         expect.objectContaining({
-          body: expect.stringContaining('| `new-module` | initial |  | **v1.0.0** |'),
+          body: expect.stringContaining('🆕 Initial Release'),
         }),
       );
       expect(endGroup).toHaveBeenCalled();
@@ -481,7 +481,7 @@ describe('pull-request', () => {
       });
       stubOctokitReturnData('issues.listComments', { data: [] });
 
-      await addReleasePlanComment([], [], { status: WikiStatus.SUCCESS });
+      await addReleasePlanComment([], [], [], { status: WIKI_STATUS.SUCCESS });
 
       expect(context.octokit.rest.issues.createComment).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -499,16 +499,11 @@ describe('pull-request', () => {
       stubOctokitReturnData('issues.listComments', { data: [] });
       config.set({ deleteLegacyTags: true });
 
-      await addReleasePlanComment([], modulesToRemove, { status: WikiStatus.SUCCESS });
+      await addReleasePlanComment([], [], modulesToRemove, { status: WIKI_STATUS.SUCCESS });
 
       expect(context.octokit.rest.issues.createComment).toHaveBeenCalledWith(
         expect.objectContaining({
-          body: expect.stringContaining('- `legacy-module1`'),
-        }),
-      );
-      expect(context.octokit.rest.issues.createComment).toHaveBeenCalledWith(
-        expect.objectContaining({
-          body: expect.stringContaining('- `legacy-module2`'),
+          body: expect.stringContaining('`legacy-module1`, `legacy-module2`'),
         }),
       );
     });
@@ -522,7 +517,7 @@ describe('pull-request', () => {
       stubOctokitReturnData('issues.listComments', { data: [] });
       config.set({ deleteLegacyTags: false });
 
-      await addReleasePlanComment([], modulesToRemove, { status: WikiStatus.SUCCESS });
+      await addReleasePlanComment([], [], modulesToRemove, { status: WIKI_STATUS.SUCCESS });
 
       const createCommentCalls = vi.mocked(context.octokit.rest.issues.createComment).mock.calls;
       expect(createCommentCalls.length).toBeGreaterThanOrEqual(1);
@@ -544,7 +539,7 @@ describe('pull-request', () => {
       });
       stubOctokitReturnData('issues.listComments', { data: [] });
 
-      await addReleasePlanComment(terraformChangedModules, [], { status: WikiStatus.SUCCESS });
+      await addReleasePlanComment(terraformModules, [], [], { status: WIKI_STATUS.SUCCESS });
 
       expect(context.octokit.rest.issues.createComment).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -564,48 +559,35 @@ describe('pull-request', () => {
       });
       stubOctokitReturnData('issues.listComments', { data: [] });
 
-      await addReleasePlanComment(terraformChangedModules, terraformModuleNamesToRemove, {
-        status: WikiStatus.SUCCESS,
+      await addReleasePlanComment(terraformModules, [], terraformModuleNamesToRemove, {
+        status: WIKI_STATUS.SUCCESS,
       });
 
       expect(context.octokit.rest.issues.createComment).toHaveBeenCalledWith(
         expect.objectContaining({
-          body: expect.stringContaining('**⚠️ The following modules no longer exist in source but have tags/releases.'),
+          body: expect.stringContaining(
+            '**⚠️ The following tags are no longer referenced by any source Terraform modules. They will be automatically deleted.**',
+          ),
         }),
       );
       expect(context.octokit.rest.issues.createComment).toHaveBeenCalledWith(
         expect.objectContaining({
-          body: expect.stringContaining('They will be automatically deleted.'),
-        }),
-      );
-      expect(context.octokit.rest.issues.createComment).toHaveBeenCalledWith(
-        expect.objectContaining({
-          body: expect.stringContaining('- `aws/module1`'),
-        }),
-      );
-      expect(context.octokit.rest.issues.createComment).toHaveBeenCalledWith(
-        expect.objectContaining({
-          body: expect.stringContaining('- `aws/module2`'),
-        }),
-      );
-      expect(context.octokit.rest.issues.createComment).toHaveBeenCalledWith(
-        expect.objectContaining({
-          body: expect.stringContaining('- `gcp/module3`'),
+          body: expect.stringContaining('`aws/module1`, `aws/module2`, `gcp/module3`'),
         }),
       );
     });
 
     it('should handle wiki failure status with error message', async () => {
       const newCommentId = 12345;
-      const errorMessage = 'Repository does not have wiki enabled';
+      const errorSummary = 'Repository does not have wiki enabled';
       stubOctokitReturnData('issues.createComment', {
         data: { id: newCommentId, html_url: 'https://github.com/org/repo/pull/1#issuecomment-1' },
       });
       stubOctokitReturnData('issues.listComments', { data: [] });
 
-      await addReleasePlanComment([], [], {
-        status: WikiStatus.FAILURE,
-        errorMessage,
+      await addReleasePlanComment([], [], [], {
+        status: WIKI_STATUS.FAILURE,
+        errorSummary,
       });
 
       expect(context.octokit.rest.issues.createComment).toHaveBeenCalledWith(
@@ -616,11 +598,6 @@ describe('pull-request', () => {
       expect(context.octokit.rest.issues.createComment).toHaveBeenCalledWith(
         expect.objectContaining({
           body: expect.stringContaining('```'),
-        }),
-      );
-      expect(context.octokit.rest.issues.createComment).toHaveBeenCalledWith(
-        expect.objectContaining({
-          body: expect.stringContaining(errorMessage),
         }),
       );
       expect(context.octokit.rest.issues.createComment).toHaveBeenCalledWith(
@@ -638,7 +615,7 @@ describe('pull-request', () => {
       });
       stubOctokitReturnData('issues.listComments', { data: [] });
 
-      await addReleasePlanComment(terraformChangedModules, [], { status: WikiStatus.SUCCESS });
+      await addReleasePlanComment(terraformModules, [], [], { status: WIKI_STATUS.SUCCESS });
 
       const createCommentCalls = vi.mocked(context.octokit.rest.issues.createComment).mock.calls;
       expect(createCommentCalls.length).toBeGreaterThanOrEqual(1);
@@ -653,16 +630,16 @@ describe('pull-request', () => {
     it('should handle different wiki statuses', async () => {
       const cases = [
         {
-          status: WikiStatus.SUCCESS,
+          status: WIKI_STATUS.SUCCESS,
           expectedContent: '✅ Enabled',
         },
         {
-          status: WikiStatus.FAILURE,
-          errorMessage: 'Failed to clone',
+          status: WIKI_STATUS.FAILURE,
+          errorSummary: 'Failed to clone',
           expectedContent: '**⚠️ Failed to checkout wiki:**',
         },
         {
-          status: WikiStatus.DISABLED,
+          status: WIKI_STATUS.DISABLED,
           expectedContent: '🚫 Wiki generation **disabled** via `disable-wiki` flag.',
         },
       ];
@@ -673,7 +650,7 @@ describe('pull-request', () => {
         });
         stubOctokitReturnData('issues.listComments', { data: [] });
 
-        await addReleasePlanComment([], [], { status: testCase.status, errorMessage: testCase.errorMessage });
+        await addReleasePlanComment([], [], [], { status: testCase.status, errorSummary: testCase.errorSummary });
 
         expect(context.octokit.rest.issues.createComment).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -695,7 +672,7 @@ describe('pull-request', () => {
       });
       stubOctokitReturnData('issues.listComments', { data: existingComments });
 
-      await addReleasePlanComment([], [], { status: WikiStatus.SUCCESS });
+      await addReleasePlanComment([], [], [], { status: WIKI_STATUS.SUCCESS });
 
       expect(context.octokit.rest.issues.deleteComment).toHaveBeenCalledTimes(2);
       expect(context.octokit.rest.issues.deleteComment).toHaveBeenCalledWith(
@@ -706,42 +683,144 @@ describe('pull-request', () => {
       );
     });
 
+    it('should handle releases to delete when delete-legacy-tags is enabled', async () => {
+      const mockReleasesToDeleteSingle: GitHubRelease[] = [
+        {
+          id: 456,
+          title: 'legacy-release/v2.0.0',
+          body: 'Release notes for deletion',
+          tagName: 'legacy-release/v2.0.0',
+        },
+      ];
+
+      stubOctokitReturnData('issues.createComment', {
+        data: { id: 1, html_url: 'https://github.com/org/repo/pull/1#issuecomment-1' },
+      });
+      stubOctokitReturnData('issues.listComments', { data: [] });
+      config.set({ deleteLegacyTags: true });
+
+      await addReleasePlanComment([], mockReleasesToDeleteSingle, [], { status: WIKI_STATUS.SUCCESS });
+
+      expect(context.octokit.rest.issues.createComment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: expect.stringContaining(
+            '**⚠️ The following release is no longer referenced by any source Terraform modules. It will be automatically deleted.**',
+          ),
+        }),
+      );
+      expect(context.octokit.rest.issues.createComment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: expect.stringContaining('`legacy-release/v2.0.0`'),
+        }),
+      );
+    });
+
+    it('should handle multiple releases to delete with plural message', async () => {
+      const mockReleasesToDeleteMultiple: GitHubRelease[] = [
+        {
+          id: 456,
+          title: 'legacy-release1/v1.0.0',
+          body: 'Release notes 1',
+          tagName: 'legacy-release1/v1.0.0',
+        },
+        {
+          id: 789,
+          title: 'legacy-release2/v2.0.0',
+          body: 'Release notes 2',
+          tagName: 'legacy-release2/v2.0.0',
+        },
+      ];
+
+      stubOctokitReturnData('issues.createComment', {
+        data: { id: 1, html_url: 'https://github.com/org/repo/pull/1#issuecomment-1' },
+      });
+      stubOctokitReturnData('issues.listComments', { data: [] });
+      config.set({ deleteLegacyTags: true });
+
+      await addReleasePlanComment([], mockReleasesToDeleteMultiple, [], { status: WIKI_STATUS.SUCCESS });
+
+      expect(context.octokit.rest.issues.createComment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: expect.stringContaining(
+            '**⚠️ The following releases are no longer referenced by any source Terraform modules. They will be automatically deleted.**',
+          ),
+        }),
+      );
+      expect(context.octokit.rest.issues.createComment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: expect.stringContaining('`legacy-release1/v1.0.0`, `legacy-release2/v2.0.0`'),
+        }),
+      );
+    });
+
+    it('should handle both releases and tags to delete with proper spacing', async () => {
+      const mockReleasesToDelete: GitHubRelease[] = [
+        {
+          id: 456,
+          title: 'legacy-release/v1.0.0',
+          body: 'Release notes',
+          tagName: 'legacy-release/v1.0.0',
+        },
+      ];
+      const mockTagsToDelete = ['legacy-tag/v2.0.0'];
+
+      stubOctokitReturnData('issues.createComment', {
+        data: { id: 1, html_url: 'https://github.com/org/repo/pull/1#issuecomment-1' },
+      });
+      stubOctokitReturnData('issues.listComments', { data: [] });
+      config.set({ deleteLegacyTags: true });
+
+      await addReleasePlanComment([], mockReleasesToDelete, mockTagsToDelete, { status: WIKI_STATUS.SUCCESS });
+
+      const createCommentCalls = vi.mocked(context.octokit.rest.issues.createComment).mock.calls;
+      expect(createCommentCalls.length).toBeGreaterThanOrEqual(1);
+
+      // Get the comment body text from the first call
+      const commentBody = createCommentCalls[0]?.[0]?.body as string;
+
+      // Ensure both releases and tags sections are included
+      expect(commentBody).toContain(
+        '**⚠️ The following release is no longer referenced by any source Terraform modules. It will be automatically deleted.**',
+      );
+      expect(commentBody).toContain('`legacy-release/v1.0.0`');
+      expect(commentBody).toContain(
+        '**⚠️ The following tag is no longer referenced by any source Terraform modules. It will be automatically deleted.**',
+      );
+      expect(commentBody).toContain('`legacy-tag/v2.0.0`');
+
+      // Verify there's proper spacing (empty line) between releases and tags sections
+      const releaseIndex = commentBody.indexOf('- `legacy-release/v1.0.0`');
+      const tagIndex = commentBody.indexOf('- `legacy-tag/v2.0.0`');
+      const betweenContent = commentBody.substring(releaseIndex, tagIndex);
+      expect(betweenContent).toContain('\n\n'); // Should contain double newline for spacing
+    });
+
     it('should handle request errors gracefully', async () => {
-      const errorMessage = 'Resource not accessible by integration';
+      const errorMessage = 'Server error';
+      const expectedErrorString = `Failed to create a comment on the pull request: ${errorMessage} - Ensure that the GitHub Actions workflow has the correct permissions to write comments. To grant the required permissions, update your workflow YAML file with the following block under "permissions":\n\npermissions:\n  pull-requests: write`;
+
+      vi.mocked(context.octokit.rest.issues.createComment).mockRejectedValueOnce(
+        new RequestError(errorMessage, 403, {
+          request: { method: 'POST', url: '', headers: {} },
+          response: { status: 403, url: '', headers: {}, data: {} },
+        }),
+      );
+
+      await expect(addReleasePlanComment([], [], [], { status: WIKI_STATUS.SUCCESS })).rejects.toThrow(
+        expectedErrorString,
+      );
+    });
+
+    it('should handle non-RequestError errors gracefully', async () => {
+      const errorMessage = 'Generic error testing';
       const expectedErrorString = `Failed to create a comment on the pull request: ${errorMessage}`;
-
-      vi.mocked(context.octokit.rest.issues.createComment).mockRejectedValueOnce(
-        new RequestError(errorMessage, 403, {
-          request: { method: 'GET', url: '', headers: {} },
-          response: { status: 403, url: '', headers: {}, data: {} },
-        }),
-      );
-
-      await expect(addReleasePlanComment([], [], { status: WikiStatus.SUCCESS })).rejects.toThrow(expectedErrorString);
-
-      vi.mocked(context.octokit.rest.issues.createComment).mockRejectedValueOnce(
-        new RequestError(errorMessage, 403, {
-          request: { method: 'GET', url: '', headers: {} },
-          response: { status: 403, url: '', headers: {}, data: {} },
-        }),
-      );
-
-      try {
-        await addReleasePlanComment([], [], { status: WikiStatus.SUCCESS });
-      } catch (error) {
-        expect(error instanceof Error).toBe(true);
-        expect((error as Error).message).toBe(
-          `${expectedErrorString} - Ensure that the GitHub Actions workflow has the correct permissions to write comments. To grant the required permissions, update your workflow YAML file with the following block under "permissions":\n\npermissions:\n  pull-requests: write`,
-        );
-        expect((error as Error).cause instanceof RequestError).toBe(true);
-      }
 
       vi.mocked(context.octokit.rest.issues.createComment).mockImplementationOnce(() => {
         throw errorMessage; // Throwing a string directly
       });
 
       try {
-        await addReleasePlanComment([], [], { status: WikiStatus.SUCCESS });
+        await addReleasePlanComment([], [], [], { status: WIKI_STATUS.SUCCESS });
       } catch (error) {
         expect(error instanceof Error).toBe(true);
         expect((error as Error).message).toBe(expectedErrorString);
@@ -749,39 +828,43 @@ describe('pull-request', () => {
       }
 
       vi.mocked(context.octokit.rest.issues.createComment).mockImplementationOnce(() => {
-        throw new Error(errorMessage); // Throwing a string directly
+        throw new Error(errorMessage); // Throwing an Error object
       });
 
       try {
-        await addReleasePlanComment([], [], { status: WikiStatus.SUCCESS });
+        await addReleasePlanComment([], [], [], { status: WIKI_STATUS.SUCCESS });
       } catch (error) {
         expect(error instanceof Error).toBe(true);
         expect((error as Error).message).toBe(expectedErrorString);
-        expect((error as Error).cause instanceof RequestError).toBe(false);
+        expect((error as Error).cause instanceof Error).toBe(true);
       }
     });
   });
 
   describe('addPostReleaseComment()', () => {
-    const updatedModules: { moduleName: string; release: GitHubRelease }[] = [
-      {
-        moduleName: 'module1',
-        release: {
-          id: 1,
-          title: 'v1.0.0',
-          body: 'Release notes for v1.0.0',
-          tagName: 'module1/v1.0.0',
-        },
-      },
-      {
-        moduleName: 'module2',
-        release: {
-          id: 2,
-          title: 'v2.0.0',
-          body: 'Release notes for v2.0.0',
-          tagName: 'module1/v2.0.0',
-        },
-      },
+    const releasedModules: TerraformModule[] = [
+      createMockTerraformModule({
+        directory: '/module1',
+        releases: [
+          {
+            id: 1,
+            title: 'v1.0.0',
+            body: 'Release notes for v1.0.0',
+            tagName: 'module1/v1.0.0',
+          },
+        ],
+      }),
+      createMockTerraformModule({
+        directory: '/module2',
+        releases: [
+          {
+            id: 2,
+            title: 'v2.0.0',
+            body: 'Release notes for v2.0.0',
+            tagName: 'module2/v2.0.0',
+          },
+        ],
+      }),
     ];
 
     beforeEach(() => {
@@ -793,7 +876,7 @@ describe('pull-request', () => {
       await addPostReleaseComment([]);
 
       expect(context.octokit.rest.issues.createComment).not.toHaveBeenCalled();
-      expect(info).toHaveBeenCalledWith('No updated modules. Skipping post release PR comment.');
+      expect(info).toHaveBeenCalledWith('No released modules. Skipping post release PR comment.');
     });
 
     it('should create comment with release details', async () => {
@@ -801,7 +884,7 @@ describe('pull-request', () => {
         data: { id: 1, html_url: 'https://github.com/org/repo/pull/1#issuecomment-1' },
       });
 
-      await addPostReleaseComment(updatedModules);
+      await addPostReleaseComment(releasedModules);
 
       expect(context.octokit.rest.issues.createComment).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -826,7 +909,7 @@ describe('pull-request', () => {
         data: { id: 1, html_url: 'https://github.com/org/repo/pull/1#issuecomment-1' },
       });
 
-      await addPostReleaseComment(updatedModules);
+      await addPostReleaseComment(releasedModules);
 
       expect(context.octokit.rest.issues.createComment).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -841,7 +924,7 @@ describe('pull-request', () => {
         data: { id: 1, html_url: 'https://github.com/org/repo/pull/1#issuecomment-1' },
       });
 
-      await addPostReleaseComment(updatedModules);
+      await addPostReleaseComment(releasedModules);
 
       expect(context.octokit.rest.issues.createComment).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -856,7 +939,7 @@ describe('pull-request', () => {
         data: { id: 1, html_url: 'https://github.com/org/repo/pull/1#issuecomment-1' },
       });
 
-      await addPostReleaseComment(updatedModules);
+      await addPostReleaseComment(releasedModules);
 
       expect(context.octokit.rest.issues.createComment).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -874,7 +957,7 @@ describe('pull-request', () => {
         }),
       );
 
-      await expect(addPostReleaseComment(updatedModules)).rejects.toThrow(
+      await expect(addPostReleaseComment(releasedModules)).rejects.toThrow(
         'Failed to create a comment on the pull request',
       );
     });
@@ -888,7 +971,7 @@ describe('pull-request', () => {
       });
 
       try {
-        await addPostReleaseComment(updatedModules);
+        await addPostReleaseComment(releasedModules);
       } catch (error) {
         expect(error instanceof Error).toBe(true);
         expect((error as Error).message).toBe(expectedErrorString);
@@ -900,7 +983,7 @@ describe('pull-request', () => {
       });
 
       try {
-        await addPostReleaseComment(updatedModules);
+        await addPostReleaseComment(releasedModules);
       } catch (error) {
         expect(error instanceof Error).toBe(true);
         expect((error as Error).message).toBe(expectedErrorString);

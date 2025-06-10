@@ -1,0 +1,69 @@
+{
+  "action": "opened",
+  "number": 42,
+  "pull_request": {
+    "id": 123456789,
+    "number": 42,
+    "state": "open",
+    "title": "feat: add new VPC endpoint module",
+    "body": "This PR adds a new Terraform module for creating VPC endpoints with proper security configurations.\n\n## Changes\n- Added vpc-endpoint module\n- Updated documentation with examples\n- Added comprehensive variable definitions\n\n## Testing\n- [x] Unit tests pass\n- [x] Module validation complete",
+    "created_at": "2025-06-02T10:30:00Z",
+    "updated_at": "2025-06-02T10:30:00Z",
+    "closed_at": null,
+    "merged_at": null,
+    "merge_commit_sha": null,
+    "assignee": null,
+    "assignees": [],
+    "requested_reviewers": [],
+    "requested_teams": [],
+    "labels": [
+      {
+        "id": 1,
+        "name": "enhancement",
+        "color": "84b6eb"
+      }
+    ],
+    "milestone": null,
+    "draft": false,
+    "head": {
+      "label": "virgofx:feature/vpc-endpoint-module",
+      "ref": "feature/vpc-endpoint-module",
+      "sha": "abc123def456789012345678901234567890abcd"
+    },
+    "base": {
+      "label": "techpivot:main",
+      "ref": "main",
+      "sha": "def456abc789012345678901234567890123cdef"
+    },
+    "user": {
+      "login": "virgofx",
+      "id": 12345,
+      "type": "User"
+    }
+  },
+  "repository": {
+    "id": 987654321,
+    "name": "terraform-module-releaser",
+    "full_name": "techpivot/terraform-module-releaser",
+    "private": false,
+    "owner": {
+      "login": "techpivot",
+      "id": 54321,
+      "type": "Organization"
+    },
+    "html_url": "https://github.com/techpivot/terraform-module-releaser",
+    "description": "GitHub Action for automated Terraform module releases and documentation",
+    "fork": false,
+    "created_at": "2023-01-15T08:00:00Z",
+    "updated_at": "2025-06-02T09:00:00Z",
+    "pushed_at": "2025-06-02T10:30:00Z",
+    "clone_url": "https://github.com/techpivot/terraform-module-releaser.git",
+    "ssh_url": "git@github.com:techpivot/terraform-module-releaser.git",
+    "default_branch": "main"
+  },
+  "sender": {
+    "login": "virgofx",
+    "id": 12345,
+    "type": "User"
+  }
+}

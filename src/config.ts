@@ -84,6 +84,8 @@ function initializeConfig(): Config {
       throw new TypeError('Asset exclude patterns cannot contain "*.tf" as these files are required');
     }
 
+    // Validate that we have a valid first tag. For now, must be v#.#.#
+
     // Validate WikiSidebar Changelog Max is a number and greater than zero
     if (configInstance.wikiSidebarChangelogMax < 1 || Number.isNaN(configInstance.wikiSidebarChangelogMax)) {
       throw new TypeError('Wiki Sidebar Change Log Max must be an integer greater than or equal to one');

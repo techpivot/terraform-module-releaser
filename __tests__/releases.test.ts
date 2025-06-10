@@ -1,10 +1,11 @@
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { config } from '@/mocks/config';
 import { context } from '@/mocks/context';
-import { createTaggedRelease, deleteLegacyReleases, getAllReleases } from '@/releases';
+import { createTaggedReleases, deleteReleases, getAllReleases } from '@/releases';
+import { TerraformModule } from '@/terraform-module';
 import { stubOctokitReturnData } from '@/tests/helpers/octokit';
-import type { GitHubRelease, TerraformChangedModule } from '@/types';
+import { createMockTerraformModule } from '@/tests/helpers/terraform-module';
+import type { GitHubRelease } from '@/types';
 import { debug, endGroup, info, startGroup } from '@actions/core';
 import { RequestError } from '@octokit/request-error';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -299,41 +300,190 @@ describe('releases', () => {
     });
   });
 
-  describe('createTaggedRelease()', () => {
-    const mockTerraformModule: TerraformChangedModule = {
-      moduleName: 'test-module',
-      directory: '/path/to/module',
-      releaseType: 'patch',
-      nextTag: 'test-module/v1.0.1',
-      nextTagVersion: '1.0.1',
-      tags: ['test-module/v1.0.0'],
-      releases: [],
-      latestTag: 'test-module/v1.0.0',
-      latestTagVersion: '1.0.0',
-      isChanged: true,
-      commitMessages: [],
-    };
+  describe('createTaggedReleases()', () => {
+    let mockTerraformModule: TerraformModule;
+
+    beforeEach(() => {
+      // Create a module with commits so needsRelease() returns true naturally
+      context.set({
+        workspaceDir: '/workspace',
+      });
+      mockTerraformModule = createMockTerraformModule({
+        directory: '/workspace/path/to/test-module',
+        commits: [
+          {
+            sha: 'abc123',
+            message: 'feat: Add new feature',
+            files: ['/workspace/path/to/test-module/main.tf'],
+          },
+        ],
+        tags: ['path/to/test-module/v1.0.0'],
+        releases: [
+          {
+            id: 1,
+            title: 'path/to/test-module/v1.0.0',
+            tagName: 'path/to/test-module/v1.0.0',
+            body: '# v1.0.0 (YYYY-MM-DD)\n\n- Changelog Item 1',
+          },
+        ],
+      });
+
+      vi.spyOn(mockTerraformModule, 'setReleases');
+      vi.spyOn(mockTerraformModule, 'setTags');
+
+      context.useMockOctokit();
+    });
 
     it('should successfully create a tagged release', async () => {
-      stubOctokitReturnData('repos.createRelease', {
+      const mockRelease = {
         data: {
-          name: 'test-module/v1.0.1',
-          body: 'Release notes',
-          tag_name: 'test-module/v1.0.1',
+          id: 123456,
+          name: 'path/to/test-module/v1.1.0',
+          body: 'Mock changelog content',
+          tag_name: 'path/to/test-module/v1.1.0',
           draft: false,
           prerelease: false,
         },
-      });
-      const result = await createTaggedRelease([mockTerraformModule]);
+      };
+      stubOctokitReturnData('repos.createRelease', mockRelease);
 
-      expect(result).toHaveLength(1);
-      expect(result[0].moduleName).toBe('test-module');
-      expect(result[0].release.title).toBe('test-module/v1.0.1');
+      const modulesToRelease = TerraformModule.getModulesNeedingRelease([mockTerraformModule]);
+      expect(modulesToRelease).toStrictEqual([mockTerraformModule]);
+
+      // Store the original releases and tags, since we update it after.
+      const originalReleases = mockTerraformModule.releases;
+      const originalTags = mockTerraformModule.tags;
+
+      expect(mockTerraformModule.needsRelease()).toBe(true);
+      const releasedModules = await createTaggedReleases([mockTerraformModule]);
+      expect(releasedModules).toStrictEqual([mockTerraformModule]);
+      expect(mockTerraformModule.setReleases).toHaveBeenCalledWith([
+        {
+          id: mockRelease.data.id,
+          title: mockRelease.data.tag_name,
+          tagName: mockRelease.data.tag_name,
+          body: mockRelease.data.body,
+        },
+        ...originalReleases,
+      ]);
+      expect(mockTerraformModule.setTags).toHaveBeenCalledWith(['path/to/test-module/v1.1.0', ...originalTags]);
+      expect(mockTerraformModule.needsRelease()).toBe(false);
       expect(startGroup).toHaveBeenCalledWith('Creating releases & tags for modules');
+      expect(endGroup).toHaveBeenCalled();
     });
 
-    it('should skip when no modules are provided', async () => {
-      const result = await createTaggedRelease([]);
+    it('should handle null/undefined name and body from GitHub API response', async () => {
+      const mockRelease = {
+        data: {
+          id: 789012,
+          name: null, // Simulate GitHub API returning null for name
+          body: undefined, // Simulate GitHub API returning undefined for body
+          tag_name: 'path/to/test-module/v1.1.0',
+          draft: false,
+          prerelease: false,
+        },
+      };
+      stubOctokitReturnData('repos.createRelease', mockRelease);
+
+      // Store the original releases and tags, since we update it after.
+      const originalTags = mockTerraformModule.tags;
+
+      const releasedModules = await createTaggedReleases([mockTerraformModule]);
+      expect(releasedModules).toStrictEqual([mockTerraformModule]);
+
+      // Verify that the setReleases was called
+      expect(mockTerraformModule.setReleases).toHaveBeenCalledOnce();
+
+      const releaseCall = vi.mocked(mockTerraformModule.setReleases).mock.calls[0][0];
+      const newRelease = releaseCall[0];
+
+      // Verify the fallbacks work correctly
+      expect(newRelease.id).toBe(789012);
+      expect(newRelease.title).toBe('path/to/test-module/v1.1.0'); // Should fall back to releaseTag since name is null
+      expect(newRelease.tagName).toBe('path/to/test-module/v1.1.0');
+      expect(newRelease.body).toContain('v1.1.0'); // Should fall back to generated changelog since body is undefined
+      expect(newRelease.body).toContain('feat: Add new feature'); // Should contain the commit message
+
+      expect(mockTerraformModule.setTags).toHaveBeenCalledWith(['path/to/test-module/v1.1.0', ...originalTags]);
+      expect(endGroup).toHaveBeenCalled();
+    });
+
+    it('should handle missing name but valid body from GitHub API response', async () => {
+      const mockRelease = {
+        data: {
+          id: 345678,
+          name: null, // Simulate GitHub API returning null for name
+          body: 'Custom release body from GitHub API', // Valid body provided
+          tag_name: 'path/to/test-module/v1.1.0',
+          draft: false,
+          prerelease: false,
+        },
+      };
+      stubOctokitReturnData('repos.createRelease', mockRelease);
+
+      const releasedModules = await createTaggedReleases([mockTerraformModule]);
+      expect(releasedModules).toStrictEqual([mockTerraformModule]);
+
+      // Verify that the setReleases was called
+      expect(mockTerraformModule.setReleases).toHaveBeenCalledOnce();
+
+      const releaseCall = vi.mocked(mockTerraformModule.setReleases).mock.calls[0][0];
+      const newRelease = releaseCall[0];
+
+      // Verify the title falls back to releaseTag but body uses the provided value
+      expect(newRelease.title).toBe('path/to/test-module/v1.1.0'); // Should fall back to releaseTag since name is null
+      expect(newRelease.body).toBe('Custom release body from GitHub API'); // Should use the provided body
+      expect(endGroup).toHaveBeenCalled();
+    });
+
+    it('should handle valid name but missing body from GitHub API response', async () => {
+      const mockRelease = {
+        data: {
+          id: 456789,
+          name: 'Custom Release Name', // Valid name provided
+          body: null, // Simulate GitHub API returning null for body (Should never happen but we'll test for it)
+          tag_name: 'path/to/test-module/v1.1.0',
+          draft: false,
+          prerelease: false,
+        },
+      };
+      stubOctokitReturnData('repos.createRelease', mockRelease);
+
+      const releasedModules = await createTaggedReleases([mockTerraformModule]);
+      expect(releasedModules).toStrictEqual([mockTerraformModule]);
+
+      // Verify that the setReleases was called
+      expect(mockTerraformModule.setReleases).toHaveBeenCalledOnce();
+
+      const releaseCall = vi.mocked(mockTerraformModule.setReleases).mock.calls[0][0];
+      const newRelease = releaseCall[0];
+
+      // With secure version extraction, custom names are not sorted as versions.
+      // Just check that the fallback for body works and the title is set as provided.
+      expect(newRelease.title).toBe('Custom Release Name');
+      expect(newRelease.body).toContain('v1.1.0'); // Should fall back to generated changelog since body is null
+      expect(newRelease.body).toContain('feat: Add new feature'); // Should contain the commit message
+      expect(endGroup).toHaveBeenCalled();
+    });
+
+    it('should skip when no modules need release', async () => {
+      // Create a module without any commits so needsRelease() returns false naturally
+      const moduleWithoutChanges = createMockTerraformModule({
+        directory: '/workspace/path/to/unchanged-module',
+        commits: [],
+        tags: ['path/to/unchanged-module/v1.0.0'],
+        releases: [
+          {
+            id: 1,
+            title: 'path/to/unchanged-module/v1.0.0',
+            tagName: 'path/to/unchanged-module/v1.0.0',
+            body: '# v1.0.0 (YYYY-MM-DD)\n\n- Initial release',
+          },
+        ],
+      });
+
+      const result = await createTaggedReleases([moduleWithoutChanges]);
+
       expect(result).toHaveLength(0);
       expect(info).toHaveBeenCalledWith('No changed Terraform modules to process. Skipping tag/release creation.');
     });
@@ -345,9 +495,10 @@ describe('releases', () => {
         throw errorMessage;
       });
 
-      await expect(createTaggedRelease([mockTerraformModule])).rejects.toThrow(
+      await expect(createTaggedReleases([mockTerraformModule])).rejects.toThrow(
         'Failed to create tags in repository: string error message',
       );
+      expect(endGroup).toHaveBeenCalled();
     });
 
     it('should handle errors', async () => {
@@ -358,60 +509,45 @@ describe('releases', () => {
       });
 
       try {
-        await createTaggedRelease([mockTerraformModule]);
+        await createTaggedReleases([mockTerraformModule]);
       } catch (error) {
         expect(error instanceof Error).toBe(true);
         expect((error as Error).message).toBe(`Failed to create tags in repository: ${errorMessage}`);
         expect(((error as Error).cause as Error).message).toBe(errorMessage);
       }
+      expect(endGroup).toHaveBeenCalled();
     });
 
     it('should provide helpful error message for permission issues', async () => {
-      const permissionError = new RequestError('The requested URL returned error: 403', 403, {
-        request: { method: 'POST', url: '', headers: {} },
-        response: { headers: {}, status: 403, url: '', data: '' },
-      });
+      const permissionError = new Error('The requested URL returned error: 403');
 
       vi.spyOn(context.octokit.rest.repos, 'createRelease').mockRejectedValue(permissionError);
 
-      await expect(createTaggedRelease([mockTerraformModule])).rejects.toThrow(/contents: write/);
+      await expect(createTaggedReleases([mockTerraformModule])).rejects.toThrow(/contents: write/);
+      expect(endGroup).toHaveBeenCalled();
     });
   });
 
-  describe('deleteLegacyReleases()', () => {
+  describe('deleteReleases()', () => {
     beforeEach(() => {
       context.useMockOctokit();
     });
 
-    it('should do nothing when deleteLegacyTags is false', async () => {
-      config.set({ deleteLegacyTags: false });
-
-      await deleteLegacyReleases([], []);
-      expect(info).toHaveBeenCalledWith('Deletion of legacy tags/releases is disabled. Skipping.');
-      expect(context.octokit.rest.git.deleteRef).not.toHaveBeenCalled();
+    it('should do nothing when no releases to delete', async () => {
+      await deleteReleases([]);
+      expect(vi.mocked(info).mock.calls).toEqual([['No releases found to delete. Skipping.']]);
+      expect(context.octokit.rest.repos.deleteRelease).not.toHaveBeenCalled();
       expect(startGroup).not.toHaveBeenCalled();
       expect(endGroup).not.toHaveBeenCalled();
     });
 
-    it('should do nothing when no releases to delete', async () => {
-      config.set({ deleteLegacyTags: true });
+    it('should delete multiple releases', async () => {
+      await deleteReleases(mockGetAllReleasesResponse);
 
-      await deleteLegacyReleases([], []);
-      expect(vi.mocked(startGroup).mock.calls).toEqual([['Deleting legacy Terraform module releases']]);
-      expect(vi.mocked(info).mock.calls).toEqual([['No legacy releases found to delete. Skipping.']]);
-      expect(context.octokit.rest.git.deleteRef).not.toHaveBeenCalled();
-      expect(endGroup).toHaveBeenCalled();
-    });
-
-    it('should delete matching legacy releases (plural)', async () => {
-      config.set({ deleteLegacyTags: true });
-      const moduleNames = mockGetAllReleasesResponse.map((release) => release.title);
-      await deleteLegacyReleases(moduleNames, mockGetAllReleasesResponse);
-
-      expect(context.octokit.rest.repos.deleteRelease).toHaveBeenCalledTimes(moduleNames.length);
-      expect(startGroup).toHaveBeenCalledWith('Deleting legacy Terraform module releases');
+      expect(context.octokit.rest.repos.deleteRelease).toHaveBeenCalledTimes(mockGetAllReleasesResponse.length);
+      expect(startGroup).toHaveBeenCalledWith('Deleting releases');
       expect(vi.mocked(info).mock.calls).toEqual([
-        [`Found ${moduleNames.length} legacy releases to delete.`],
+        [`Deleting ${mockGetAllReleasesResponse.length} releases`],
         [
           JSON.stringify(
             mockGetAllReleasesResponse.map((release) => release.title),
@@ -424,16 +560,14 @@ describe('releases', () => {
       ]);
     });
 
-    it('should delete matching legacy release (singular)', async () => {
-      config.set({ deleteLegacyTags: true });
+    it('should delete single release', async () => {
       const releases = mockGetAllReleasesResponse.slice(0, 1);
-      const moduleNames = mockGetAllReleasesResponse.map((release) => release.title).slice(0, 1);
-      await deleteLegacyReleases(moduleNames, releases);
+      await deleteReleases(releases);
 
-      expect(context.octokit.rest.repos.deleteRelease).toHaveBeenCalledTimes(moduleNames.length);
-      expect(startGroup).toHaveBeenCalledWith('Deleting legacy Terraform module releases');
+      expect(context.octokit.rest.repos.deleteRelease).toHaveBeenCalledTimes(1);
+      expect(startGroup).toHaveBeenCalledWith('Deleting releases');
       expect(vi.mocked(info).mock.calls).toEqual([
-        ['Found 1 legacy release to delete.'],
+        ['Deleting 1 release'],
         [
           JSON.stringify(
             releases.map((release) => release.title),
@@ -446,9 +580,6 @@ describe('releases', () => {
     });
 
     it('should provide helpful error for permission issues', async () => {
-      config.set({ deleteLegacyTags: true });
-      const moduleNames = mockGetAllReleasesResponse.map((release) => release.title);
-
       vi.mocked(context.octokit.rest.repos.deleteRelease).mockRejectedValueOnce(
         new RequestError('Permission Error', 403, {
           request: { method: 'DELETE', url, headers: {} },
@@ -456,9 +587,8 @@ describe('releases', () => {
         }),
       );
 
-      await expect(deleteLegacyReleases(moduleNames, mockGetAllReleasesResponse)).rejects.toThrow(
-        `Failed to delete release: v1.3.0 Permission Error.
-Ensure that the GitHub Actions workflow has the correct permissions to delete releases by ensuring that your workflow YAML file has the following block under "permissions":
+      await expect(deleteReleases(mockGetAllReleasesResponse)).rejects.toThrow(
+        `Failed to delete release: v1.3.0 - Permission Error. Ensure that the GitHub Actions workflow has the correct permissions to delete releases. Update your workflow YAML file with the following block under "permissions": 
 
 permissions:
   contents: write`,
@@ -467,9 +597,6 @@ permissions:
     });
 
     it('should handle non-permission errors', async () => {
-      config.set({ deleteLegacyTags: true });
-      const moduleNames = mockGetAllReleasesResponse.map((release) => release.title);
-
       vi.mocked(context.octokit.rest.repos.deleteRelease).mockRejectedValueOnce(
         new RequestError('Not Found', 404, {
           request: { method: 'DELETE', url, headers: {} },
@@ -477,7 +604,7 @@ permissions:
         }),
       );
 
-      await expect(deleteLegacyReleases(moduleNames, mockGetAllReleasesResponse)).rejects.toThrow(
+      await expect(deleteReleases(mockGetAllReleasesResponse)).rejects.toThrow(
         'Failed to delete release: [Status = 404] Not Found',
       );
       expect(endGroup).toHaveBeenCalled();

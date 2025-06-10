@@ -1,5 +1,6 @@
 import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
-import { extname, join, relative } from 'node:path';
+import { dirname, extname, isAbsolute, join, relative, resolve } from 'node:path';
+import { context } from '@/context';
 import { info } from '@actions/core';
 import { minimatch } from 'minimatch';
 
@@ -16,8 +17,9 @@ export function isTerraformDirectory(dirPath: string): boolean {
 /**
  * Checks if a module path should be ignored based on provided ignore patterns.
  *
- * This function evaluates whether a given module path matches any of the specified ignore patterns
- * using the minimatch library for glob pattern matching.
+ * This function evaluates whether a given relative module path matches any of the specified ignore patterns
+ * using the minimatch library for glob pattern matching. It is called after all Terraform module directories
+ * are found, to filter them using the patterns provided via the 'module-path-ignore' flag.
  *
  * @remarks
  * Important pattern matching behavior notes:
@@ -25,50 +27,149 @@ export function isTerraformDirectory(dirPath: string): boolean {
  * - To match both a directory and its contents, you must include both patterns:
  *   ["dir", "dir/**"]
  * - The function uses matchBase: false for precise path structure matching
+ * - The modulePath parameter must be a path relative to the workspace root directory
  *
  * @example
- * // Will return false (doesn't match the directory itself)
+ * // Will return { shouldIgnore: false }
  * shouldIgnoreModulePath('tf-modules/kms/examples/complete', ['tf-modules/kms/examples/complete/**']);
  *
  * @example
- * // Will return true (matches the exact path)
+ * // Will return { shouldIgnore: true, matchedPattern: 'tf-modules/kms/examples/complete' }
  * shouldIgnoreModulePath('tf-modules/kms/examples/complete', ['tf-modules/kms/examples/complete']);
  *
- * @param {string} modulePath - The path of the module to check.
+ * @param {string} relativeModulePath - The relative path of the module to check.
  * @param {string[]} ignorePatterns - Array of path patterns to ignore.
- * @returns {boolean} True if the module should be ignored, false otherwise.
+ * @returns {{ shouldIgnore: boolean, matchedPattern?: string }} Object containing whether to ignore and the matched pattern.
  */
-export function shouldIgnoreModulePath(modulePath: string, ignorePatterns: string[]): boolean {
+export function shouldIgnoreModulePath(
+  relativeModulePath: string,
+  ignorePatterns: string[],
+): {
+  /** Whether the module should be ignored */
+  shouldIgnore: boolean;
+  /** The pattern that matched (if any) */
+  matchedPattern?: string;
+} {
   if (!ignorePatterns || ignorePatterns.length === 0) {
-    return false;
+    return { shouldIgnore: false };
   }
 
-  return ignorePatterns.some((pattern: string) => minimatch(modulePath, pattern, { matchBase: false }));
+  for (const pattern of ignorePatterns) {
+    if (minimatch(relativeModulePath, pattern, { matchBase: false })) {
+      return { shouldIgnore: true, matchedPattern: pattern };
+    }
+  }
+
+  return { shouldIgnore: false };
 }
 
 /**
- * Checks if a file should be excluded from matching based on the defined exclude patterns
- * and relative paths from the base directory.
+ * Recursively finds Terraform module directories within a given workspace directory.
  *
- * @param {string} baseDirectory - The base directory to resolve relative paths against.
- * @param {string} filePath - The path of the file to check.
- * @param {string[]} excludePatterns - An array of patterns to match against for exclusion.
- * @returns {boolean} True if the file should be excluded, false otherwise.
+ * This function traverses the directory structure starting from the specified workspace directory
+ * and identifies directories that contain Terraform configurations. It skips '.terraform' directories
+ * and any paths that match the provided ignore patterns.
+ *
+ * @param workspaceDir - The root directory to start searching from
+ * @param modulePathIgnore - Optional array of patterns for module paths to ignore
+ * @returns An array of absolute paths to Terraform module directories
  */
-export function shouldExcludeFile(baseDirectory: string, filePath: string, excludePatterns: string[]): boolean {
-  const relativePath = relative(baseDirectory, filePath);
+export function findTerraformModuleDirectories(workspaceDir: string, modulePathIgnore: string[] = []): string[] {
+  const modulePaths: string[] = [];
 
-  // Expand patterns to include both directories and their contents, then remove duplicates
-  const expandedPatterns = Array.from(
-    new Set(
-      excludePatterns.flatMap((pattern) => [
-        pattern, // Original pattern
-        pattern.replace(/\/(?:\*\*)?$/, ''), // Match directories themselves, like `tests2/`
-      ]),
-    ),
-  );
+  const searchDirectory = (dir: string): void => {
+    const files = readdirSync(dir);
 
-  return expandedPatterns.some((pattern: string) => minimatch(relativePath, pattern, { matchBase: true }));
+    for (const file of files) {
+      // Skip .terraform directories entirely
+      if (file === '.terraform') {
+        continue;
+      }
+
+      const fullPath = join(dir, file);
+      const stat = statSync(fullPath);
+
+      // If this isn't a directory, skip it
+      if (!stat.isDirectory()) {
+        continue;
+      }
+
+      if (isTerraformDirectory(fullPath)) {
+        const relativeModulePath = relative(workspaceDir, fullPath);
+
+        // Check if this module path should be ignored
+        const ignore = shouldIgnoreModulePath(relativeModulePath, modulePathIgnore);
+        if (ignore.shouldIgnore) {
+          info(
+            `Skipping module in '${relativeModulePath}' due to module-path-ignore match: "${ignore.matchedPattern}"`,
+          );
+          continue;
+        }
+
+        modulePaths.push(fullPath);
+      }
+
+      // Recurse into subdirectories
+      searchDirectory(fullPath);
+    }
+  };
+
+  searchDirectory(workspaceDir);
+
+  return modulePaths;
+}
+
+/**
+ * Gets the relative path of the Terraform module directory associated with a specified file.
+ *
+ * Traverses upward from the file's directory to locate the nearest Terraform module directory.
+ * Returns the module's path relative to the current working directory.
+ *
+ * @param {string} filePath - The absolute or relative path of the file to analyze.
+ * @returns {string | null} Relative path to the associated Terraform module directory, or null
+ *                          if no directory is found.
+ */
+export function getRelativeTerraformModulePathFromFilePath(filePath: string): string | null {
+  const rootDir = resolve(context.workspaceDir);
+  const absoluteFilePath = isAbsolute(filePath) ? filePath : resolve(context.workspaceDir, filePath); // Handle relative/absolute
+  let directory = dirname(absoluteFilePath);
+
+  // Traverse upward until the current working directory (rootDir) is reached
+  while (directory !== rootDir && directory !== resolve(directory, '..')) {
+    if (isTerraformDirectory(directory)) {
+      return relative(rootDir, directory);
+    }
+
+    directory = resolve(directory, '..'); // Move up a directory
+  }
+
+  // Return null if no Terraform module directory is found
+  return null;
+}
+
+/**
+ * Checks if a file should be excluded from triggering a module version bump based on exclude patterns.
+ * Returns an object with match status and the matched pattern (if any).
+ *
+ * @example
+ * // Given a file 'tests/sub/test.tftest.hcl' and patterns ['*.md', '*.tftest.hcl', 'tests/**']:
+ * // shouldExcludeFile('tests/sub/test.tftest.hcl', ['*.md', '*.tftest.hcl', 'tests/**'])
+ * //   => { shouldExclude: true, matchedPattern: 'tests/**' }
+ *
+ * @param relativeFilePath - The file path to check, relative to the module directory (no leading slash)
+ * @param excludePatterns - Array of glob patterns (relative to the module directory)
+ * @returns { shouldExclude: boolean, matchedPattern?: string }
+ */
+export function shouldExcludeFile(
+  relativeFilePath: string,
+  excludePatterns: string[],
+): { shouldExclude: boolean; matchedPattern?: string } {
+  for (const pattern of excludePatterns) {
+    if (minimatch(relativeFilePath, pattern, { matchBase: true })) {
+      return { shouldExclude: true, matchedPattern: pattern };
+    }
+  }
+  return { shouldExclude: false };
 }
 
 /**
@@ -103,7 +204,7 @@ export function copyModuleContents(
       mkdirSync(newDir, { recursive: true });
       // Note: Important we pass the original base directory.
       copyModuleContents(filePath, newDir, excludePatterns, baseDir); // Recursion for directory contents
-    } else if (!shouldExcludeFile(baseDir, filePath, excludePatterns)) {
+    } else if (!shouldExcludeFile(relative(baseDir, filePath), excludePatterns).shouldExclude) {
       // Handle file copying
       copyFileSync(filePath, join(tmpDir, file));
     } else {
@@ -157,7 +258,7 @@ export function removeDirectoryContents(directory: string, exceptions: string[] 
     const itemPath = join(directory, item);
 
     // Skip removal for items listed in the exceptions array
-    if (!shouldExcludeFile(directory, itemPath, exceptions)) {
+    if (!shouldExcludeFile(relative(directory, itemPath), exceptions).shouldExclude) {
       rmSync(itemPath, { recursive: true, force: true });
     }
   }

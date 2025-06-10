@@ -5,7 +5,8 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { context } from '@/mocks/context';
 import { ensureTerraformDocsConfigDoesNotExist, generateTerraformDocs, installTerraformDocs } from '@/terraform-docs';
-import type { TerraformModule } from '@/types';
+import type { TerraformModule } from '@/terraform-module';
+import { createMockTerraformModule } from '@/tests/helpers/terraform-module';
 import { info } from '@actions/core';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import which from 'which';
@@ -311,16 +312,10 @@ describe('terraform-docs', async () => {
   });
 
   describe('generate terraform docs for terraform module', () => {
-    const mockModule: TerraformModule = {
-      moduleName: 'test-module',
-      directory: '/path/to/module',
-      tags: [],
-      releases: [],
-      latestTag: null,
-      latestTagVersion: null,
-    };
+    let mockModule: TerraformModule;
 
     beforeEach(() => {
+      mockModule = createMockTerraformModule({ directory: 'test-module' });
       fsExistsSyncMock.mockReturnValue(false);
       mockExecFilePromisified.mockReturnValue(
         Promise.resolve({
@@ -380,7 +375,7 @@ describe('terraform-docs', async () => {
       );
 
       await expect(generateTerraformDocs(mockModule)).rejects.toThrow(
-        `Terraform-docs generation failed for module: ${mockModule.moduleName}\nInvalid terraform directory`,
+        `Terraform-docs generation failed for module: ${mockModule.name}\nInvalid terraform directory`,
       );
     });
 
@@ -402,8 +397,8 @@ describe('terraform-docs', async () => {
     it('should call core.info with appropriate messages', async () => {
       await generateTerraformDocs(mockModule);
 
-      expect(info).toHaveBeenCalledWith(`Generating tf-docs for: ${mockModule.moduleName}`);
-      expect(info).toHaveBeenCalledWith(`Finished tf-docs for: ${mockModule.moduleName}`);
+      expect(info).toHaveBeenCalledWith(`Generating tf-docs for: ${mockModule.name}`);
+      expect(info).toHaveBeenCalledWith(`Finished tf-docs for: ${mockModule.name}`);
     });
   });
 });

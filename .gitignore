@@ -1,6 +1,9 @@
 # Dependency directory
 node_modules
 
+# Terraform
+.terraform
+
 # Rest pulled from https://github.com/github/gitignore/blob/master/Node.gitignore
 # Logs
 logs

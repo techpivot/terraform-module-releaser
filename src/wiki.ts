@@ -4,28 +4,27 @@ import { existsSync, mkdirSync } from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import { cpus } from 'node:os';
 import { join, resolve } from 'node:path';
-import { getModuleReleaseChangelog } from '@/changelog';
+import { getTerraformModuleFullReleaseChangelog } from '@/changelog';
 import { config } from '@/config';
 import { context } from '@/context';
 import { generateTerraformDocs } from '@/terraform-docs';
-import type { ExecSyncError, TerraformModule } from '@/types';
+import type { TerraformModule } from '@/terraform-module';
+import type { ExecSyncError, WikiStatusResult } from '@/types';
 import {
   BRANDING_WIKI,
   GITHUB_ACTIONS_BOT_EMAIL,
   GITHUB_ACTIONS_BOT_NAME,
   PROJECT_URL,
+  WIKI_FOOTER_FILENAME,
+  WIKI_HOME_FILENAME,
+  WIKI_SIDEBAR_FILENAME,
+  WIKI_STATUS,
   WIKI_TITLE_REPLACEMENTS,
 } from '@/utils/constants';
 import { removeDirectoryContents } from '@/utils/file';
 import { endGroup, info, startGroup } from '@actions/core';
 import pLimit from 'p-limit';
 import which from 'which';
-
-export enum WikiStatus {
-  SUCCESS = 'SUCCESS',
-  FAILURE = 'FAILURE',
-  DISABLED = 'DISABLED',
-}
 
 // Special subdirectory inside the primary repository where the wiki is checked out.
 const WIKI_SUBDIRECTORY_NAME = '.wiki';
@@ -45,11 +44,17 @@ const WIKI_SUBDIRECTORY_NAME = '.wiki';
  * has been manually enabled.
  *
  * @throws {Error} If the `git clone` command fails due to issues such as the wiki not existing.
+ * @throws {Error} If git is not found in PATH
+ * @throws {Error} If authentication configuration fails
  */
 export function checkoutWiki(): void {
   const wikiHtmlUrl = `${context.repoUrl}.wiki`;
   const wikiDirectory = resolve(context.workspaceDir, WIKI_SUBDIRECTORY_NAME);
-  const execWikiOpts: ExecSyncOptions = { cwd: wikiDirectory, stdio: 'inherit' };
+  const execWikiOpts: ExecSyncOptions = {
+    cwd: wikiDirectory,
+    //stdio: 'inherit',
+    stdio: ['inherit', 'inherit', 'pipe'], // stdin, stdout, stderr
+  };
 
   startGroup(`Checking out wiki repository [${wikiHtmlUrl}]`);
 
@@ -90,8 +95,8 @@ export function checkoutWiki(): void {
   try {
     execFileSync(gitPath, ['config', '--local', '--unset-all', extraHeaderKey], execWikiOpts);
   } catch (error) {
-    // Type guard to ensure we're handling the correct error type
-    // Only ignore specific status code if needed
+    // Git exits with status 5 if the config key doesn't exist to be unset.
+    // This is not a failure condition for us, so we ignore it.
     if (error instanceof Error && (error as unknown as ExecSyncError).status !== 5) {
       throw error;
     }
@@ -121,6 +126,34 @@ export function checkoutWiki(): void {
     info('Successfully checked out wiki repository');
   } finally {
     endGroup();
+  }
+}
+
+/**
+ * Checks the status of the wiki operation for a Terraform module release.
+ *
+ * This function will never throw an error; all errors are caught and returned as part of the result.
+ *
+ * @returns {WikiStatusResult} The result of the wiki status check, including error details if any failure occurs.
+ */
+export function getWikiStatus(): WikiStatusResult {
+  try {
+    if (config.disableWiki) {
+      return { status: WIKI_STATUS.DISABLED };
+    }
+
+    checkoutWiki();
+
+    return { status: WIKI_STATUS.SUCCESS };
+  } catch (err) {
+    // Since all errors in checkoutWiki() come from execFileSync, we can safely cast to ExecSyncError
+    const execError = err as ExecSyncError;
+
+    return {
+      status: WIKI_STATUS.FAILURE,
+      error: execError,
+      errorSummary: String(execError).trim(),
+    };
   }
 }
 
@@ -217,15 +250,15 @@ export function getWikiLink(moduleName: string, relative = true): string {
  * @example
  * ```typescript
  * // HTTPS format
- * formatModuleSource('https://github.com/owner/repo', false)
+ * getModuleSource('https://github.com/owner/repo', false)
  * // Returns: 'https://github.com/owner/repo.git'
  *
  * // SSH format
- * formatModuleSource('https://github.techpivot.com/owner/repo', true)
+ * getModuleSource('https://github.techpivot.com/owner/repo', true)
  * // Returns: 'ssh://git@github.techpivot.com/owner/repo.git'
  * ```
  */
-function formatModuleSource(repoUrl: string, useSSH: boolean): string {
+function getModuleSource(repoUrl: string, useSSH: boolean): string {
   if (useSSH) {
     const url = new URL(repoUrl);
     const hostname = url.hostname;
@@ -241,31 +274,42 @@ function formatModuleSource(repoUrl: string, useSSH: boolean): string {
 }
 
 /**
+ * Writes content to a wiki file in the workspace wiki subdirectory.
+ *
+ * This function creates or overwrites a file in the wiki subdirectory with the
+ * provided content and logs the generation of the file.
+ *
+ * @param {string} basename - The name of the file to create (including extension)
+ * @param {string} content - The content to write to the file
+ * @returns {Promise<string>} A promise that resolves to the full path of the created wiki file
+ * @throws {Error} Throws an error if the file cannot be written (e.g., permission issues, invalid path)
+ */
+async function writeWikiFile(basename: string, content: string): Promise<string> {
+  const wikiFile = join(context.workspaceDir, WIKI_SUBDIRECTORY_NAME, basename);
+  await fsp.writeFile(wikiFile, content, 'utf8');
+  info(`Generated: ${basename}`);
+  return wikiFile;
+}
+
+/**
  * Generates the wiki file associated with the specified Terraform module.
  * Ensures that the directory structure is created if it doesn't exist and handles overwriting
  * the existing wiki file.
  *
- * @param {string} moduleName - The name of the Terraform module.
- * @param {string} content - The markdown content to write to the wiki file.
+ * @param {TerraformModule} terraformModule - The Terraform module to generate the wiki file for.
  * @returns {Promise<string>} The path to the wiki file that was written.
  * @throws Will throw an error if the file cannot be written.
  */
-async function generateWikiModule(terraformModule: TerraformModule): Promise<string> {
-  const { moduleName, latestTag } = terraformModule;
-
-  const wikiSlugFile = `${getWikiSlug(moduleName)}.md`;
-  const wikiFile = join(context.workspaceDir, WIKI_SUBDIRECTORY_NAME, wikiSlugFile);
-
-  // Generate a module changelog
-  const changelog = getModuleReleaseChangelog(terraformModule);
+async function generateWikiTerraformModule(terraformModule: TerraformModule): Promise<string> {
+  const changelog = getTerraformModuleFullReleaseChangelog(terraformModule);
   const tfDocs = await generateTerraformDocs(terraformModule);
-  const moduleSource = formatModuleSource(context.repoUrl, config.useSSHSourceFormat);
-  const wikiContent = [
+  const moduleSource = getModuleSource(context.repoUrl, config.useSSHSourceFormat);
+  const content = [
     '# Usage\n',
     'To use this module in your Terraform, refer to the below module example:\n',
     '```hcl',
-    `module "${moduleName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()}" {`,
-    `  source = "git::${moduleSource}?ref=${latestTag}"`,
+    `module "${terraformModule.name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()}" {`,
+    `  source = "git::${moduleSource}?ref=${terraformModule.getLatestTag()}"`,
     '\n  # See inputs below for additional required parameters',
     '}',
     '```',
@@ -278,11 +322,8 @@ async function generateWikiModule(terraformModule: TerraformModule): Promise<str
   ].join('\n');
 
   // Write the markdown content to the wiki file, overwriting if it exists
-  await fsp.writeFile(wikiFile, wikiContent, 'utf8');
 
-  info(`Generated: ${wikiSlugFile}`);
-
-  return wikiFile;
+  return await writeWikiFile(`${getWikiSlug(terraformModule.name)}.md`, content);
 }
 
 /**
@@ -330,46 +371,37 @@ async function generateWikiModule(terraformModule: TerraformModule): Promise<str
  * ```
  */
 async function generateWikiSidebar(terraformModules: TerraformModule[]): Promise<string> {
-  const sidebarFile = join(context.workspaceDir, WIKI_SUBDIRECTORY_NAME, '_Sidebar.md');
   const { owner, repo } = context.repo;
   const repoBaseUrl = `/${owner}/${repo}`;
   let moduleSidebarContent = '';
 
-  for (const module of terraformModules) {
-    const { moduleName } = module;
-
+  for (const terraformModule of terraformModules) {
     // Get the baselink which is used throughout the sidebar
-    const baselink = getWikiLink(moduleName, true);
+    const baselink = getWikiLink(terraformModule.name, true);
 
     // Generate module changelog string by limiting to wikiSidebarChangelogMax
-    const changelogContent = getModuleReleaseChangelog(module);
+    const changelogContent = getTerraformModuleFullReleaseChangelog(terraformModule);
 
     // Regex to capture all headings starting with '## ' on a single line
     // Note: Use ([^\n]+) Instead of (.+):
     // The pattern [^\n]+ matches one or more characters that are not a newline. This restricts matches
     // to a single line and reduces backtracking possibilities since it won't consume any newlines.
+    // Note: The 'g' flag is required for matchAll
     const headingRegex = /^(?:#{2,3})\s+([^\n]+)/gm; // Matches '##' or '###' headings
 
-    // Initialize changelog entries
     const changelogEntries = [];
-    let headingMatch = null;
-    do {
-      // If a match is found, process it
-      if (headingMatch) {
-        const heading = headingMatch[1].trim();
 
-        // Convert heading into a valid ID string (keep only [a-zA-Z0-9-_]) But we need spaces to go to a '-'
-        const idString = heading.replace(/ +/g, '-').replace(/[^a-zA-Z0-9-_]/g, '');
+    for (const headingMatch of changelogContent.matchAll(headingRegex)) {
+      const heading = headingMatch[1].trim();
 
-        // Append the entry to changelogEntries
-        changelogEntries.push(
-          `            <li><a href="${baselink}#${idString}">${heading.replace(/`/g, '')}</a></li>`,
-        );
-      }
+      // Convert heading into a valid ID string (keep only [a-zA-Z0-9-_]) But we need spaces to go to a '-'
+      const idString = heading.replace(/ +/g, '-').replace(/[^a-zA-Z0-9-_]/g, '');
 
-      // Execute the regex again for the next match
-      headingMatch = headingRegex.exec(changelogContent);
-    } while (headingMatch);
+      // Append the entry to changelogEntries
+      changelogEntries.push(
+        `               <li><a href="${baselink}#${idString}">${heading.replace(/`/g, '')}</a></li>`,
+      );
+    }
 
     // Limit to the maximum number of changelog entries defined in config
     const limitedChangelogEntries = changelogEntries.slice(0, config.wikiSidebarChangelogMax).join('\n');
@@ -383,7 +415,7 @@ async function generateWikiSidebar(terraformModules: TerraformModule[]): Promise
     moduleSidebarContent += [
       '\n  <li>',
       '    <details>',
-      `      <summary><a href="${baselink}"><b>${moduleName}</b></a></summary>`,
+      `      <summary><a href="${baselink}"><b>${terraformModule.name}</b></a></summary>`,
       '      <ul>',
       `        <li><a href="${baselink}#usage">Usage</a></li>`,
       `        <li><a href="${baselink}#attributes">Attributes</a></li>`,
@@ -396,11 +428,7 @@ async function generateWikiSidebar(terraformModules: TerraformModule[]): Promise
 
   const content = `[Home](${repoBaseUrl}/wiki/Home)\n\n## Terraform Modules\n\n<ul>${moduleSidebarContent}\n</ul>`;
 
-  await fsp.writeFile(sidebarFile, content, 'utf8');
-
-  info('Generated: _Sidebar.md');
-
-  return sidebarFile;
+  return await writeWikiFile(WIKI_SIDEBAR_FILENAME, content);
 }
 
 /**
@@ -419,10 +447,7 @@ async function generateWikiFooter(): Promise<string | undefined> {
     return;
   }
 
-  const footerFile = join(context.workspaceDir, WIKI_SUBDIRECTORY_NAME, '_Footer.md');
-  await fsp.writeFile(footerFile, BRANDING_WIKI, 'utf8');
-  info('Generated: _Footer.md');
-  return footerFile;
+  return await writeWikiFile(WIKI_FOOTER_FILENAME, BRANDING_WIKI);
 }
 
 /**
@@ -432,14 +457,12 @@ async function generateWikiFooter(): Promise<string | undefined> {
  * providing an overview of their functionality and the latest versions. It includes sections for current
  * modules, usage instructions, and contribution guidelines.
  *
- * @param {TerraformModule[]} terraformModules - An array of TerraformModule objects containing the
+ * @param {TerraformModule[]} terraformModules - An array of TerraformModule classes containing the
  *                                                names and latest version tags of the modules.
  * @returns {Promise<string>} A promise that resolves to the path of the generated Home.md file.
  * @throws {Error} Throws an error if the file writing operation fails.
  */
 async function generateWikiHome(terraformModules: TerraformModule[]): Promise<string> {
-  const homeFile = join(context.workspaceDir, WIKI_SUBDIRECTORY_NAME, 'Home.md');
-
   const content = [
     '# Terraform Modules Home',
     '\nWelcome to the Terraform Modules Wiki! This page serves as an index for all the available Terraform modules,',
@@ -449,8 +472,8 @@ async function generateWikiHome(terraformModules: TerraformModule[]): Promise<st
     '| -- | -- |',
     terraformModules
       .map(
-        ({ moduleName, latestTagVersion }) =>
-          `| [${moduleName}](${getWikiLink(moduleName, true)}) | ${latestTagVersion} |`,
+        (terraformModule) =>
+          `| [${terraformModule.name}](${getWikiLink(terraformModule.name, true)}) | ${terraformModule.getLatestTagVersion()} |`,
       )
       .join('\n'),
     '\n## How to Use',
@@ -464,10 +487,7 @@ async function generateWikiHome(terraformModules: TerraformModule[]): Promise<st
     'For the latest updates, please refer to the individual module documentation links above.*',
   ].join('\n');
 
-  await fsp.writeFile(homeFile, content, 'utf8');
-  info('Generated: Home.md');
-
-  return homeFile;
+  return await writeWikiFile(WIKI_HOME_FILENAME, content);
 }
 
 /**
@@ -481,11 +501,10 @@ async function generateWikiHome(terraformModules: TerraformModule[]): Promise<st
  * Once all wiki files are updated, it commits and pushes the changes to the repository.
  *
  * @param {TerraformModule[]} terraformModules - A list of Terraform modules to update in the wiki.
- *
  * @returns {Promise<string[]>} A promise that resolves to a list of file paths of the updated wiki files.
  */
 export async function generateWikiFiles(terraformModules: TerraformModule[]): Promise<string[]> {
-  startGroup('Generating wiki ...');
+  startGroup('Generating wiki files...');
 
   // Clears the contents of the Wiki directory to ensure no stale content remains,
   // as the Wiki is fully regenerated during each run.
@@ -501,6 +520,9 @@ export async function generateWikiFiles(terraformModules: TerraformModule[]): Pr
   info('Removing existing wiki files...');
   removeDirectoryContents(join(context.workspaceDir, WIKI_SUBDIRECTORY_NAME), ['.git']);
 
+  // Set parallelism to slightly more than the number of CPU cores to ensure
+  // CPU-bound tasks (e.g., regex) and I/O-bound tasks (file writing)
+  // are handled efficiently, keeping the pipeline saturated.
   const parallelism = cpus().length + 2;
 
   info(`Using parallelism: ${parallelism}`);
@@ -509,7 +531,7 @@ export async function generateWikiFiles(terraformModules: TerraformModule[]): Pr
   const updatedFiles: string[] = [];
   const tasks = terraformModules.map((module) => {
     return limit(async () => {
-      updatedFiles.push(await generateWikiModule(module));
+      updatedFiles.push(await generateWikiTerraformModule(module));
     });
   });
   await Promise.all(tasks);
@@ -522,7 +544,7 @@ export async function generateWikiFiles(terraformModules: TerraformModule[]): Pr
   }
 
   info('Wiki files generated:');
-  console.log(updatedFiles);
+  info(JSON.stringify(updatedFiles, null, 2));
   endGroup();
 
   return updatedFiles;
@@ -531,8 +553,10 @@ export async function generateWikiFiles(terraformModules: TerraformModule[]): Pr
 /**
  * Commits and pushes changes to the wiki repository.
  *
- * This function checks for any changes in the wiki directory, and if there are changes,
- * it commits and pushes them using the provided commit message.
+ * This function checks for any changes in the wiki directory. If changes are found,
+ * it configures git, commits them with a message derived from the pull request, and
+ * pushes them to the remote wiki repository. If no changes are detected, it logs a
+ * message and exits gracefully without creating a commit.
  *
  * @returns {void}
  */
