@@ -129,7 +129,9 @@ export function parseTerraformModules(
   terraformModules.sort((a, b) => a.name.localeCompare(b.name));
 
   info(`Successfully parsed and instantiated ${terraformModules.length} Terraform modules:`);
-  terraformModules.map((terraformModule) => info(terraformModule.toString()));
+  for (const terraformModule of terraformModules) {
+    info(terraformModule.toString());
+  }
 
   console.timeEnd('Elapsed time parsing terraform modules');
   endGroup();
