@@ -15,10 +15,12 @@ import {
   GITHUB_ACTIONS_BOT_EMAIL,
   GITHUB_ACTIONS_BOT_NAME,
   PROJECT_URL,
+  WIKI_FOOTER_FILENAME,
+  WIKI_HOME_FILENAME,
+  WIKI_SIDEBAR_FILENAME,
   WIKI_STATUS,
   WIKI_TITLE_REPLACEMENTS,
 } from '@/utils/constants';
-import { WIKI_FOOTER_FILENAME, WIKI_HOME_FILENAME, WIKI_SIDEBAR_FILENAME } from '@/utils/constants';
 import { removeDirectoryContents } from '@/utils/file';
 import { endGroup, info, startGroup } from '@actions/core';
 import pLimit from 'p-limit';
