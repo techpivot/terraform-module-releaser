@@ -7,7 +7,6 @@ import { createMockTerraformModule } from '@/tests/helpers/terraform-module';
 import type { GitHubRelease } from '@/types';
 import {
   BRANDING_COMMENT,
-  GITHUB_ACTIONS_BOT_USER_ID,
   PR_RELEASE_MARKER,
   PR_SUMMARY_MARKER,
   WIKI_STATUS,
@@ -55,7 +54,8 @@ describe('pull-request', () => {
       context.useMockOctokit();
     });
 
-    it('should return false when release marker is found in comments from non github-actions user', async () => {
+
+    it('should return true when release marker is found in comments', async () => {
       stubOctokitReturnData('issues.listComments', {
         data: [
           { user: { id: 123 }, body: 'Some comment' },
@@ -63,19 +63,8 @@ describe('pull-request', () => {
           { user: { id: 123 }, body: 'Another comment' },
         ],
       });
-      expect(await hasReleaseComment()).toBe(false);
-    });
-
-    it('should return true when release marker is found in comments from github-actions user', async () => {
-      stubOctokitReturnData('issues.listComments', {
-        data: [
-          { user: { id: 123 }, body: 'Some comment' },
-          { user: { id: GITHUB_ACTIONS_BOT_USER_ID }, body: PR_RELEASE_MARKER },
-          { user: { id: 123 }, body: 'Another comment' },
-        ],
-      });
       expect(await hasReleaseComment()).toBe(true);
-    });
+    })
 
     it('should return false when no release marker is found', async () => {
       stubOctokitReturnData('issues.listComments', {

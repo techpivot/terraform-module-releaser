@@ -7,8 +7,9 @@ import { config } from '@/config';
 import { context } from '@/context';
 import { TerraformModule } from '@/terraform-module';
 import type { GitHubRelease } from '@/types';
-import { GITHUB_ACTIONS_BOT_EMAIL, GITHUB_ACTIONS_BOT_NAME } from '@/utils/constants';
+import { GITHUB_ACTIONS_BOT_NAME } from '@/utils/constants';
 import { copyModuleContents } from '@/utils/file';
+import { getGitHubActionsBotEmail } from '@/utils/github';
 import { debug, endGroup, info, startGroup } from '@actions/core';
 import type { RestEndpointMethodTypes } from '@octokit/plugin-rest-endpoint-methods';
 import { RequestError } from '@octokit/request-error';
@@ -139,13 +140,14 @@ export async function createTaggedReleases(terraformModules: TerraformModule[]):
       // Git operations: commit the changes and tag the release
       const commitMessage = `${module.getReleaseTag()}\n\n${prTitle}\n\n${prBody}`.trim();
       const gitPath = await which('git');
+      const githubActionsBotEmail = await getGitHubActionsBotEmail();
 
       // Execute git commands in temp directory without inheriting stdio to avoid output pollution
       const gitOpts: ExecSyncOptions = { cwd: tmpDir };
 
       for (const cmd of [
         ['config', '--local', 'user.name', GITHUB_ACTIONS_BOT_NAME],
-        ['config', '--local', 'user.email', GITHUB_ACTIONS_BOT_EMAIL],
+        ['config', '--local', 'user.email', githubActionsBotEmail],
         ['add', '.'],
         ['commit', '-m', commitMessage.trim()],
         ['tag', releaseTag],

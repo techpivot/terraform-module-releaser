@@ -78,7 +78,7 @@ async function handlePullRequestMergedEvent(
     ensureTerraformDocsConfigDoesNotExist();
     checkoutWiki();
     await generateWikiFiles(terraformModules);
-    commitAndPushWikiChanges();
+    await commitAndPushWikiChanges();
   }
 }
 
