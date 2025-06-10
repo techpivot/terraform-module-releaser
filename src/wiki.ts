@@ -12,7 +12,6 @@ import type { TerraformModule } from '@/terraform-module';
 import type { ExecSyncError, WikiStatusResult } from '@/types';
 import {
   BRANDING_WIKI,
-  GITHUB_ACTIONS_BOT_EMAIL,
   GITHUB_ACTIONS_BOT_NAME,
   PROJECT_URL,
   WIKI_FOOTER_FILENAME,
@@ -22,6 +21,7 @@ import {
   WIKI_TITLE_REPLACEMENTS,
 } from '@/utils/constants';
 import { removeDirectoryContents } from '@/utils/file';
+import { getGitHubActionsBotEmail } from '@/utils/github';
 import { endGroup, info, startGroup } from '@actions/core';
 import pLimit from 'p-limit';
 import which from 'which';
@@ -558,9 +558,9 @@ export async function generateWikiFiles(terraformModules: TerraformModule[]): Pr
  * pushes them to the remote wiki repository. If no changes are detected, it logs a
  * message and exits gracefully without creating a commit.
  *
- * @returns {void}
+ * @returns {Promise<void>}
  */
-export function commitAndPushWikiChanges(): void {
+export async function commitAndPushWikiChanges(): Promise<void> {
   startGroup('Committing and pushing changes to wiki');
 
   try {
@@ -583,9 +583,11 @@ export function commitAndPushWikiChanges(): void {
 
     if (status !== null && status.toString().trim() !== '') {
       // There are changes, commit and push
+      const githubActionsBotEmail = await getGitHubActionsBotEmail();
+
       for (const cmd of [
         ['config', '--local', 'user.name', GITHUB_ACTIONS_BOT_NAME],
-        ['config', '--local', 'user.email', GITHUB_ACTIONS_BOT_EMAIL],
+        ['config', '--local', 'user.email', githubActionsBotEmail],
         ['add', '.'],
         ['commit', '-m', commitMessage.trim()],
         ['push', 'origin'],

@@ -1,8 +1,8 @@
 import {
   BRANDING_COMMENT,
   BRANDING_WIKI,
-  GITHUB_ACTIONS_BOT_EMAIL,
   GITHUB_ACTIONS_BOT_NAME,
+  GITHUB_ACTIONS_BOT_USERNAME,
   PROJECT_URL,
   PR_RELEASE_MARKER,
   PR_SUMMARY_MARKER,
@@ -10,13 +10,13 @@ import {
 } from '@/utils/constants';
 import { describe, expect, it } from 'vitest';
 
-describe('constants', () => {
+describe('utils/constants', () => {
   it('should have the correct GitHub Actions bot name', () => {
     expect(GITHUB_ACTIONS_BOT_NAME).toBe('GitHub Actions');
   });
 
-  it('should have the correct GitHub Actions bot email', () => {
-    expect(GITHUB_ACTIONS_BOT_EMAIL).toBe('41898282+github-actions[bot]@users.noreply.github.com');
+  it('should have the correct GitHub Actions bot username', () => {
+    expect(GITHUB_ACTIONS_BOT_USERNAME).toBe('github-actions[bot]');
   });
 
   it('should have the correct PR summary marker', () => {

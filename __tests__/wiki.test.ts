@@ -205,6 +205,7 @@ describe('wiki', async () => {
 
     afterAll(() => {
       vi.mocked(execFileSync).mockImplementation(vi.fn());
+      vi.resetAllMocks(); // Unclears the console.log
     });
 
     it('should generate all required wiki files', async () => {
@@ -259,11 +260,16 @@ describe('wiki', async () => {
   });
 
   describe('commitAndPushWikiChanges()', () => {
-    it('should commit and push changes when changes are detected', () => {
+    beforeAll(() => {
+      // Ensure we're using the mock octokit, not real one
+      context.useMockOctokit();
+    });
+
+    it('should commit and push changes when changes are detected', async () => {
       // Mock git status to indicate changes exist
       vi.mocked(execFileSync).mockImplementationOnce(() => Buffer.from('M  _Sidebar.md\n'));
 
-      commitAndPushWikiChanges();
+      await commitAndPushWikiChanges();
 
       // Verify git commands were called in correct order
       const gitCalls = vi.mocked(execFileSync).mock.calls.map((call) => call?.[1]?.join(' ') || '');
@@ -284,11 +290,11 @@ describe('wiki', async () => {
       expect(endGroup).toHaveBeenCalled();
     });
 
-    it('should skip commit and push when no changes are detected', () => {
+    it('should skip commit and push when no changes are detected', async () => {
       // Mock git status to indicate no changes
       vi.mocked(execFileSync).mockImplementationOnce(() => Buffer.from(''));
 
-      commitAndPushWikiChanges();
+      await commitAndPushWikiChanges();
 
       // Verify only status check was called
       const gitCalls = vi.mocked(execFileSync).mock.calls.map((call) => call?.[1]?.join(' ') || '');
@@ -301,7 +307,7 @@ describe('wiki', async () => {
       expect(endGroup).toHaveBeenCalled();
     });
 
-    it('should handle git command failures gracefully', () => {
+    it('should handle git command failures gracefully', async () => {
       // Mock git status to indicate changes exist but make add command fail
       vi.mocked(execFileSync)
         .mockImplementationOnce(() => Buffer.from('M  _Sidebar.md\n'))
@@ -309,7 +315,7 @@ describe('wiki', async () => {
           throw new Error('Git command failed');
         });
 
-      expect(() => commitAndPushWikiChanges()).toThrow('Git command failed');
+      await expect(commitAndPushWikiChanges()).rejects.toThrow('Git command failed');
 
       expect(startGroup).toHaveBeenCalledWith('Committing and pushing changes to wiki');
       expect(info).toHaveBeenCalledWith('Checking for changes in wiki repository');
@@ -317,7 +323,7 @@ describe('wiki', async () => {
       expect(endGroup).toHaveBeenCalled();
     });
 
-    it('should not use complete PR information in commit message', () => {
+    it('should not use complete PR information in commit message', async () => {
       // Set up PR context with multiline body
       context.set({
         prBody: 'Line 1\nLine 2\nLine 3',
@@ -328,7 +334,7 @@ describe('wiki', async () => {
       // Mock git status to indicate changes exist
       vi.mocked(execFileSync).mockImplementationOnce(() => Buffer.from('M  _Sidebar.md\n'));
 
-      commitAndPushWikiChanges();
+      await commitAndPushWikiChanges();
 
       // Verify commit message format
       const commitCall = vi.mocked(execFileSync).mock.calls.find((call) => call?.[1]?.includes('commit'));

@@ -3,14 +3,7 @@ import { config } from '@/config';
 import { context } from '@/context';
 import { TerraformModule } from '@/terraform-module';
 import type { CommitDetails, GitHubRelease, WikiStatusResult } from '@/types';
-import {
-  BRANDING_COMMENT,
-  GITHUB_ACTIONS_BOT_USER_ID,
-  PROJECT_URL,
-  PR_RELEASE_MARKER,
-  PR_SUMMARY_MARKER,
-  WIKI_STATUS,
-} from '@/utils/constants';
+import { BRANDING_COMMENT, PROJECT_URL, PR_RELEASE_MARKER, PR_SUMMARY_MARKER, WIKI_STATUS } from '@/utils/constants';
 
 import { getWikiLink } from '@/wiki';
 import { debug, endGroup, info, startGroup } from '@actions/core';
@@ -38,7 +31,7 @@ export async function hasReleaseComment(): Promise<boolean> {
 
     for await (const { data } of iterator) {
       for (const comment of data) {
-        if (comment.user?.id === GITHUB_ACTIONS_BOT_USER_ID && comment.body?.includes(PR_RELEASE_MARKER)) {
+        if (comment.body?.includes(PR_RELEASE_MARKER)) {
           return true;
         }
       }

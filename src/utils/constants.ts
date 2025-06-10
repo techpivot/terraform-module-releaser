@@ -46,9 +46,8 @@ export const WIKI_HOME_FILENAME = 'Home.md';
 export const WIKI_SIDEBAR_FILENAME = '_Sidebar.md';
 export const WIKI_FOOTER_FILENAME = '_Footer.md';
 
-export const GITHUB_ACTIONS_BOT_USER_ID = 41898282;
 export const GITHUB_ACTIONS_BOT_NAME = 'GitHub Actions';
-export const GITHUB_ACTIONS_BOT_EMAIL = '41898282+github-actions[bot]@users.noreply.github.com';
+export const GITHUB_ACTIONS_BOT_USERNAME = 'github-actions[bot]';
 
 export const PR_SUMMARY_MARKER = '<!-- techpivot/terraform-module-releaser — pr-summary-marker -->';
 export const PR_RELEASE_MARKER = '<!-- techpivot/terraform-module-releaser — release-marker -->';
