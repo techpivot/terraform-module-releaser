@@ -27,7 +27,7 @@ export class TerraformModule {
   /**
    * Map of commits that affect this module, keyed by SHA to prevent duplicates.
    */
-  private _commits: Map<string, CommitDetails> = new Map();
+  private readonly _commits: Map<string, CommitDetails> = new Map();
 
   /**
    * Private list of tags relevant to this module.
