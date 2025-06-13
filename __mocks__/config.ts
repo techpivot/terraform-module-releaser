@@ -1,4 +1,7 @@
+import { ACTION_INPUTS, createConfigFromInputs } from '@/utils/action-metadata';
 import type { Config } from '@/types';
+import type { ActionInputMetadata } from '@/types';
+import { setupTestInputs } from '@/tests/helpers/inputs';
 
 /**
  * Configuration interface with added utility methods
@@ -9,44 +12,24 @@ interface ConfigWithMethods extends Config {
 }
 
 /**
- * Default configuration object.
+ * Load default configuration from action.yml.
  */
-const defaultConfig: Config = {
-  majorKeywords: ['BREAKING CHANGE', '!', 'MAJOR CHANGE'],
-  minorKeywords: ['feat', 'feature'],
-  patchKeywords: ['fix', 'chore'],
-  defaultFirstTag: 'v1.0.0',
-  terraformDocsVersion: 'v0.20.0',
-  deleteLegacyTags: false,
-  disableWiki: false,
-  wikiSidebarChangelogMax: 10,
-  disableBranding: false,
-  modulePathIgnore: ['tf-modules/kms/examples/complete'],
-  moduleChangeExcludePatterns: ['.gitignore', '*.md'],
-  moduleAssetExcludePatterns: ['tests/**', 'examples/**'],
-  githubToken: 'ghp_test_token_2c6912E7710c838347Ae178B4',
-  useSSHSourceFormat: false,
+const createDefaultConfig = (): Config => {
+  setupTestInputs();
+  return createConfigFromInputs();
 };
 
 /**
- * Valid configuration keys.
+ * Default configuration object loaded from action.yml.
  */
-const validConfigKeys = [
-  'majorKeywords',
-  'minorKeywords',
-  'patchKeywords',
-  'defaultFirstTag',
-  'terraformDocsVersion',
-  'deleteLegacyTags',
-  'disableWiki',
-  'wikiSidebarChangelogMax',
-  'disableBranding',
-  'modulePathIgnore',
-  'moduleChangeExcludePatterns',
-  'moduleAssetExcludePatterns',
-  'githubToken',
-  'useSSHSourceFormat',
-] as const;
+const defaultConfig: Config = createDefaultConfig();
+
+/**
+ * Valid configuration keys derived from ACTION_INPUTS.
+ */
+const validConfigKeys = (Object.values(ACTION_INPUTS) as ActionInputMetadata[]).map(
+  (metadata) => metadata.configKey,
+) as Array<keyof Config>;
 
 type ValidConfigKey = (typeof validConfigKeys)[number];
 
