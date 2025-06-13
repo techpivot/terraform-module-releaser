@@ -1,3 +1,4 @@
+import { setupTestInputs } from '@/tests/helpers/inputs';
 import { afterEach, beforeEach, vi } from 'vitest';
 
 // Mocked node modules (./__mocks__/*)
@@ -20,10 +21,13 @@ const defaultEnvironmentVariables = {
 };
 
 beforeEach(() => {
-  // Initialize environment
+  // Initialize GitHub mock pull request environment
   for (const [key, value] of Object.entries(defaultEnvironmentVariables)) {
     vi.stubEnv(key, value);
   }
+
+  // Set up action input defaults for testing
+  setupTestInputs();
 
   // Clear all mocked functions usage data and state
   vi.clearAllMocks();
