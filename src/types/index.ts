@@ -1,3 +1,6 @@
+// Action metadata types
+export * from './action-metadata.types';
+
 // Common types
 export * from './common.types';
 
