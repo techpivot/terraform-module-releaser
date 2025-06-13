@@ -1,5 +1,5 @@
+import type { ExecSyncError } from '@/types/node-child-process.types';
 import type { WIKI_STATUS } from '@/utils/constants';
-import type { ExecSyncError } from './node-child-process.types';
 
 /**
  * Represents the status of wiki operations.

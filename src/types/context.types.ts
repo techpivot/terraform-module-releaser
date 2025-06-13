@@ -1,4 +1,4 @@
-import type { OctokitRestApi, Repo } from './github.types';
+import type { OctokitRestApi, Repo } from '@/types/github.types';
 
 /**
  * Context and runtime related types
