@@ -68,6 +68,13 @@ export interface Config {
   githubToken: string;
 
   /**
+   * A list of module paths to completely ignore when processing. Any module whose path matches
+   * one of these patterns will not be processed for versioning, release, or documentation.
+   * Paths are relative to the workspace directory.
+   */
+  modulePathIgnore: string[];
+
+  /**
    * A comma-separated list of file patterns to exclude from triggering version changes in Terraform modules.
    * These patterns follow glob syntax (e.g., ".gitignore,*.md") and are relative to each Terraform module directory within
    * the repository, rather than the workspace root. Patterns are used for filtering files within module directories, allowing
@@ -97,15 +104,21 @@ export interface Config {
   useSSHSourceFormat: boolean;
 
   /**
-   * A list of module paths to completely ignore when processing. Any module whose path matches
-   * one of these patterns will not be processed for versioning, release, or documentation.
-   * Paths are relative to the workspace directory.
+   * The character used to separate the module name from the version in tags.
+   * Must be a single character and one of: -, _, /, .
+   *
+   * Examples:
+   * - "/" (default): module/aws-s3-bucket/v1.0.0
+   * - "-": module-aws-s3-bucket-v1.0.0
+   * - "_": module_aws-s3-bucket_v1.0.0
+   * - ".": module.aws-s3-bucket.v1.0.0
    */
-  modulePathIgnore: string[];
+  tagDirectorySeparator: string;
 
   /**
-   * A raw, multi-line string to override the default 'Usage' section in the generated wiki.
-   * If not provided, a default usage block will be generated.
+   * Whether to include the "v" prefix in version tags.
+   * When true (default), tags will be formatted as: module/v1.2.3
+   * When false, tags will be formatted as: module/1.2.3
    */
-  wikiUsageTemplate?: string;
+  useVersionPrefix: boolean;
 }
