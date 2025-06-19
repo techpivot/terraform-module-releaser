@@ -26,7 +26,8 @@ export interface Config {
 
   /**
    * Default first tag for initializing repositories without existing tags.
-   * This serves as the fallback tag when no tags are found in the repository.
+   * This serves as the fallback tag when no tags are found in the repository. Note this may
+   * be in the format of `v#.#.#` or `#.#.#` (e.g., `v1.0.0` or `1.0.0`).
    */
   defaultFirstTag: string;
 

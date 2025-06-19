@@ -9,6 +9,7 @@ import {
   setupTestInputs,
   stringInputs,
 } from '@/tests/helpers/inputs';
+import { VALID_TAG_DIRECTORY_SEPARATORS } from '@/utils/constants';
 import { endGroup, getBooleanInput, getInput, info, startGroup } from '@actions/core';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -191,22 +192,32 @@ describe('config', () => {
 
     it('should throw error for invalid tag directory separator length', () => {
       setupTestInputs({ 'tag-directory-separator': 'ab' });
-      expect(() => getConfig()).toThrow(
-        new TypeError('Tag directory separator must be exactly one character'),
-      );
+      expect(() => getConfig()).toThrow(new TypeError('Tag directory separator must be exactly one character'));
     });
 
     it('should throw error for invalid tag directory separator character', () => {
       setupTestInputs({ 'tag-directory-separator': '@' });
       expect(() => getConfig()).toThrow(
-        new TypeError("Tag directory separator must be one of: -, _, /, .. Got: '@'"),
+        new TypeError(`Tag directory separator must be one of: ${VALID_TAG_DIRECTORY_SEPARATORS.join(', ')}. Got: '@'`),
       );
+    });
+
+    it('should allow valid tag directory separators', () => {
+      for (const separator of VALID_TAG_DIRECTORY_SEPARATORS) {
+        clearConfigForTesting();
+        vi.unstubAllEnvs();
+        setupTestInputs({ 'tag-directory-separator': separator });
+        const config = getConfig();
+        expect(config.tagDirectorySeparator).toBe(separator);
+      }
     });
 
     it('should throw error for invalid default first tag format', () => {
       setupTestInputs({ 'default-first-tag': 'invalid-tag' });
       expect(() => getConfig()).toThrow(
-        new TypeError("Default first tag must be in format v#.#.# or #.#.# (e.g., v1.0.0 or 1.0.0). Got: 'invalid-tag'"),
+        new TypeError(
+          "Default first tag must be in format v#.#.# or #.#.# (e.g., v1.0.0 or 1.0.0). Got: 'invalid-tag'",
+        ),
       );
 
       clearConfigForTesting();
@@ -229,7 +240,7 @@ describe('config', () => {
     it('should initialize with valid default inputs', () => {
       const config = getConfig();
 
-      expect(config.majorKeywords).toEqual(['major change', 'breaking change', '!']);
+      expect(config.majorKeywords).toEqual(['major change', 'breaking change']);
       expect(config.minorKeywords).toEqual(['feat', 'feature']);
       expect(config.patchKeywords).toEqual(['fix', 'chore', 'docs']);
       expect(config.defaultFirstTag).toBe('v1.0.0');
@@ -250,7 +261,7 @@ describe('config', () => {
       expect(startGroup).toHaveBeenCalledTimes(1);
       expect(endGroup).toHaveBeenCalledTimes(1);
       expect(vi.mocked(info).mock.calls).toEqual([
-        ['Major Keywords: major change, breaking change, !'],
+        ['Major Keywords: major change, breaking change'],
         ['Minor Keywords: feat, feature'],
         ['Patch Keywords: fix, chore, docs'],
         ['Default First Tag: v1.0.0'],

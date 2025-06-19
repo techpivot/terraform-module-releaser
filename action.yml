@@ -122,6 +122,14 @@ inputs:
       specific requirements.
     required: true
     default: ${{ github.token }}
+  tag-directory-separator:
+    description: The separator character to use between module directory parts in the git tag.
+    required: true
+    default: /
+  use-version-prefix:
+    description: Whether to include the 'v' prefix on version tags (e.g., v1.2.3).
+    required: true
+    default: "true"
 
 outputs:
   changed-module-names:

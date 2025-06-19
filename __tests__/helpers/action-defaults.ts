@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { ACTION_INPUTS } from '@/utils/action-metadata';
+import { ACTION_INPUTS } from '@/utils/metadata';
 import * as yaml from 'js-yaml';
 
 /**

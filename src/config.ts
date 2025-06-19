@@ -1,6 +1,6 @@
 import type { Config } from '@/types';
-import { createConfigFromInputs } from '@/utils/action-metadata';
-import { VERSION_TAG_REGEX } from '@/utils/constants';
+import { VALID_TAG_DIRECTORY_SEPARATORS, VERSION_TAG_REGEX } from '@/utils/constants';
+import { createConfigFromInputs } from '@/utils/metadata';
 import { endGroup, info, startGroup } from '@actions/core';
 
 // Keep configInstance private to this module
@@ -56,13 +56,14 @@ function initializeConfig(): Config {
     }
 
     // Validate tag directory separator
-    const validSeparators = ['-', '_', '/', '.'];
     if (configInstance.tagDirectorySeparator.length !== 1) {
       throw new TypeError('Tag directory separator must be exactly one character');
     }
-    if (!validSeparators.includes(configInstance.tagDirectorySeparator)) {
+    if (!VALID_TAG_DIRECTORY_SEPARATORS.includes(configInstance.tagDirectorySeparator)) {
       throw new TypeError(
-        `Tag directory separator must be one of: ${validSeparators.join(', ')}. Got: '${configInstance.tagDirectorySeparator}'`,
+        `Tag directory separator must be one of: ${VALID_TAG_DIRECTORY_SEPARATORS.join(', ')}. Got: '${
+          configInstance.tagDirectorySeparator
+        }'`,
       );
     }
 

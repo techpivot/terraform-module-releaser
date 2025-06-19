@@ -48,7 +48,7 @@ describe('context', () => {
       it(`should throw an error if ${envVar} is not set`, () => {
         // Set the specific environment variable to undefined, but keep others set
         vi.stubEnv(envVar, undefined);
-        
+
         expect(() => getContext()).toThrow(
           new Error(
             `The ${envVar} environment variable is missing or invalid. This variable should be automatically set by GitHub for each workflow run. If this variable is missing or not correctly set, it indicates a serious issue with the GitHub Actions environment, potentially affecting the execution of subsequent steps in the workflow. Please review the workflow setup or consult the documentation for proper configuration.`,
@@ -60,7 +60,6 @@ describe('context', () => {
 
   describe('event validation', () => {
     it('should throw error when event is not pull_request', () => {
-
       vi.stubEnv('GITHUB_EVENT_NAME', 'push');
       expect(() => getContext()).toThrow('This workflow is not running in the context of a pull request');
     });
@@ -195,7 +194,6 @@ describe('context', () => {
     it('should use default GITHUB_API_URL when not provided', () => {
       // Ensure GITHUB_API_URL is not set to test the default fallback
       vi.stubEnv('GITHUB_API_URL', undefined);
-
 
       const context = getContext();
 

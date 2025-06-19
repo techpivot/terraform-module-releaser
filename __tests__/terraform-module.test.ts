@@ -33,6 +33,7 @@ describe('TerraformModule', () => {
       defaultFirstTag: 'v0.1.0',
       moduleChangeExcludePatterns: [],
       modulePathIgnore: [],
+      useVersionPrefix: true,
     });
   });
 
@@ -245,6 +246,38 @@ describe('TerraformModule', () => {
       expect(module.getLatestTagVersion()).toBeNull();
     });
 
+    it('should handle tags with different separators in getLatestTagVersion', () => {
+      // Test with different separators to ensure regex works correctly
+      module.setTags(['tf-modules/test-module/v1.0.0']);
+      expect(module.getLatestTagVersion()).toBe('v1.0.0');
+
+      // Test with hyphen separator
+      module.setTags(['tf-modules-test-module-v2.0.0']);
+      expect(module.getLatestTagVersion()).toBe('v2.0.0');
+
+      // Test with underscore separator
+      module.setTags(['tf-modules_test_module_v3.0.0']);
+      expect(module.getLatestTagVersion()).toBe('v3.0.0');
+
+      // Test with dot separator
+      module.setTags(['tf-modules.test.module.v4.0.0']);
+      expect(module.getLatestTagVersion()).toBe('v4.0.0');
+
+      // Test without v prefix
+      module.setTags(['tf-modules/test-module/5.0.0']);
+      expect(module.getLatestTagVersion()).toBe('5.0.0');
+    });
+
+    it('should return null when latest tag does not match MODULE_TAG_REGEX', () => {
+      // Mock getLatestTag to return an invalid format that won't match the regex
+      vi.spyOn(module, 'getLatestTag').mockReturnValue('invalid-tag-format');
+
+      expect(module.getLatestTagVersion()).toBeNull();
+
+      // Restore the original method
+      vi.restoreAllMocks();
+    });
+
     it('should handle complex version sorting', () => {
       const tags = [
         'tf-modules/test-module/v1.2.10',
@@ -275,14 +308,14 @@ describe('TerraformModule', () => {
     it('should throw error for tag with no slash (invalid format)', () => {
       const tags = ['v1.2.3'];
       expect(() => module.setTags(tags)).toThrow(
-        "Invalid tag format: 'v1.2.3'. Expected format: 'tf-modules/test-module/v#.#.#' or 'tf-modules/test-module/#.#.#' for module.",
+        "Invalid tag format: 'v1.2.3'. Expected format: 'tf-modules/test-module[separator]v#.#.#' or 'tf-modules/test-module[separator]#.#.#'.",
       );
     });
 
     it('should throw error for tag with incorrect module name', () => {
       const tags = ['foo/bar/v9.8.7'];
       expect(() => module.setTags(tags)).toThrow(
-        "Invalid tag format: 'foo/bar/v9.8.7'. Expected format: 'tf-modules/test-module/v#.#.#' or 'tf-modules/test-module/#.#.#' for module.",
+        "Invalid tag format: 'foo/bar/v9.8.7'. Expected format: 'tf-modules/test-module[separator]v#.#.#' or 'tf-modules/test-module[separator]#.#.#'.",
       );
     });
 
@@ -304,7 +337,6 @@ describe('TerraformModule', () => {
       expect(module.tags[1]).toBe('tf-modules/test-module/1.2.3');
     });
 
-    // Add tests for extractVersionFromTag
     describe('extractVersionFromTag()', () => {
       let module: TerraformModule;
 
@@ -473,7 +505,7 @@ describe('TerraformModule', () => {
       ];
 
       expect(() => module.setReleases(releases)).toThrow(
-        "Invalid tag format: 'tf-modules/test-module/v1.0'. Expected format: 'tf-modules/test-module/v#.#.#' or 'tf-modules/test-module/#.#.#' for module.",
+        "Invalid tag format: 'tf-modules/test-module/v1.0'. Expected format: 'tf-modules/test-module[separator]v#.#.#' or 'tf-modules/test-module[separator]#.#.#'.",
       );
     });
 
@@ -494,7 +526,7 @@ describe('TerraformModule', () => {
       ];
 
       expect(() => module.setReleases(releases)).toThrow(
-        "Invalid tag format: 'tf-modules/test-module/vbeta.1.0'. Expected format: 'tf-modules/test-module/v#.#.#' or 'tf-modules/test-module/#.#.#' for module.",
+        "Invalid tag format: 'tf-modules/test-module/vbeta.1.0'. Expected format: 'tf-modules/test-module[separator]v#.#.#' or 'tf-modules/test-module[separator]#.#.#'.",
       );
     });
 
@@ -788,6 +820,38 @@ describe('TerraformModule', () => {
           "Invalid version format: 'invalid-format'. Expected v#.#.# or #.#.# format.",
         );
       });
+
+      it('should respect useVersionPrefix setting when true (with v prefix)', () => {
+        // Set useVersionPrefix to true
+        config.set({
+          useVersionPrefix: true,
+        });
+
+        module.setTags(['tf-modules/test-module/v1.2.3']);
+        module.addCommit({
+          sha: 'abc123',
+          message: 'fix: bug fix',
+          files: ['main.tf'],
+        });
+
+        expect(module.getReleaseTagVersion()).toBe('v1.2.4');
+      });
+
+      it('should respect useVersionPrefix setting when false (without v prefix)', () => {
+        // Set useVersionPrefix to false
+        config.set({
+          useVersionPrefix: false,
+        });
+
+        module.setTags(['tf-modules/test-module/v1.2.3']);
+        module.addCommit({
+          sha: 'abc123',
+          message: 'fix: bug fix',
+          files: ['main.tf'],
+        });
+
+        expect(module.getReleaseTagVersion()).toBe('1.2.4'); // No 'v' prefix
+      });
     });
 
     describe('getReleaseTag()', () => {
@@ -954,16 +1018,47 @@ describe('TerraformModule', () => {
           TerraformModule.isModuleAssociatedWithTag('tf-modules/vpc-endpoint', 'tf-modules/vpc-endpoint/v1.0.0'),
         ).toBe(true);
         expect(
-          TerraformModule.isModuleAssociatedWithTag('tf-modules/vpc-endpoint', 'tf-modules/vpc-endpoint/1.0.0'),
+          TerraformModule.isModuleAssociatedWithTag('tf-modules/vpc-endpoint', 'tf-modules-vpc-endpoint-v1.0.0'),
         ).toBe(true);
-        expect(TerraformModule.isModuleAssociatedWithTag('tf-modules/vpc-endpoint', 'tf-modules/vpc/v1.0.0')).toBe(
-          false,
-        );
+        expect(
+          TerraformModule.isModuleAssociatedWithTag('tf-modules/vpc-endpoint', 'tf-modules_vpc_endpoint_v1.0.0'),
+        ).toBe(true);
+        expect(
+          TerraformModule.isModuleAssociatedWithTag('tf-modules/vpc-endpoint', 'tf-modules.vpc.endpoint.v1.0.0'),
+        ).toBe(true);
       });
 
       it('should be case sensitive', () => {
         expect(TerraformModule.isModuleAssociatedWithTag('my-module', 'My-Module/v1.0.0')).toBe(false);
         expect(TerraformModule.isModuleAssociatedWithTag('my-module', 'my-module/V1.0.0')).toBe(false);
+      });
+
+      it('should handle tags with different directory separators', () => {
+        // Test that tags with different separators are properly associated after normalization
+        expect(TerraformModule.isModuleAssociatedWithTag('my-module', 'my-module/v1.0.0')).toBe(true);
+        expect(TerraformModule.isModuleAssociatedWithTag('my-module', 'my-module-v1.0.0')).toBe(true);
+        expect(TerraformModule.isModuleAssociatedWithTag('my-module', 'my-module_v1.0.0')).toBe(true);
+        expect(TerraformModule.isModuleAssociatedWithTag('my-module', 'my-module.v1.0.0')).toBe(true);
+
+        // Test complex module names with separators
+        expect(
+          TerraformModule.isModuleAssociatedWithTag('tf-modules/vpc-endpoint', 'tf-modules/vpc-endpoint/v1.0.0'),
+        ).toBe(true);
+        expect(
+          TerraformModule.isModuleAssociatedWithTag('tf-modules/vpc-endpoint', 'tf-modules-vpc-endpoint-v1.0.0'),
+        ).toBe(true);
+        expect(
+          TerraformModule.isModuleAssociatedWithTag('tf-modules/vpc-endpoint', 'tf-modules_vpc_endpoint_v1.0.0'),
+        ).toBe(true);
+        expect(
+          TerraformModule.isModuleAssociatedWithTag('tf-modules/vpc-endpoint', 'tf-modules.vpc.endpoint.v1.0.0'),
+        ).toBe(true);
+
+        // Test that wrong associations still return false
+        expect(TerraformModule.isModuleAssociatedWithTag('my-module', 'other-module/v1.0.0')).toBe(false);
+        expect(TerraformModule.isModuleAssociatedWithTag('my-module', 'other-module-v1.0.0')).toBe(false);
+        expect(TerraformModule.isModuleAssociatedWithTag('my-module', 'other-module_v1.0.0')).toBe(false);
+        expect(TerraformModule.isModuleAssociatedWithTag('my-module', 'other-module.v1.0.0')).toBe(false);
       });
     });
 
@@ -1146,6 +1241,45 @@ describe('TerraformModule', () => {
         const tagsToDelete = TerraformModule.getTagsToDelete(allTags, terraformModules);
 
         expect(tagsToDelete).toEqual(['apple-module/v1.0.0', 'banana-module/v1.0.0', 'zebra-module/v1.0.0']);
+      });
+
+      it('should handle tags with different directory separators for same module', () => {
+        // Scenario: Module was originally using / separator, but tags exist with various separators
+        const allTags = [
+          'test-module/v1.0.0', // Forward slash (current format)
+          'test-module-v1.1.0', // Hyphen (old format)
+          'test-module_v1.2.0', // Underscore (old format)
+          'test-module.v1.3.0', // Dot (old format)
+          'other-module/v1.0.0', // Different module that no longer exists
+        ];
+        const existingModules = [createMockTerraformModule({ directory: join(tmpDir, 'test-module') })];
+
+        const tagsToDelete = TerraformModule.getTagsToDelete(allTags, existingModules);
+
+        // Only tags for non-existent modules should be deleted
+        // All test-module tags should be kept regardless of separator
+        expect(tagsToDelete).toEqual(['other-module/v1.0.0']);
+      });
+
+      it('should handle complex module names with various separators', () => {
+        const allTags = [
+          'tf-modules/vpc-endpoint/v1.0.0', // Current format
+          'tf-modules-vpc-endpoint-v1.1.0', // All hyphens
+          'tf-modules_vpc_endpoint_v1.2.0', // All underscores
+          'tf-modules.vpc.endpoint.v1.3.0', // All dots
+          'tf-modules/vpc-endpoint-v1.4.0', // Mixed separators
+          'removed-module/v1.0.0', // Module that no longer exists
+        ];
+        const existingModules = [
+          createMockTerraformModule({
+            directory: join(tmpDir, 'tf-modules', 'vpc-endpoint'),
+          }),
+        ];
+
+        const tagsToDelete = TerraformModule.getTagsToDelete(allTags, existingModules);
+
+        // Only tags for non-existent modules should be deleted
+        expect(tagsToDelete).toEqual(['removed-module/v1.0.0']);
       });
     });
 
@@ -1535,6 +1669,102 @@ describe('TerraformModule', () => {
 
         expect(releasesToDelete).toHaveLength(2);
         expect(releasesToDelete.map((r) => r.tagName)).toEqual(['legacy-module/v1.0.0', 'legacy-module/v1.2.0']);
+      });
+
+      it('should handle releases with different directory separators for same module', () => {
+        // Scenario: Module was originally using / separator, but releases exist with various separators
+        const allReleases: GitHubRelease[] = [
+          {
+            id: 1,
+            title: 'test-module/v1.0.0',
+            tagName: 'test-module/v1.0.0',
+            body: 'Forward slash format',
+          },
+          {
+            id: 2,
+            title: 'test-module-v1.1.0',
+            tagName: 'test-module-v1.1.0',
+            body: 'Hyphen format',
+          },
+          {
+            id: 3,
+            title: 'test-module_v1.2.0',
+            tagName: 'test-module_v1.2.0',
+            body: 'Underscore format',
+          },
+          {
+            id: 4,
+            title: 'test-module.v1.3.0',
+            tagName: 'test-module.v1.3.0',
+            body: 'Dot format',
+          },
+          {
+            id: 5,
+            title: 'other-module/v1.0.0',
+            tagName: 'other-module/v1.0.0',
+            body: 'Different module that no longer exists',
+          },
+        ];
+        const existingModules = [createMockTerraformModule({ directory: join(tmpDir, 'test-module') })];
+
+        const releasesToDelete = TerraformModule.getReleasesToDelete(allReleases, existingModules);
+
+        // Only releases for non-existent modules should be deleted
+        // All test-module releases should be kept regardless of separator
+        expect(releasesToDelete).toHaveLength(1);
+        expect(releasesToDelete[0].tagName).toBe('other-module/v1.0.0');
+      });
+
+      it('should handle complex module names with various separators in releases', () => {
+        const allReleases: GitHubRelease[] = [
+          {
+            id: 1,
+            title: 'tf-modules/vpc-endpoint/v1.0.0',
+            tagName: 'tf-modules/vpc-endpoint/v1.0.0',
+            body: 'Current format',
+          },
+          {
+            id: 2,
+            title: 'tf-modules-vpc-endpoint-v1.1.0',
+            tagName: 'tf-modules-vpc-endpoint-v1.1.0',
+            body: 'All hyphens',
+          },
+          {
+            id: 3,
+            title: 'tf-modules_vpc_endpoint_v1.2.0',
+            tagName: 'tf-modules_vpc_endpoint_v1.2.0',
+            body: 'All underscores',
+          },
+          {
+            id: 4,
+            title: 'tf-modules.vpc.endpoint.v1.3.0',
+            tagName: 'tf-modules.vpc.endpoint.v1.3.0',
+            body: 'All dots',
+          },
+          {
+            id: 5,
+            title: 'tf-modules/vpc-endpoint-v1.4.0',
+            tagName: 'tf-modules/vpc-endpoint-v1.4.0',
+            body: 'Mixed separators',
+          },
+          {
+            id: 6,
+            title: 'removed-module/v1.0.0',
+            tagName: 'removed-module/v1.0.0',
+            body: 'Module that no longer exists',
+          },
+        ];
+        const existingModules = [
+          createMockTerraformModule({
+            directory: join(tmpDir, 'tf-modules', 'vpc-endpoint'),
+          }),
+        ];
+
+        const releasesToDelete = TerraformModule.getReleasesToDelete(allReleases, existingModules);
+
+        // Only releases for non-existent modules should be deleted
+        expect(releasesToDelete).toHaveLength(1);
+        expect(releasesToDelete[0].tagName).toBe('removed-module/v1.0.0');
       });
     });
 

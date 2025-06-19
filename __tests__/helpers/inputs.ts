@@ -1,6 +1,6 @@
 import { getActionDefaults } from '@/tests/helpers/action-defaults';
 import type { Config } from '@/types';
-import { ACTION_INPUTS } from '@/utils/action-metadata';
+import { ACTION_INPUTS } from '@/utils/metadata';
 import { vi } from 'vitest';
 
 // Load action defaults once globally
