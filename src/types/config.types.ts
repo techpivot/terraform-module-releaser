@@ -105,21 +105,38 @@ export interface Config {
   useSSHSourceFormat: boolean;
 
   /**
-   * The character used to separate the module name from the version in tags.
+   * The character used to separate directory path components when creating Git tags from module paths.
+   * This separator is applied throughout the entire directory structure conversion process, not just
+   * between the module name and version.
+   *
    * Must be a single character and one of: -, _, /, .
    *
-   * Examples:
-   * - "/" (default): module/aws-s3-bucket/v1.0.0
-   * - "-": module-aws-s3-bucket-v1.0.0
-   * - "_": module_aws-s3-bucket_v1.0.0
-   * - ".": module.aws-s3-bucket.v1.0.0
+   * When converting a module path like 'modules/aws/s3-bucket' to a Git tag, this separator determines
+   * how directory separators (/) are replaced in the tag name portion:
+   *
+   * Examples with module path 'modules/aws/s3-bucket' and version 'v1.0.0':
+   * - "/" (default): modules/aws/s3-bucket/v1.0.0
+   * - "-": modules-aws-s3-bucket-v1.0.0
+   * - "_": modules_aws_s3_bucket_v1.0.0
+   * - ".": modules.aws.s3-bucket.v1.0.0
+   *
+   * This setting affects tag creation, tag parsing, and tag association logic throughout the system.
    */
   tagDirectorySeparator: string;
 
   /**
    * Whether to include the "v" prefix in version tags.
-   * When true (default), tags will be formatted as: module/v1.2.3
-   * When false, tags will be formatted as: module/1.2.3
+   *
+   * When true (default), version tags will include the "v" prefix:
+   * - Example: module/v1.2.3
+   *
+   * When false, version tags will not include the "v" prefix:
+   * - Example: module/1.2.3
+   *
+   * For initial releases, this setting takes precedence over any "v" prefix specified in the
+   * defaultFirstTag configuration. If useVersionPrefix is false and defaultFirstTag contains
+   * a "v" prefix (e.g., "v1.0.0"), the "v" will be automatically removed to ensure consistency
+   * with the useVersionPrefix setting (resulting in "1.0.0").
    */
   useVersionPrefix: boolean;
 }

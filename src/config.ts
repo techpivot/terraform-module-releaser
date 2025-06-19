@@ -66,12 +66,17 @@ function initializeConfig(): Config {
         }'`,
       );
     }
-
     // Validate default first tag format
     if (!VERSION_TAG_REGEX.test(configInstance.defaultFirstTag)) {
       throw new TypeError(
         `Default first tag must be in format v#.#.# or #.#.# (e.g., v1.0.0 or 1.0.0). Got: '${configInstance.defaultFirstTag}'`,
       );
+    }
+
+    // If we aren't using "v" prefix but the default first tag was specified with a "v"
+    // prefix, then strip this to enforce.
+    if (!configInstance.useVersionPrefix && configInstance.defaultFirstTag.startsWith('v')) {
+      configInstance.defaultFirstTag = configInstance.defaultFirstTag.substring(1);
     }
 
     info(`Major Keywords: ${configInstance.majorKeywords.join(', ')}`);

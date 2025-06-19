@@ -54,6 +54,8 @@ jobs:
           module-change-exclude-patterns: .gitignore,*.md,*.tftest.hcl,tests/**,examples/**
           module-asset-exclude-patterns: .gitignore,*.md,*.tftest.hcl,tests/**
           use-ssh-source-format: true
+          tag-directory-separator: "-"
+          use-version-prefix: false
 
       - name: Test Action Outputs
         id: test-outputs

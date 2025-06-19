@@ -9,7 +9,7 @@ import {
   VALID_TAG_DIRECTORY_SEPARATORS,
   VERSION_TAG_REGEX,
 } from '@/utils/constants';
-import { removeTrailingCharacters } from '@/utils/string';
+import { removeLeadingCharacters, removeTrailingCharacters } from '@/utils/string';
 import { endGroup, info, startGroup } from '@actions/core';
 
 /**
@@ -224,7 +224,7 @@ export class TerraformModule {
       return null;
     }
 
-    const match = latestTag.match(MODULE_TAG_REGEX);
+    const match = MODULE_TAG_REGEX.exec(latestTag);
 
     return match ? match[3] : null;
   }
@@ -484,7 +484,7 @@ export class TerraformModule {
       return null;
     }
 
-    return `${this.name}/${releaseTagVersion}`;
+    return `${this.name}${config.tagDirectorySeparator}${releaseTagVersion}`;
   }
 
   //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -630,29 +630,28 @@ export class TerraformModule {
    *
    * The function transforms the directory path by:
    * - Trimming whitespace
-   * - Replacing invalid characters with hyphens
-   * - Normalizing slashes
-   * - Removing leading/trailing slashes
-   * - Handling consecutive dots and hyphens
-   * - Removing any remaining whitespace
    * - Converting to lowercase (for consistency)
-   * - Removing trailing dots, hyphens, and underscores
+   * - Normalizing path separators (both backslashes and forward slashes) to the configured tag directory separator
+   * - Replacing invalid characters with hyphens (preserving only alphanumeric, "/", ".", "-", "_")
+   * - Normalizing consecutive special characters ("/", ".", "-", "_") to single instances
+   * - Removing leading/trailing special characters ("/", ".", "-", "_") using safe string operations
    *
    * @param {string} terraformDirectory - The relative directory path from which to generate the module name.
    * @returns {string} A valid Terraform module name based on the provided directory path.
    */
   public static getTerraformModuleNameFromRelativePath(terraformDirectory: string): string {
-    const cleanedDirectory = terraformDirectory
+    let name = terraformDirectory
       .trim()
-      .replace(/[^a-zA-Z0-9/_-]+/g, '-')
-      .replace(/\/{2,}/g, '/')
-      .replace(/\/\.+/g, '/')
-      .replace(/(^\/|\/$)/g, '')
-      .replace(/\.\.+/g, '.')
-      .replace(/--+/g, '-')
-      .replace(/\s+/g, '')
-      .toLowerCase();
-    return removeTrailingCharacters(cleanedDirectory, ['.', '-', '_']);
+      .toLowerCase()
+      .replace(/[/\\]/g, config.tagDirectorySeparator) // Normalize backslashes and forward slashes to configured separator
+      .replace(/[^a-zA-Z0-9/._-]+/g, '-') // Replace invalid characters with hyphens (preserve alphanumeric, /, ., _, -)
+      .replace(/[/._-]{2,}/g, (match) => match[0]); // Normalize consecutive special characters to single instances
+
+    // Remove leading/trailing special characters safely without regex backtracking
+    name = removeLeadingCharacters(name, VALID_TAG_DIRECTORY_SEPARATORS);
+    name = removeTrailingCharacters(name, VALID_TAG_DIRECTORY_SEPARATORS);
+
+    return name;
   }
 
   /**

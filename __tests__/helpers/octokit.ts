@@ -1,5 +1,5 @@
 import type { OctokitRestApi } from '@/types';
-import { trimSlashes } from '@/utils/string';
+import { removeTrailingCharacters } from '@/utils/string';
 import { paginateRest } from '@octokit/plugin-paginate-rest';
 import { restEndpointMethods } from '@octokit/plugin-rest-endpoint-methods';
 import type { RestEndpointMethodTypes } from '@octokit/plugin-rest-endpoint-methods';
@@ -384,5 +384,6 @@ function getLinkHeader(slug: string, page: number, perPage: number, totalCount: 
 
   const nextPage = page + 1;
   const lastPage = totalPages;
-  return `<https://api.github.com/repos/techpivot/terraform-module-releaser/${trimSlashes(slug)}?per_page=${perPage}&page=${nextPage}>; rel="next", <https://api.github.com/repos/techpivot/terraform-module-releaser/${trimSlashes(slug)}?per_page=${perPage}&page=${lastPage}>; rel="last"`;
+  const slugTrimmed = removeTrailingCharacters(slug, ['/']);
+  return `<https://api.github.com/repos/techpivot/terraform-module-releaser/${slugTrimmed}?per_page=${perPage}&page=${nextPage}>; rel="next", <https://api.github.com/repos/techpivot/terraform-module-releaser/${slugTrimmed}?per_page=${perPage}&page=${lastPage}>; rel="last"`;
 }

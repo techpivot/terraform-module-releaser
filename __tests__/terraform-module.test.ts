@@ -58,7 +58,7 @@ describe('TerraformModule', () => {
       mkdirSync(specialDir, { recursive: true });
 
       const module = new TerraformModule(specialDir);
-      expect(module.name).toBe('complex_module-name-with/chars');
+      expect(module.name).toBe('complex_module-name.with/chars');
     });
 
     it('should handle nested directory paths', () => {
@@ -949,44 +949,222 @@ describe('TerraformModule', () => {
 
   describe('static utilities', () => {
     describe('getTerraformModuleNameFromRelativePath()', () => {
-      it('should generate valid module names from paths', () => {
-        expect(TerraformModule.getTerraformModuleNameFromRelativePath('tf-modules/simple-module')).toBe(
-          'tf-modules/simple-module',
-        );
-
-        expect(TerraformModule.getTerraformModuleNameFromRelativePath('complex_module-name.with/chars')).toBe(
-          'complex_module-name-with/chars',
-        );
-
-        expect(TerraformModule.getTerraformModuleNameFromRelativePath('/leading/slash/')).toBe('leading/slash');
-
-        expect(TerraformModule.getTerraformModuleNameFromRelativePath('module...with...dots')).toBe('module-with-dots');
+      beforeEach(() => {
+        // Reset to default config for each test
+        config.set({
+          tagDirectorySeparator: '/',
+          majorKeywords: ['BREAKING CHANGE', 'major change'],
+          minorKeywords: ['feat:', 'feature:'],
+          defaultFirstTag: 'v0.1.0',
+          moduleChangeExcludePatterns: [],
+          modulePathIgnore: [],
+          useVersionPrefix: true,
+        });
       });
 
-      it('should handle leading and trailing slashes', () => {
-        expect(TerraformModule.getTerraformModuleNameFromRelativePath('/test-module/')).toBe('test-module');
+      describe('with different tag directory separators', () => {
+        it('should use forward slash separator by default', () => {
+          config.set({ tagDirectorySeparator: '/' });
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('tf-modules/simple-module')).toBe(
+            'tf-modules/simple-module',
+          );
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('complex\\module\\windows\\path')).toBe(
+            'complex/module/windows/path',
+          );
+        });
+
+        it('should use hyphen separator when configured', () => {
+          config.set({ tagDirectorySeparator: '-' });
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('tf-modules/simple-module')).toBe(
+            'tf-modules-simple-module',
+          );
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('complex\\module\\windows\\path')).toBe(
+            'complex-module-windows-path',
+          );
+        });
+
+        it('should use underscore separator when configured', () => {
+          config.set({ tagDirectorySeparator: '_' });
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('tf-modules/simple-module')).toBe(
+            'tf-modules_simple-module',
+          );
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('complex\\module\\windows\\path')).toBe(
+            'complex_module_windows_path',
+          );
+        });
+
+        it('should use dot separator when configured', () => {
+          config.set({ tagDirectorySeparator: '.' });
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('tf-modules/simple-module')).toBe(
+            'tf-modules.simple-module',
+          );
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('complex\\module\\windows\\path')).toBe(
+            'complex.module.windows.path',
+          );
+        });
       });
 
-      it('should handle multiple consecutive slashes', () => {
-        expect(TerraformModule.getTerraformModuleNameFromRelativePath('tf-modules//vpc//endpoint')).toBe(
-          'tf-modules/vpc/endpoint',
-        );
+      describe('character normalization and cleanup', () => {
+        beforeEach(() => {
+          config.set({ tagDirectorySeparator: '/' });
+        });
+
+        it('should normalize Windows backslashes to configured separator', () => {
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('windows\\path\\module')).toBe(
+            'windows/path/module',
+          );
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('mixed\\and/path\\separators')).toBe(
+            'mixed/and/path/separators',
+          );
+        });
+
+        it('should convert to lowercase', () => {
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('Test-Module')).toBe('test-module');
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('UPPERCASE/MODULE')).toBe('uppercase/module');
+        });
+
+        it('should replace invalid characters with hyphens', () => {
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('test@module!#$')).toBe('test-module');
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('module%with&special*chars')).toBe(
+            'module-with-special-chars',
+          );
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('test module with spaces')).toBe(
+            'test-module-with-spaces',
+          );
+        });
+
+        it('should normalize consecutive special characters', () => {
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('module...with...dots')).toBe(
+            'module.with.dots',
+          );
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('tf-modules//vpc//endpoint')).toBe(
+            'tf-modules/vpc/endpoint',
+          );
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('module---with---hyphens')).toBe(
+            'module-with-hyphens',
+          );
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('module___with___underscores')).toBe(
+            'module_with_underscores',
+          );
+        });
+
+        it('should remove leading and trailing special characters', () => {
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('/leading/slash/')).toBe('leading/slash');
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('...leading.dots')).toBe('leading.dots');
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('trailing.dots...')).toBe('trailing.dots');
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('---leading-hyphens')).toBe('leading-hyphens');
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('trailing-hyphens---')).toBe(
+            'trailing-hyphens',
+          );
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('___leading_underscores')).toBe(
+            'leading_underscores',
+          );
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('trailing_underscores___')).toBe(
+            'trailing_underscores',
+          );
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('/.-_mixed_leading')).toBe('mixed_leading');
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('mixed_trailing_.-/')).toBe('mixed_trailing');
+        });
+
+        it('should handle edge cases', () => {
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('  whitespace  ')).toBe('whitespace');
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('/test-module/')).toBe('test-module');
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('single')).toBe('single');
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('a')).toBe('a');
+        });
       });
 
-      it('should handle whitespace', () => {
-        expect(TerraformModule.getTerraformModuleNameFromRelativePath('  test module  ')).toBe('test-module');
+      describe('comprehensive scenarios with different separators', () => {
+        const testScenarios = [
+          {
+            separator: '/',
+            input: 'tf-modules/aws/vpc-endpoint',
+            expected: 'tf-modules/aws/vpc-endpoint',
+          },
+          {
+            separator: '-',
+            input: 'tf-modules/aws/vpc-endpoint',
+            expected: 'tf-modules-aws-vpc-endpoint',
+          },
+          {
+            separator: '_',
+            input: 'tf-modules/aws/vpc-endpoint',
+            expected: 'tf-modules_aws_vpc-endpoint',
+          },
+          {
+            separator: '.',
+            input: 'tf-modules/aws/vpc-endpoint',
+            expected: 'tf-modules.aws.vpc-endpoint',
+          },
+        ];
+
+        for (const { separator, input, expected } of testScenarios) {
+          it(`should handle complex paths with ${separator} separator`, () => {
+            config.set({ tagDirectorySeparator: separator });
+            expect(TerraformModule.getTerraformModuleNameFromRelativePath(input)).toBe(expected);
+          });
+        }
+
+        const complexTestScenarios = [
+          {
+            separator: '/',
+            input: '//tf-modules//aws..vpc--endpoint__',
+            expected: 'tf-modules/aws.vpc-endpoint',
+          },
+          {
+            separator: '-',
+            input: '//tf-modules//aws..vpc--endpoint__',
+            expected: 'tf-modules-aws.vpc-endpoint',
+          },
+          {
+            separator: '_',
+            input: '//tf-modules//aws..vpc--endpoint__',
+            expected: 'tf-modules_aws.vpc-endpoint',
+          },
+          {
+            separator: '.',
+            input: '//tf-modules//aws..vpc--endpoint__',
+            expected: 'tf-modules.aws.vpc-endpoint',
+          },
+        ];
+
+        for (const { separator, input, expected } of complexTestScenarios) {
+          it(`should handle complex normalization with ${separator} separator`, () => {
+            config.set({ tagDirectorySeparator: separator });
+            expect(TerraformModule.getTerraformModuleNameFromRelativePath(input)).toBe(expected);
+          });
+        }
       });
 
-      it('should convert to lowercase', () => {
-        expect(TerraformModule.getTerraformModuleNameFromRelativePath('Test-Module')).toBe('test-module');
-      });
+      describe('real-world terraform module scenarios', () => {
+        it('should handle typical terraform module paths', () => {
+          config.set({ tagDirectorySeparator: '/' });
 
-      it('should clean up invalid characters', () => {
-        expect(TerraformModule.getTerraformModuleNameFromRelativePath('test@module!#$')).toBe('test-module');
-      });
+          const testCases = [
+            { input: 'modules/networking/vpc', expected: 'modules/networking/vpc' },
+            { input: 'modules/compute/ec2-instance', expected: 'modules/compute/ec2-instance' },
+            { input: 'modules/storage/s3-bucket', expected: 'modules/storage/s3-bucket' },
+            { input: 'terraform/aws/rds_cluster', expected: 'terraform/aws/rds_cluster' },
+            { input: 'tf-modules/azure/storage.account', expected: 'tf-modules/azure/storage.account' },
+          ];
 
-      it('should remove trailing special characters', () => {
-        expect(TerraformModule.getTerraformModuleNameFromRelativePath('test-module-.')).toBe('test-module');
+          for (const { input, expected } of testCases) {
+            expect(TerraformModule.getTerraformModuleNameFromRelativePath(input)).toBe(expected);
+          }
+        });
+
+        it('should handle module paths with various separators configured', () => {
+          const separatorTests = [
+            { separator: '-', input: 'modules/aws/vpc', expected: 'modules-aws-vpc' },
+            { separator: '_', input: 'modules/aws/vpc', expected: 'modules_aws_vpc' },
+            { separator: '.', input: 'modules/aws/vpc', expected: 'modules.aws.vpc' },
+          ];
+
+          for (const { separator, input, expected } of separatorTests) {
+            config.set({ tagDirectorySeparator: separator });
+            expect(TerraformModule.getTerraformModuleNameFromRelativePath(input)).toBe(expected);
+          }
+        });
       });
     });
 

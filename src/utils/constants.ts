@@ -44,8 +44,12 @@ export const VERSION_TAG_REGEX = /^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
  * - "module-v1.0.0" → ["module-v1.0.0", "module", "-", "v1.0.0", "1", "0", "0"]
  * - "feature_2.3.4" → ["feature_2.3.4", "feature", "_", "2.3.4", "2", "3", "4"]
  * - "service/v0.1.0" → ["service/v0.1.0", "service", "/", "v0.1.0", "0", "1", "0"]
+ *
+ * Note: In the character class [-_/.], only the dot (.) requires escaping to match literal periods.
+ * The hyphen (-) doesn't need escaping when at the start/end of the character class.
+ * The forward slash (/) doesn't need escaping in JavaScript regex character classes.
  */
-export const MODULE_TAG_REGEX = /^(.+)([-_\/\.])(v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*))$/;
+export const MODULE_TAG_REGEX = /^(.+)([-_/.])(v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*))$/;
 
 /**
  * Release type constants for semantic versioning

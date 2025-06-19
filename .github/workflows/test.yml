@@ -10,9 +10,9 @@ on:
     types: [opened, synchronize, reopened]
 
 jobs:
-  tests:
+  typescript-tests:
     runs-on: ubuntu-latest
-    name: Test
+    name: TypeScript Tests
     permissions:
       contents: read
     steps:
@@ -34,6 +34,26 @@ jobs:
         run: npm run test
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN_REPO_CI_TESTING }}
+
+  sonarqube-scan:
+    runs-on: ubuntu-latest
+    name: SonarQube Analysis
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Disabling shallow clone is recommended for improving relevancy of reporting
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install Dependencies
+        run: npm ci --no-fund
 
       - name: SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@2500896589ef8f7247069a56136f8dc177c27ccf # v5
