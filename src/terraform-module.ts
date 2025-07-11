@@ -463,7 +463,7 @@ export class TerraformModule {
       return null;
     }
 
-    return `${this.name}/${releaseTagVersion}`;
+    return `${this.name}-${releaseTagVersion}`;
   }
 
   //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
