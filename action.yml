@@ -102,6 +102,9 @@ inputs:
       If enabled, all links to source code in generated Wiki documentation will use SSH format instead of HTTPS format.
     required: true
     default: "false"
+  wiki-custom-usage-string:
+    description: A raw, multi-line string to override the default 'Usage' section in the generated wiki. If not provided, a default usage block will be generated.
+    required: false
   github_token:
     description: >
       Required for retrieving pull request metadata, tags, releases, updating PR comments, wiki, and creating 
