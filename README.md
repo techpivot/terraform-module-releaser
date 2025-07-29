@@ -199,6 +199,7 @@ configuring the following optional input parameters as needed.
 | `module-change-exclude-patterns` | Comma-separated list of file patterns (relative to each module) to exclude from triggering version changes. Lets you release a module but control which files inside it do not force a version bump.<br><sub>[Read more here](#understanding-the-filtering-options)</sub>          | `.gitignore,*.md,*.tftest.hcl,tests/**` |
 | `module-asset-exclude-patterns`  | A comma-separated list of file patterns to exclude when bundling a Terraform module for tag/release. Patterns follow glob syntax (e.g., `tests/\*\*`) and are relative to each Terraform module directory. Files matching these patterns will be excluded from the bundled output. | `.gitignore,*.md,*.tftest.hcl,tests/**` |
 | `use-ssh-source-format`          | If enabled, all links to source code in generated Wiki documentation will use SSH standard format (e.g., `git::ssh://git@github.com/owner/repo.git`) instead of HTTPS format (`git::https://github.com/owner/repo.git`)                                                            | `false`                                 |
+| `wiki-custom-usage-string`       | A raw, multi-line string to override the default 'Usage' section in the generated wiki. If not provided, a default usage block will be generated.                                                                                                                               | `` (empty string)                       |
 
 ### Understanding the filtering options
 
@@ -317,6 +318,17 @@ jobs:
           module-change-exclude-patterns: .gitignore,*.md,docs/**,examples/**,*.tftest.hcl,tests/**
           module-asset-exclude-patterns: .gitignore,*.md,*.tftest.hcl,tests/**
           use-ssh-source-format: false
+          wiki-custom-usage-string: |
+            # My Custom Usage Instructions
+
+            This is a custom usage block. You can add any markdown you want here.
+
+            ```hcl
+            module "my_module" {
+              source = "..."
+              # ...
+            }
+            ```
 ```
 
 ## Outputs
