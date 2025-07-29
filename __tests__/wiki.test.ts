@@ -257,6 +257,39 @@ describe('wiki', async () => {
         'https://github.com/techpivot/terraform-module-releaser/wiki/aws∕vpc',
       );
     });
+
+    it('should use the custom usage string when provided', async () => {
+      const customUsage = 'This is a custom usage string.';
+      config.set({ wikiCustomUsageString: customUsage });
+      const files = await generateWikiFiles(terraformModules);
+      for (const file of files) {
+        if (
+          file.endsWith('.md') &&
+          basename(file) !== 'Home.md' &&
+          basename(file) !== '_Sidebar.md' &&
+          basename(file) !== '_Footer.md'
+        ) {
+          const content = readFileSync(file, 'utf8');
+          expect(content).toContain(`# Usage\n\n${customUsage}`);
+        }
+      }
+    });
+
+    it('should use the default usage block when custom string is not provided', async () => {
+      config.set({ wikiCustomUsageString: undefined });
+      const files = await generateWikiFiles(terraformModules);
+      for (const file of files) {
+        if (
+          file.endsWith('.md') &&
+          basename(file) !== 'Home.md' &&
+          basename(file) !== '_Sidebar.md' &&
+          basename(file) !== '_Footer.md'
+        ) {
+          const content = readFileSync(file, 'utf8');
+          expect(content).toContain('To use this module in your Terraform, refer to the below module example:');
+        }
+      }
+    });
   });
 
   describe('commitAndPushWikiChanges()', () => {
