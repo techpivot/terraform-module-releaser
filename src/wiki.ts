@@ -8,6 +8,7 @@ import { getTerraformModuleFullReleaseChangelog } from '@/changelog';
 import { config } from '@/config';
 import { context } from '@/context';
 import { generateTerraformDocs } from '@/terraform-docs';
+import { render } from '@/templating';
 import type { TerraformModule } from '@/terraform-module';
 import type { ExecSyncError, WikiStatusResult } from '@/types';
 import {
@@ -315,7 +316,18 @@ async function generateWikiTerraformModule(terraformModule: TerraformModule): Pr
   const changelog = getTerraformModuleFullReleaseChangelog(terraformModule);
   const tfDocs = await generateTerraformDocs(terraformModule);
   const moduleSource = getModuleSource(context.repoUrl, config.useSSHSourceFormat);
-  const usage = config.wikiCustomUsageString || DEFAULT_USAGE_BLOCK(terraformModule, moduleSource);
+
+  let usage: string;
+  if (config.wikiCustomUsageTemplate) {
+    const variables = {
+      module_name: terraformModule.name,
+      latest_tag: terraformModule.getLatestTag(),
+      latest_tag_version: terraformModule.getLatestTagVersionNumber(),
+    };
+    usage = render(config.wikiCustomUsageTemplate, variables);
+  } else {
+    usage = DEFAULT_USAGE_BLOCK(terraformModule, moduleSource);
+  }
 
   const content = [
     '# Usage\n',
