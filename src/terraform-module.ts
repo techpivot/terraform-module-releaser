@@ -220,6 +220,19 @@ export class TerraformModule {
     return this.tags[0].replace(`${this.name}/`, '');
   }
 
+  /**
+   * Returns the version part of the latest tag for this module, without any "v" prefix.
+   *
+   * @returns {string | null} The version string without any prefixes (e.g., '1.2.3'), or null if no tags exist.
+   */
+  public getLatestTagVersionNumber(): string | null {
+    const version = this.getLatestTagVersion();
+    if (!version) {
+      return null;
+    }
+    return version.replace(/^v/, '');
+  }
+
   //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   // Releases
   //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
