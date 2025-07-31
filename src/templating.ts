@@ -7,6 +7,6 @@
  */
 export const render = (template: string, variables: Record<string, string>): string => {
   return template.replace(/\{\{(\w+)\}\}/g, (placeholder, key) => {
-    return variables.hasOwn(key) ? variables[key] : placeholder;
+    return key in variables ? variables[key] : placeholder;
   });
 };
