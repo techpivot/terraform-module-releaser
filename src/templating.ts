@@ -5,8 +5,8 @@
  * @param variables An object where keys correspond to placeholder names and values are their replacements.
  * @returns The rendered string with placeholders replaced.
  */
-export const render = (template: string, variables: Record<string, any>): string => {
+export const render = (template: string, variables: Record<string, string>): string => {
   return template.replace(/\{\{(\w+)\}\}/g, (placeholder, key) => {
-    return variables.hasOwnProperty(key) ? variables[key] : placeholder;
+    return variables.hasOwn(key) ? variables[key] : placeholder;
   });
 };

@@ -7,8 +7,8 @@ import { join, resolve } from 'node:path';
 import { getTerraformModuleFullReleaseChangelog } from '@/changelog';
 import { config } from '@/config';
 import { context } from '@/context';
-import { generateTerraformDocs } from '@/terraform-docs';
 import { render } from '@/templating';
+import { generateTerraformDocs } from '@/terraform-docs';
 import type { TerraformModule } from '@/terraform-module';
 import type { ExecSyncError, WikiStatusResult } from '@/types';
 import {
