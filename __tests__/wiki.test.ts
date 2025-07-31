@@ -260,7 +260,7 @@ describe('wiki', async () => {
 
     it('should use the custom usage template when provided', async () => {
       const customUsage = 'This is a custom usage template: {{module_name}}';
-      config.set({ wikiCustomUsageTemplate: customUsage });
+      config.set({ wikiUsageTemplate: customUsage });
       const files = await generateWikiFiles(terraformModules);
       for (const file of files) {
         if (
@@ -277,7 +277,7 @@ describe('wiki', async () => {
     });
 
     it('should use the default usage block when custom template is not provided', async () => {
-      config.set({ wikiCustomUsageTemplate: undefined });
+      config.set({ wikiUsageTemplate: undefined });
       const files = await generateWikiFiles(terraformModules);
       for (const file of files) {
         if (
@@ -294,7 +294,7 @@ describe('wiki', async () => {
 
     it('should handle missing variables in the custom usage template', async () => {
       const customUsage = 'Module: {{module_name}}, Missing: {{missing_variable}}';
-      config.set({ wikiCustomUsageTemplate: customUsage });
+      config.set({ wikiUsageTemplate: customUsage });
       const files = await generateWikiFiles(terraformModules);
       for (const file of files) {
         if (
