@@ -107,5 +107,5 @@ export interface Config {
    * A raw, multi-line string to override the default 'Usage' section in the generated wiki.
    * If not provided, a default usage block will be generated.
    */
-  wikiCustomUsageTemplate?: string;
+  wikiUsageTemplate?: string;
 }
