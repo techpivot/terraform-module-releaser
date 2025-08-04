@@ -102,4 +102,10 @@ export interface Config {
    * Paths are relative to the workspace directory.
    */
   modulePathIgnore: string[];
+
+  /**
+   * The target branch to use for wiki operations. This allows supporting repositories that use 'main' 
+   * instead of 'master' as their default branch. Defaults to 'master' for backward compatibility.
+   */
+  targetBranch: string;
 }

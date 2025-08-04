@@ -102,6 +102,12 @@ inputs:
       If enabled, all links to source code in generated Wiki documentation will use SSH format instead of HTTPS format.
     required: true
     default: "false"
+  target-branch:
+    description: >
+      The target branch to use for wiki operations. This allows supporting repositories that use 'main' 
+      instead of 'master' as their default branch.
+    required: true
+    default: "master"
   github_token:
     description: >
       Required for retrieving pull request metadata, tags, releases, updating PR comments, wiki, and creating 
