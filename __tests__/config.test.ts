@@ -155,6 +155,7 @@ describe('config', () => {
       expect(config.moduleAssetExcludePatterns).toEqual(['tests/**', 'examples/**']);
       expect(config.modulePathIgnore).toEqual(['tf-modules/kms/examples/complete']);
       expect(config.useSSHSourceFormat).toBe(false);
+      expect(config.targetBranch).toBe('master');
       expect(startGroup).toHaveBeenCalledWith('Initializing Config');
       expect(startGroup).toHaveBeenCalledTimes(1);
       expect(endGroup).toHaveBeenCalledTimes(1);
@@ -171,6 +172,7 @@ describe('config', () => {
         ['Module Change Exclude Patterns: .gitignore, *.md'],
         ['Module Asset Exclude Patterns: tests/**, examples/**'],
         ['Use SSH Source Format: false'],
+        ['Target Branch: master'],
       ]);
     });
   });

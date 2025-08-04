@@ -74,6 +74,7 @@ function initializeConfig(): Config {
       moduleChangeExcludePatterns: getArrayInput('module-change-exclude-patterns', false),
       moduleAssetExcludePatterns: getArrayInput('module-asset-exclude-patterns', false),
       useSSHSourceFormat: getBooleanInput('use-ssh-source-format', { required: true }),
+      targetBranch: getInput('target-branch', { required: true }),
     };
 
     // Validate that *.tf is not in excludePatterns
@@ -103,6 +104,7 @@ function initializeConfig(): Config {
     info(`Module Change Exclude Patterns: ${configInstance.moduleChangeExcludePatterns.join(', ')}`);
     info(`Module Asset Exclude Patterns: ${configInstance.moduleAssetExcludePatterns.join(', ')}`);
     info(`Use SSH Source Format: ${configInstance.useSSHSourceFormat}`);
+    info(`Target Branch: ${configInstance.targetBranch}`);
 
     return configInstance;
   } finally {

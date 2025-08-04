@@ -22,6 +22,7 @@ export const inputToConfigKeyMap: Record<string, keyof Config> = {
   'module-change-exclude-patterns': 'moduleChangeExcludePatterns',
   'module-asset-exclude-patterns': 'moduleAssetExcludePatterns',
   'use-ssh-source-format': 'useSSHSourceFormat',
+  'target-branch': 'targetBranch',
 };
 
 // Create reverse mapping from config keys to input names
@@ -49,6 +50,7 @@ export const defaultInputs = {
   'module-asset-exclude-patterns': 'tests/**,examples/**',
   github_token: 'ghp_test_token_2c6912E7710c838347Ae178B4',
   'use-ssh-source-format': 'false',
+  'target-branch': 'master',
 };
 export const requiredInputs = [
   'major-keywords',
@@ -62,6 +64,7 @@ export const requiredInputs = [
   'disable-branding',
   'github_token',
   'use-ssh-source-format',
+  'target-branch',
 ];
 export const optionalInputs = Object.keys(defaultInputs).filter((key) => !requiredInputs.includes(key));
 export const booleanInputs = ['delete-legacy-tags', 'disable-wiki', 'disable-branding', 'use-ssh-source-format'];
@@ -73,7 +76,7 @@ export const arrayInputs = [
   'module-change-exclude-patterns',
   'module-asset-exclude-patterns',
 ];
-export const stringInputs = ['default-first-tag', 'terraform-docs-version', 'github_token'];
+export const stringInputs = ['default-first-tag', 'terraform-docs-version', 'github_token', 'target-branch'];
 export const numberInputs = ['wiki-sidebar-changelog-max'];
 
 /**

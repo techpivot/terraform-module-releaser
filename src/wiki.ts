@@ -72,7 +72,7 @@ export function checkoutWiki(): void {
   const isExistingRepo = existsSync(join(wikiDirectory, '.git'));
   if (!isExistingRepo) {
     info('Initializing new repository');
-    execFileSync(gitPath, ['init', '--initial-branch=master', wikiDirectory], execWikiOpts);
+    execFileSync(gitPath, ['init', `--initial-branch=${config.targetBranch}`, wikiDirectory], execWikiOpts);
   }
 
   // Set or update the remote URL
@@ -115,13 +115,13 @@ export function checkoutWiki(): void {
         '--no-recurse-submodules',
         '--depth=1',
         'origin',
-        '+refs/heads/master*:refs/remotes/origin/master*',
-        '+refs/tags/master*:refs/tags/master*',
+        `+refs/heads/${config.targetBranch}*:refs/remotes/origin/${config.targetBranch}*`,
+        `+refs/tags/${config.targetBranch}*:refs/tags/${config.targetBranch}*`,
       ],
       execWikiOpts,
     );
 
-    execFileSync(gitPath, ['checkout', 'master'], execWikiOpts);
+    execFileSync(gitPath, ['checkout', config.targetBranch], execWikiOpts);
 
     info('Successfully checked out wiki repository');
   } finally {
