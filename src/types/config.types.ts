@@ -68,6 +68,12 @@ export interface Config {
   githubToken: string;
 
   /**
+   * The working directory where the action should look for Terraform modules.
+   * Defaults to the repository root.
+   */
+  workingDirectory: string;
+
+  /**
    * A comma-separated list of file patterns to exclude from triggering version changes in Terraform modules.
    * These patterns follow glob syntax (e.g., ".gitignore,*.md") and are relative to each Terraform module directory within
    * the repository, rather than the workspace root. Patterns are used for filtering files within module directories, allowing
