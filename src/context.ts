@@ -133,7 +133,7 @@ function initializeContext(): Context {
       prTitle: payload.pull_request.title.trim(),
       prBody: payload.pull_request.body ?? '',
       issueNumber: payload.pull_request.number,
-      workspaceDir,
+      workspaceDir: `${workspaceDir}${config.workingDirectory?.trim() ? `/${config.workingDirectory}` : ''}`,
       isPrMergeEvent: payload.action === 'closed' && payload.pull_request.merged === true,
     };
 

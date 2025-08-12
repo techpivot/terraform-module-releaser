@@ -26,6 +26,7 @@ const defaultConfig: Config = {
   moduleAssetExcludePatterns: ['tests/**', 'examples/**'],
   githubToken: 'ghp_test_token_2c6912E7710c838347Ae178B4',
   useSSHSourceFormat: false,
+  workingDirectory: '',
 };
 
 /**
