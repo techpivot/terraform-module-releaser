@@ -126,7 +126,7 @@ function initializeContext(): Context {
       repoUrl: `${serverUrl}/${owner}/${repo}`,
       octokit: new OctokitRestApi({
         baseUrl: apiUrl,
-        auth: `token ${config.githubToken}`,
+        auth: `Bearer ${config.githubToken}`,
         userAgent: `[octokit] terraform-module-releaser/${version} (${homepage})`,
       }),
       prNumber: payload.pull_request.number,

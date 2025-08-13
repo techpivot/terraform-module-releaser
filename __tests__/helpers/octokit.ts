@@ -358,7 +358,7 @@ export async function createRealOctokit(): Promise<OctokitRestApi> {
   const OctokitWithPaginateAndRest = realOctokit.Octokit.plugin(restEndpointMethods, paginateRest);
 
   return new OctokitWithPaginateAndRest({
-    auth: `token ${process.env.GITHUB_TOKEN}`,
+    auth: `Bearer ${process.env.GITHUB_TOKEN}`,
     userAgent: '[octokit] terraform-module-releaser-ci-test',
   });
 }
