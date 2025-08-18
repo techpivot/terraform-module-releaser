@@ -24,7 +24,7 @@ jobs:
     permissions:
       contents: read # Required to read repo contents. Note: We leverage release-preview app for PR + commit generation
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0 # Get all history which is required for parsing commits
 
