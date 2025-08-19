@@ -2,91 +2,61 @@ import type { ActionInputMetadata, Config } from '@/types';
 import { getBooleanInput, getInput } from '@actions/core';
 
 /**
+ * Factory functions to reduce duplication in ACTION_INPUTS metadata definitions.
+ * These functions create standardized metadata objects for common input patterns.
+ */
+const requiredString = (configKey: keyof Config): ActionInputMetadata => ({
+  configKey,
+  required: true,
+  type: 'string',
+});
+
+const requiredBoolean = (configKey: keyof Config): ActionInputMetadata => ({
+  configKey,
+  required: true,
+  type: 'boolean',
+});
+
+const requiredArray = (configKey: keyof Config): ActionInputMetadata => ({
+  configKey,
+  required: true,
+  type: 'array',
+});
+
+const requiredNumber = (configKey: keyof Config): ActionInputMetadata => ({
+  configKey,
+  required: true,
+  type: 'number',
+});
+
+const optionalArray = (configKey: keyof Config): ActionInputMetadata => ({
+  configKey,
+  required: false,
+  type: 'array',
+});
+
+/**
  * Complete mapping of all GitHub Action inputs to their metadata.
  * This is the single source of truth for input configuration.
  * Note: defaultValue is removed as defaults come from action.yml at runtime
  */
 export const ACTION_INPUTS: Record<string, ActionInputMetadata> = {
-  'major-keywords': {
-    configKey: 'majorKeywords',
-    required: true,
-    type: 'array',
-  },
-  'minor-keywords': {
-    configKey: 'minorKeywords',
-    required: true,
-    type: 'array',
-  },
-  'patch-keywords': {
-    configKey: 'patchKeywords',
-    required: true,
-    type: 'array',
-  },
-  'default-first-tag': {
-    configKey: 'defaultFirstTag',
-    required: true,
-    type: 'string',
-  },
-  'terraform-docs-version': {
-    configKey: 'terraformDocsVersion',
-    required: true,
-    type: 'string',
-  },
-  'delete-legacy-tags': {
-    configKey: 'deleteLegacyTags',
-    required: true,
-    type: 'boolean',
-  },
-  'disable-wiki': {
-    configKey: 'disableWiki',
-    required: true,
-    type: 'boolean',
-  },
-  'wiki-sidebar-changelog-max': {
-    configKey: 'wikiSidebarChangelogMax',
-    required: true,
-    type: 'number',
-  },
-  'disable-branding': {
-    configKey: 'disableBranding',
-    required: true,
-    type: 'boolean',
-  },
-  'module-path-ignore': {
-    configKey: 'modulePathIgnore',
-    required: false,
-    type: 'array',
-  },
-  'module-change-exclude-patterns': {
-    configKey: 'moduleChangeExcludePatterns',
-    required: false,
-    type: 'array',
-  },
-  'module-asset-exclude-patterns': {
-    configKey: 'moduleAssetExcludePatterns',
-    required: false,
-    type: 'array',
-  },
-  'use-ssh-source-format': {
-    configKey: 'useSSHSourceFormat',
-    required: true,
-    type: 'boolean',
-  },
-  github_token: {
-    configKey: 'githubToken',
-    required: true,
-    type: 'string',
-  },
-  'tag-directory-separator': {
-    configKey: 'tagDirectorySeparator',
-    required: true,
-    type: 'string',
-  },
-  'use-version-prefix': {
-    configKey: 'useVersionPrefix',
-    required: true,
-    type: 'boolean',
-  },
+  'major-keywords': requiredArray('majorKeywords'),
+  'minor-keywords': requiredArray('minorKeywords'),
+  'patch-keywords': requiredArray('patchKeywords'),
+  'default-first-tag': requiredString('defaultFirstTag'),
+  'terraform-docs-version': requiredString('terraformDocsVersion'),
+  'delete-legacy-tags': requiredBoolean('deleteLegacyTags'),
+  'disable-wiki': requiredBoolean('disableWiki'),
+  'wiki-sidebar-changelog-max': requiredNumber('wikiSidebarChangelogMax'),
+  'disable-branding': requiredBoolean('disableBranding'),
+  'module-path-ignore': optionalArray('modulePathIgnore'),
+  'module-change-exclude-patterns': optionalArray('moduleChangeExcludePatterns'),
+  'module-asset-exclude-patterns': optionalArray('moduleAssetExcludePatterns'),
+  'use-ssh-source-format': requiredBoolean('useSSHSourceFormat'),
+  github_token: requiredString('githubToken'),
+  'tag-directory-separator': requiredString('tagDirectorySeparator'),
+  'use-version-prefix': requiredBoolean('useVersionPrefix'),
 } as const;
 
 /**
