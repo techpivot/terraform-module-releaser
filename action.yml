@@ -102,6 +102,19 @@ inputs:
       If enabled, all links to source code in generated Wiki documentation will use SSH format instead of HTTPS format.
     required: true
     default: "false"
+  wiki-usage-template:
+    description: A raw, multi-line string to override the default 'Usage' section in the generated wiki. If not provided, a default usage block will be generated.
+    required: false
+    default: |
+      To use this module in your Terraform, refer to the below module example:
+
+      ```hcl
+      module "{{module_name_terraform}}" {
+        source = "git::{{module_source}}?ref={{latest_tag}}"
+
+        # See inputs below for additional required parameters
+      }
+      ```
   github_token:
     description: >
       Required for retrieving pull request metadata, tags, releases, updating PR comments, wiki, and creating 

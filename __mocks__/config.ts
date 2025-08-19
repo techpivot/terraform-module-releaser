@@ -26,6 +26,17 @@ const defaultConfig: Config = {
   moduleAssetExcludePatterns: ['tests/**', 'examples/**'],
   githubToken: 'ghp_test_token_2c6912E7710c838347Ae178B4',
   useSSHSourceFormat: false,
+  wikiUsageTemplate: `
+      To use this module in your Terraform, refer to the below module example:
+
+      \`\`\`hcl
+      module "{{module_name_terraform}}" {
+        source = "git::{{module_source}}?ref={{latest_tag}}"
+
+        # See inputs below for additional required parameters
+      }
+      \`\`\`
+`
 };
 
 /**

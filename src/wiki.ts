@@ -7,6 +7,7 @@ import { join, resolve } from 'node:path';
 import { getTerraformModuleFullReleaseChangelog } from '@/changelog';
 import { config } from '@/config';
 import { context } from '@/context';
+import { render } from '@/templating';
 import { generateTerraformDocs } from '@/terraform-docs';
 import type { TerraformModule } from '@/terraform-module';
 import type { ExecSyncError, WikiStatusResult } from '@/types';
@@ -304,15 +305,18 @@ async function generateWikiTerraformModule(terraformModule: TerraformModule): Pr
   const changelog = getTerraformModuleFullReleaseChangelog(terraformModule);
   const tfDocs = await generateTerraformDocs(terraformModule);
   const moduleSource = getModuleSource(context.repoUrl, config.useSSHSourceFormat);
+
+  const usage = render(config.wikiUsageTemplate, {
+    module_name: terraformModule.name,
+    latest_tag: terraformModule.getLatestTag(),
+    latest_tag_version_number: terraformModule.getLatestTagVersionNumber(),
+    module_source: moduleSource,
+    module_name_terraform: terraformModule.name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase(),
+  });
+
   const content = [
     '# Usage\n',
-    'To use this module in your Terraform, refer to the below module example:\n',
-    '```hcl',
-    `module "${terraformModule.name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()}" {`,
-    `  source = "git::${moduleSource}?ref=${terraformModule.getLatestTag()}"`,
-    '\n  # See inputs below for additional required parameters',
-    '}',
-    '```',
+    usage,
     '\n# Attributes\n',
     '<!-- BEGIN_TF_DOCS -->',
     tfDocs,

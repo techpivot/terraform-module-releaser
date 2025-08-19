@@ -74,6 +74,7 @@ function initializeConfig(): Config {
       moduleChangeExcludePatterns: getArrayInput('module-change-exclude-patterns', false),
       moduleAssetExcludePatterns: getArrayInput('module-asset-exclude-patterns', false),
       useSSHSourceFormat: getBooleanInput('use-ssh-source-format', { required: true }),
+      wikiUsageTemplate: getInput('wiki-usage-template', { required: false }),
     };
 
     // Validate that *.tf is not in excludePatterns

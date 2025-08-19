@@ -257,6 +257,83 @@ describe('wiki', async () => {
         'https://github.com/techpivot/terraform-module-releaser/wiki/aws∕vpc',
       );
     });
+
+    it('should use the default usage block when custom template is not provided', async () => {
+      const files = await generateWikiFiles(terraformModules);
+      for (const file of files) {
+        if (
+          file.endsWith('.md') &&
+          basename(file) !== 'Home.md' &&
+          basename(file) !== '_Sidebar.md' &&
+          basename(file) !== '_Footer.md'
+        ) {
+          const content = readFileSync(file, 'utf8');
+          expect(content).toContain('To use this module in your Terraform, refer to the below module example:');
+        }
+      }
+    });
+
+    it('should use the custom usage template when provided', async () => {
+      const customUsage = 'This is a custom usage template: {{module_name}}';
+      config.set({ wikiUsageTemplate: customUsage });
+      const terraformModule = terraformModules[0];
+      const files = await generateWikiFiles([terraformModule]);
+      for (const file of files) {
+        if (
+          file.endsWith('.md') &&
+          basename(file) !== 'Home.md' &&
+          basename(file) !== '_Sidebar.md' &&
+          basename(file) !== '_Footer.md'
+        ) {
+          const content = readFileSync(file, 'utf8');
+          const moduleName = basename(file, '.md');
+          expect(content).toContain(`# Usage\n\nThis is a custom usage template: ${moduleName}`);
+        }
+      }
+    });
+
+    it('should handle missing variables in the custom usage template', async () => {
+      const customUsage = 'Module: {{module_name}}, Missing: {{missing_variable}}';
+      config.set({ wikiUsageTemplate: customUsage });
+      const terraformModule = terraformModules[0];
+      const files = await generateWikiFiles([terraformModule]);
+      for (const file of files) {
+        if (
+          file.endsWith('.md') &&
+          basename(file) !== 'Home.md' &&
+          basename(file) !== '_Sidebar.md' &&
+          basename(file) !== '_Footer.md'
+        ) {
+          const content = readFileSync(file, 'utf8');
+          const moduleName = basename(file, '.md');
+          expect(content).toContain(`# Usage\n\nModule: ${terraformModule.name}, Missing: {{missing_variable}}`);
+        }
+      }
+    });
+
+    it('should handle all variables in the custom usage template', async () => {
+      const customUsage =
+        'Name: {{module_name}}, Tag: {{latest_tag}}, Version: {{latest_tag_version_number}}, Source: {{module_source}}, TFName: {{module_name_terraform}}';
+      config.set({ wikiUsageTemplate: customUsage });
+      const files = await generateWikiFiles(terraformModules);
+      for (const file of files) {
+        if (
+          file.endsWith('.md') &&
+          basename(file) !== 'Home.md' &&
+          basename(file) !== '_Sidebar.md' &&
+          basename(file) !== '_Footer.md'
+        ) {
+          const content = readFileSync(file, 'utf8');
+          const moduleName = basename(file, '.md');
+          // vpc-endpoint is the only one with a tag in the test setup
+          if (moduleName === 'vpc‒endpoint') {
+            expect(content).toContain(
+              'Name: vpc-endpoint, Tag: vpc-endpoint/v1.0.0, Version: 1.0.0, Source: https://github.com/techpivot/terraform-module-releaser.git, TFName: vpc_endpoint',
+            );
+          }
+        }
+      }
+    });
   });
 
   describe('commitAndPushWikiChanges()', () => {
