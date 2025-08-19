@@ -33,7 +33,7 @@ jobs:
       - name: Run Tests Typescript
         run: npm run test
         env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN_REPO_CI_TESTING }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   sonarqube-scan:
     runs-on: ubuntu-latest
