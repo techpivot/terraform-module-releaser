@@ -1,4 +1,7 @@
 import {
+  VALID_TAG_DIRECTORY_SEPARATORS,
+  VERSION_TAG_REGEX,
+  MODULE_TAG_REGEX,
   BRANDING_COMMENT,
   BRANDING_WIKI,
   GITHUB_ACTIONS_BOT_NAME,
@@ -11,6 +14,18 @@ import {
 import { describe, expect, it } from 'vitest';
 
 describe('utils/constants', () => {
+  it('should have the correct default separators', () => {
+    expect(VALID_TAG_DIRECTORY_SEPARATORS).toStrictEqual(['-', '_', '/', '.']);
+  });
+
+  it('should have the correct version tag regex', () => {
+    expect(VERSION_TAG_REGEX).toStrictEqual(/^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/);
+  });
+
+  it('should have the correct module tag regex', () => {
+    expect(MODULE_TAG_REGEX).toStrictEqual(/^(.+)([-_/.])(v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*))$/);
+  });
+
   it('should have the correct GitHub Actions bot name', () => {
     expect(GITHUB_ACTIONS_BOT_NAME).toBe('GitHub Actions');
   });
