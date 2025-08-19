@@ -8,7 +8,7 @@ describe('utils/metadata', () => {
     it('should contain all expected input configurations', () => {
       const expectedInputs = [
         'major-keywords',
-        'minor-keywords', 
+        'minor-keywords',
         'patch-keywords',
         'default-first-tag',
         'terraform-docs-version',
@@ -31,7 +31,7 @@ describe('utils/metadata', () => {
 
     it('should have correct metadata structure for required string inputs', () => {
       const stringInputs = ['default-first-tag', 'terraform-docs-version', 'github_token', 'tag-directory-separator'];
-      
+
       for (const inputName of stringInputs) {
         const metadata = ACTION_INPUTS[inputName];
         expect(metadata).toEqual({
@@ -45,12 +45,12 @@ describe('utils/metadata', () => {
     it('should have correct metadata structure for required boolean inputs', () => {
       const booleanInputs = [
         'delete-legacy-tags',
-        'disable-wiki', 
+        'disable-wiki',
         'disable-branding',
         'use-ssh-source-format',
         'use-version-prefix',
       ];
-      
+
       for (const inputName of booleanInputs) {
         const metadata = ACTION_INPUTS[inputName];
         expect(metadata).toEqual({
@@ -63,7 +63,7 @@ describe('utils/metadata', () => {
 
     it('should have correct metadata structure for required array inputs', () => {
       const arrayInputs = ['major-keywords', 'minor-keywords', 'patch-keywords'];
-      
+
       for (const inputName of arrayInputs) {
         const metadata = ACTION_INPUTS[inputName];
         expect(metadata).toEqual({
@@ -76,7 +76,7 @@ describe('utils/metadata', () => {
 
     it('should have correct metadata structure for required number inputs', () => {
       const numberInputs = ['wiki-sidebar-changelog-max'];
-      
+
       for (const inputName of numberInputs) {
         const metadata = ACTION_INPUTS[inputName];
         expect(metadata).toEqual({
@@ -93,7 +93,7 @@ describe('utils/metadata', () => {
         'module-change-exclude-patterns',
         'module-asset-exclude-patterns',
       ];
-      
+
       for (const inputName of optionalArrayInputs) {
         const metadata = ACTION_INPUTS[inputName];
         expect(metadata).toEqual({
@@ -119,7 +119,7 @@ describe('utils/metadata', () => {
         'module-change-exclude-patterns': 'moduleChangeExcludePatterns',
         'module-asset-exclude-patterns': 'moduleAssetExcludePatterns',
         'use-ssh-source-format': 'useSSHSourceFormat',
-        'github_token': 'githubToken',
+        github_token: 'githubToken',
         'tag-directory-separator': 'tagDirectorySeparator',
         'use-version-prefix': 'useVersionPrefix',
       };
@@ -137,9 +137,9 @@ describe('utils/metadata', () => {
             configKey: expect.any(String),
             required: expect.any(Boolean),
             type: expect.stringMatching(/^(string|boolean|array|number)$/),
-          })
+          }),
         );
-        
+
         // Ensure type is properly typed
         const validTypes: ActionInputMetadata['type'][] = ['string', 'boolean', 'array', 'number'];
         expect(validTypes).toContain(metadata.type);
@@ -163,7 +163,9 @@ describe('utils/metadata', () => {
         throw errorObject;
       });
 
-      expect(() => createConfigFromInputs()).toThrow(`Failed to process input 'major-keywords': ${String(errorObject)}`);
+      expect(() => createConfigFromInputs()).toThrow(
+        `Failed to process input 'major-keywords': ${String(errorObject)}`,
+      );
     });
 
     it('should process all input types correctly', () => {
@@ -179,7 +181,7 @@ describe('utils/metadata', () => {
           'module-path-ignore': '',
           'module-change-exclude-patterns': '*.md,tests/**',
           'module-asset-exclude-patterns': '*.md,tests/**',
-          'github_token': 'fake-token',
+          github_token: 'fake-token',
           'tag-directory-separator': '/',
           'use-ssh-source-format': 'false',
         };
