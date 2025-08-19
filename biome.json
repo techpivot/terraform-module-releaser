@@ -1,12 +1,15 @@
 {
-  "$schema": "https://biomejs.dev/schemas/1.8.3/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.2.0/schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
     "useIgnoreFile": true
   },
+  "assist": {
+    "enabled": false
+  },
   "files": {
-    "ignore": ["dist", "node_modules"]
+    "includes": ["*.md", "*.ts", "__mocks__/**/*.ts", "__tests__/**/*.ts", "src/**/*.ts", "scripts/**/*.ts"]
   },
   "formatter": {
     "enabled": true,
@@ -23,9 +26,6 @@
         "noUnusedImports": "warn"
       }
     }
-  },
-  "organizeImports": {
-    "enabled": true
   },
   "javascript": {
     "formatter": {

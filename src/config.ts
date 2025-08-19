@@ -107,7 +107,7 @@ export function getConfig(): Config {
 
 // For backward compatibility and existing usage
 export const config: Config = new Proxy({} as Config, {
-  get(target, prop) {
+  get(_target, prop) {
     return getConfig()[prop as keyof Config];
   },
 });

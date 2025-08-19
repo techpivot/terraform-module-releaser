@@ -37,11 +37,11 @@ async function main() {
   process.env['INPUT_MODULE-CHANGE-EXCLUDE-PATTERNS'] = '.gitignore,*.md';
 
   // Initialize
-  const config = getConfig();
-  const context = getContext();
+  const _config = getConfig();
+  const _context = getContext();
 
   // Test with empty tags and releases for now
-  const modules = parseTerraformModules(
+  const _modules = parseTerraformModules(
     [
       {
         message: 'feat: add screenshots for documentation',

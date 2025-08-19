@@ -53,7 +53,7 @@ describe('tags', () => {
       expect(debugCall).toBeDefined(); // Ensure there is a debug call
       const debugMessage = debugCall[0];
       expect(/^Total page requests: \d+$/.test(debugMessage)).toBe(true); // Check if it matches the format
-      expect(Number.parseInt(debugMessage.split(': ')[1])).toBeGreaterThan(1); // Check if number > 1
+      expect(Number.parseInt(debugMessage.split(': ')[1], 10)).toBeGreaterThan(1); // Check if number > 1
 
       // Check the first info call for "Found X tags"
       const infoCall = vi.mocked(info).mock.calls[0]; // Get the first call
@@ -270,7 +270,7 @@ describe('tags', () => {
 
       await expect(deleteTags(tagsToDelete)).rejects.toThrow(
         `Failed to delete repository tag: v1.0.0 Resource not accessible by integration.
-Ensure that the GitHub Actions workflow has the correct permissions to delete tags by ensuring that your workflow YAML file has the following block under \"permissions\":
+Ensure that the GitHub Actions workflow has the correct permissions to delete tags by ensuring that your workflow YAML file has the following block under "permissions":
 
 permissions:
   contents: write`,

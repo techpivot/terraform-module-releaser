@@ -103,7 +103,7 @@ describe('wiki', async () => {
 
     it('should handle unsetting config extraheader and throwing error accordingly', () => {
       const mockExecFileSync = vi.fn(
-        (command: string, args?: readonly string[] | undefined, options?: ExecFileSyncOptions) => {
+        (_command: string, args?: readonly string[] | undefined, _options?: ExecFileSyncOptions) => {
           if (args?.includes('--unset-all') && args.includes('http.https://github.com/.extraheader')) {
             const error = new Error('git config error') as ExecSyncError;
             error.status = 10;
@@ -131,7 +131,7 @@ describe('wiki', async () => {
 
     it('should handle unsetting config extraheader gracefully', () => {
       const mockExecFileSync = vi.fn(
-        (command: string, args?: readonly string[] | undefined, options?: ExecFileSyncOptions) => {
+        (_command: string, args?: readonly string[] | undefined, _options?: ExecFileSyncOptions) => {
           if (args?.includes('--unset-all') && args.includes('http.https://github.com/.extraheader')) {
             const error = new Error('git config error') as ExecSyncError;
             error.status = 5;
@@ -168,7 +168,7 @@ describe('wiki', async () => {
 
       // Reset mocks and configure remote command to return "origin"
       vi.clearAllMocks();
-      vi.mocked(execFileSync).mockImplementation((cmd, args = []) => {
+      vi.mocked(execFileSync).mockImplementation((_cmd, args = []) => {
         if (args[0] === 'remote') {
           return Buffer.from('origin');
         }

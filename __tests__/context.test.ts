@@ -216,7 +216,7 @@ describe('context', () => {
       vi.mocked(startGroup).mockClear();
 
       // Second access should not trigger initialization
-      const prNumber = context.prNumber; // Intentionally access a property with no usage
+      const _prNumber = context.prNumber; // Intentionally access a property with no usage
       expect(startGroup).not.toHaveBeenCalled();
       expect(info).not.toHaveBeenCalled();
     });

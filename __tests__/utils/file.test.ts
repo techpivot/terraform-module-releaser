@@ -619,7 +619,7 @@ describe('utils/file', () => {
       // Create terraform file above workspace (if possible)
       try {
         writeFileSync(terraformFileAbove, 'resource "test" "example" {}');
-      } catch (error) {
+      } catch (_error) {
         // Skip this test if we can't write above tmpDir
         return;
       }
@@ -635,7 +635,7 @@ describe('utils/file', () => {
       // Cleanup
       try {
         rmSync(terraformFileAbove);
-      } catch (error) {
+      } catch (_error) {
         // Ignore cleanup errors
       }
     });

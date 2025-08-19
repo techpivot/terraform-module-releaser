@@ -14,13 +14,13 @@ type MockedFunction<TFunc> = TFunc extends (...args: infer TArgs) => infer TRetu
  * Writes a debug message to the user log.
  * @param message - The debug message to log.
  */
-export const debug: MockedFunction<(message: string) => void> = vi.fn((message: string): void => {});
+export const debug: MockedFunction<(message: string) => void> = vi.fn((_message: string): void => {});
 
 /**
  * Writes an informational message to the log.
  * @param message - The info message to log.
  */
-export const info: MockedFunction<(message: string) => void> = vi.fn((message: string): void => {});
+export const info: MockedFunction<(message: string) => void> = vi.fn((_message: string): void => {});
 
 /**
  * Adds a warning issue with optional annotation properties.
@@ -28,7 +28,7 @@ export const info: MockedFunction<(message: string) => void> = vi.fn((message: s
  * @param properties - Optional properties to add to the annotation.
  */
 export const warning: MockedFunction<(message: string | Error, properties?: AnnotationProperties) => void> = vi.fn(
-  (message: string | Error, properties?: AnnotationProperties): void => {},
+  (_message: string | Error, _properties?: AnnotationProperties): void => {},
 );
 
 /**
@@ -37,7 +37,7 @@ export const warning: MockedFunction<(message: string | Error, properties?: Anno
  * @param properties - Optional properties to add to the annotation.
  */
 export const notice: MockedFunction<(message: string | Error, properties?: AnnotationProperties) => void> = vi.fn(
-  (message: string | Error, properties?: AnnotationProperties): void => {},
+  (_message: string | Error, _properties?: AnnotationProperties): void => {},
 );
 
 /**
@@ -46,7 +46,7 @@ export const notice: MockedFunction<(message: string | Error, properties?: Annot
  * @param properties - Optional properties to add to the annotation.
  */
 export const error: MockedFunction<(message: string | Error, properties?: AnnotationProperties) => void> = vi.fn(
-  (message: string | Error, properties?: AnnotationProperties): void => {},
+  (_message: string | Error, _properties?: AnnotationProperties): void => {},
 );
 
 /**
@@ -55,13 +55,13 @@ export const error: MockedFunction<(message: string | Error, properties?: Annota
  * @param message - The error message or object.
  * @throws An error with the specified message.
  */
-export const setFailed: MockedFunction<(message: string | Error) => void> = vi.fn((message: string | Error) => {});
+export const setFailed: MockedFunction<(message: string | Error) => void> = vi.fn((_message: string | Error) => {});
 
 /**
  * Begins a new output group. Output until the next `endGroup` will be foldable in this group.
  * @param name - The name of the output group.
  */
-export const startGroup: MockedFunction<(name: string) => void> = vi.fn((name: string): void => {});
+export const startGroup: MockedFunction<(name: string) => void> = vi.fn((_name: string): void => {});
 
 /**
  * Ends the current output group.
@@ -109,13 +109,13 @@ export const getMultilineInput: MockedFunction<(name: string, options?: InputOpt
  * Masks a value in the log. When the masked value appears in the log, it is replaced with asterisks.
  * @param secret - Value to mask
  */
-export const setSecret: MockedFunction<(secret: string) => void> = vi.fn((secret: string): void => {});
+export const setSecret: MockedFunction<(secret: string) => void> = vi.fn((_secret: string): void => {});
 
 /**
  * Prepends the given path to the PATH environment variable.
  * @param inputPath - Path to prepend
  */
-export const addPath: MockedFunction<(inputPath: string) => void> = vi.fn((inputPath: string): void => {});
+export const addPath: MockedFunction<(inputPath: string) => void> = vi.fn((_inputPath: string): void => {});
 
 /**
  * Sets env variable for this action and future actions in the job.
@@ -123,14 +123,14 @@ export const addPath: MockedFunction<(inputPath: string) => void> = vi.fn((input
  * @param val - Value of the variable
  */
 export const exportVariable: MockedFunction<(name: string, val: string) => void> = vi.fn(
-  (name: string, val: string): void => {},
+  (_name: string, _val: string): void => {},
 );
 
 /**
  * Enables or disables the echoing of commands into stdout for the rest of the step.
  * @param enabled - True to enable echoing, false to disable
  */
-export const setCommandEcho: MockedFunction<(enabled: boolean) => void> = vi.fn((enabled: boolean): void => {});
+export const setCommandEcho: MockedFunction<(enabled: boolean) => void> = vi.fn((_enabled: boolean): void => {});
 
 /**
  * Begin an output group.
@@ -138,7 +138,7 @@ export const setCommandEcho: MockedFunction<(enabled: boolean) => void> = vi.fn(
  * @param fn - Function to execute within the output group
  */
 export const group: MockedFunction<(name: string, fn: () => Promise<void>) => Promise<void>> = vi.fn(
-  async (name: string, fn: () => Promise<void>): Promise<void> => {
+  async (_name: string, fn: () => Promise<void>): Promise<void> => {
     await fn();
   },
 );
@@ -150,7 +150,7 @@ export const group: MockedFunction<(name: string, fn: () => Promise<void>) => Pr
  * @param value - Value to store. Non-string values will be converted to a string via JSON.stringify
  */
 export const saveState: MockedFunction<(name: string, value: string) => void> = vi.fn(
-  (name: string, value: string): void => {},
+  (_name: string, _value: string): void => {},
 );
 
 /**
@@ -158,7 +158,7 @@ export const saveState: MockedFunction<(name: string, value: string) => void> = 
  * @param name - Name of the state to get
  * @returns string
  */
-export const getState: MockedFunction<(name: string) => string> = vi.fn((name: string): string => '');
+export const getState: MockedFunction<(name: string) => string> = vi.fn((_name: string): string => '');
 
 /**
  * Gets whether Actions Step Debug is on or not
@@ -172,7 +172,7 @@ export const isDebug: MockedFunction<() => boolean> = vi.fn((): boolean => false
  * @returns string
  */
 export const getIDToken: MockedFunction<(audience?: string) => Promise<string>> = vi.fn(
-  async (audience?: string): Promise<string> => '',
+  async (_audience?: string): Promise<string> => '',
 );
 
 /**
@@ -181,7 +181,7 @@ export const getIDToken: MockedFunction<(audience?: string) => Promise<string>> 
  * @param value - Value to store. Non-string values will be converted to a string via JSON.stringify
  */
 export const setOutput: MockedFunction<(name: string, value: string) => void> = vi.fn(
-  (name: string, value: string): void => {},
+  (_name: string, _value: string): void => {},
 );
 
 // Re-export types
