@@ -15,7 +15,6 @@ describe('utils/metadata', () => {
   it('should handle non-Error objects thrown during input processing', () => {
     const errorObject = 'A plain string error';
     vi.mocked(getInput).mockImplementation(() => {
-      // eslint-disable-next-line @typescript-eslint/no-throw-literal
       throw errorObject;
     });
 
