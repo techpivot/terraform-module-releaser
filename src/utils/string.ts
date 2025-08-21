@@ -61,6 +61,7 @@ export function removeLeadingCharacters(input: string, charactersToRemove: strin
  *
  * @param template The template string containing placeholders in the format `{{key}}`.
  * @param variables An object where keys correspond to placeholder names and values are their replacements.
+ *                   If a value is undefined or null, the placeholder will be left unchanged.
  * @returns The rendered string with placeholders replaced.
  *
  * @example
@@ -70,9 +71,18 @@ export function removeLeadingCharacters(input: string, charactersToRemove: strin
  * @example
  * // Returns "Hi, There!"
  * renderTemplate("{{greeting}}, {{name}}!", { greeting: "Hi", name: "There" })
+ *
+ * @example
+ * // Returns "Hello, {{name}}!" (undefined value leaves placeholder unchanged)
+ * renderTemplate("Hello, {{name}}!", { name: undefined })
+ *
+ * @example
+ * // Returns "Hello, {{name}}!" (null value leaves placeholder unchanged)
+ * renderTemplate("Hello, {{name}}!", { name: null })
  */
-export function renderTemplate(template: string, variables: Record<string, string>): string {
+export function renderTemplate(template: string, variables: Record<string, string | undefined | null>): string {
   return template.replace(/\{\{(\w+)\}\}/g, (placeholder, key) => {
-    return key in variables ? variables[key] : placeholder;
+    const value = variables[key];
+    return value !== undefined && value !== null ? value : placeholder;
   });
 }

@@ -176,5 +176,68 @@ describe('utils/string', () => {
       const result = renderTemplate(template, variables);
       expect(result).toBe('Item first and second');
     });
+
+    it('should handle undefined values by leaving placeholders unchanged', () => {
+      const template = 'Hello, {{name}} and {{greeting}}!';
+      const variables = { name: 'World', greeting: undefined };
+      const result = renderTemplate(template, variables);
+      expect(result).toBe('Hello, World and {{greeting}}!');
+    });
+
+    it('should handle all undefined values', () => {
+      const template = '{{greeting}}, {{name}}!';
+      const variables = { greeting: undefined, name: undefined };
+      const result = renderTemplate(template, variables);
+      expect(result).toBe('{{greeting}}, {{name}}!');
+    });
+
+    it('should handle mixed defined and undefined values', () => {
+      const template = 'Module: {{module}}, Version: {{version}}, Author: {{author}}';
+      const variables = { module: 'vpc-endpoint', version: undefined, author: 'TechPivot' };
+      const result = renderTemplate(template, variables);
+      expect(result).toBe('Module: vpc-endpoint, Version: {{version}}, Author: TechPivot');
+    });
+
+    it('should handle empty string vs undefined distinction', () => {
+      const template = 'A{{key1}}B{{key2}}C';
+      const variables = { key1: '', key2: undefined };
+      const result = renderTemplate(template, variables);
+      expect(result).toBe('AB{{key2}}C');
+    });
+
+    it('should handle undefined values in complex templates', () => {
+      const template = 'Path: {{path}}, Command: {{cmd}}, Options: {{opts}}';
+      const variables = { path: '/opt/bin/terraform', cmd: undefined, opts: '--verbose' };
+      const result = renderTemplate(template, variables);
+      expect(result).toBe('Path: /opt/bin/terraform, Command: {{cmd}}, Options: --verbose');
+    });
+
+    it('should handle null values by leaving placeholders unchanged', () => {
+      const template = 'Hello, {{name}} and {{greeting}}!';
+      const variables = { name: 'World', greeting: null };
+      const result = renderTemplate(template, variables);
+      expect(result).toBe('Hello, World and {{greeting}}!');
+    });
+
+    it('should handle all null values', () => {
+      const template = '{{greeting}}, {{name}}!';
+      const variables = { greeting: null, name: null };
+      const result = renderTemplate(template, variables);
+      expect(result).toBe('{{greeting}}, {{name}}!');
+    });
+
+    it('should handle mixed null, undefined, and defined values', () => {
+      const template = 'Module: {{module}}, Version: {{version}}, Author: {{author}}, License: {{license}}';
+      const variables = { module: 'vpc-endpoint', version: null, author: 'TechPivot', license: undefined };
+      const result = renderTemplate(template, variables);
+      expect(result).toBe('Module: vpc-endpoint, Version: {{version}}, Author: TechPivot, License: {{license}}');
+    });
+
+    it('should handle empty string vs null vs undefined distinction', () => {
+      const template = 'A{{key1}}B{{key2}}C{{key3}}D';
+      const variables = { key1: '', key2: null, key3: undefined };
+      const result = renderTemplate(template, variables);
+      expect(result).toBe('AB{{key2}}C{{key3}}D');
+    });
   });
 });

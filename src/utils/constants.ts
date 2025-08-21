@@ -10,7 +10,7 @@
  * - `modules_aws_s3_bucket_v1.0.0` (using '_')
  * - `modules.aws.s3.bucket.v1.0.0` (using '.')
  *
- * The default separator is '/' as defined in action.yml.dddd
+ * The default separator is '/' as defined in action.yml.
  */
 export const VALID_TAG_DIRECTORY_SEPARATORS = ['-', '_', '/', '.'];
 

@@ -14,7 +14,7 @@ import type { Config } from '@/types/config.types';
  * comprehensive mapping of all action inputs, which then drives the automatic
  * config generation process.
  *
- * @see {@link /workspaces/terraform-module-releaser/src/utils/metadata.ts} for usage
+ * @see utils/metadata.ts for usage
  * @see {@link https://docs.github.com/en/actions/reference/metadata-syntax-for-github-actions#inputs} GitHub Actions input reference
  */
 export interface ActionInputMetadata {

@@ -309,8 +309,8 @@ async function generateWikiTerraformModule(terraformModule: TerraformModule): Pr
 
   const usage = renderTemplate(config.wikiUsageTemplate, {
     module_name: terraformModule.name,
-    latest_tag: terraformModule.getLatestTag() ?? '',
-    latest_tag_version_number: terraformModule.getLatestTagVersionNumber() ?? '',
+    latest_tag: terraformModule.getLatestTag(),
+    latest_tag_version_number: terraformModule.getLatestTagVersionNumber(),
     module_source: moduleSource,
     module_name_terraform: terraformModule.name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase(),
   });
