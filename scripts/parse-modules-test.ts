@@ -30,18 +30,21 @@ async function main() {
   process.env['INPUT_DELETE-LEGACY-TAGS'] = 'false';
   process.env['INPUT_DISABLE-WIKI'] = 'true';
   process.env['INPUT_WIKI-SIDEBAR-CHANGELOG-MAX'] = '5';
+  process.env['INPUT_WIKI-USAGE-TEMPLATE'] = 'Wiki usage template';
   process.env['INPUT_DISABLE-BRANDING'] = 'false';
   process.env.INPUT_GITHUB_TOKEN = process.env.GITHUB_TOKEN;
   process.env['INPUT_USE-SSH-SOURCE-FORMAT'] = 'true';
+  process.env['INPUT_TAG-DIRECTORY-SEPARATOR'] = '/';
+  process.env['INPUT_USE-VERSION-PREFIX'] = 'true';
   process.env['INPUT_MODULE-PATH-IGNORE'] = '**/examples/**';
   process.env['INPUT_MODULE-CHANGE-EXCLUDE-PATTERNS'] = '.gitignore,*.md';
 
   // Initialize
-  const config = getConfig();
-  const context = getContext();
+  const _config = getConfig();
+  const _context = getContext();
 
   // Test with empty tags and releases for now
-  const modules = parseTerraformModules(
+  const _modules = parseTerraformModules(
     [
       {
         message: 'feat: add screenshots for documentation',

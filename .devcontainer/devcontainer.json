@@ -26,7 +26,6 @@
         "markdown.extension.list.indentationSize": "adaptive",
         "markdown.extension.italic.indicator": "_",
         "markdown.extension.orderedList.marker": "one",
-        "remote.SSH.enableAgentForwarding": true,
         "[json]": {
           "editor.defaultFormatter": "biomejs.biome"
         },
@@ -53,6 +52,6 @@
   },
   "features": {
     "ghcr.io/devcontainers/features/github-cli:1": {},
-    "ghcr.io/devcontainers-contrib/features/prettier:1": {}
+    "ghcr.io/devcontainers-community/npm-features/prettier": {}
   }
 }

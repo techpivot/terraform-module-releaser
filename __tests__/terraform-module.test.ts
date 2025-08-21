@@ -33,6 +33,7 @@ describe('TerraformModule', () => {
       defaultFirstTag: 'v0.1.0',
       moduleChangeExcludePatterns: [],
       modulePathIgnore: [],
+      useVersionPrefix: true,
     });
   });
 
@@ -57,7 +58,7 @@ describe('TerraformModule', () => {
       mkdirSync(specialDir, { recursive: true });
 
       const module = new TerraformModule(specialDir);
-      expect(module.name).toBe('complex_module-name-with/chars');
+      expect(module.name).toBe('complex_module-name.with/chars');
     });
 
     it('should handle nested directory paths', () => {
@@ -245,6 +246,38 @@ describe('TerraformModule', () => {
       expect(module.getLatestTagVersion()).toBeNull();
     });
 
+    it('should handle tags with different separators in getLatestTagVersion', () => {
+      // Test with different separators to ensure regex works correctly
+      module.setTags(['tf-modules/test-module/v1.0.0']);
+      expect(module.getLatestTagVersion()).toBe('v1.0.0');
+
+      // Test with hyphen separator
+      module.setTags(['tf-modules-test-module-v2.0.0']);
+      expect(module.getLatestTagVersion()).toBe('v2.0.0');
+
+      // Test with underscore separator
+      module.setTags(['tf-modules_test_module_v3.0.0']);
+      expect(module.getLatestTagVersion()).toBe('v3.0.0');
+
+      // Test with dot separator
+      module.setTags(['tf-modules.test.module.v4.0.0']);
+      expect(module.getLatestTagVersion()).toBe('v4.0.0');
+
+      // Test without v prefix
+      module.setTags(['tf-modules/test-module/5.0.0']);
+      expect(module.getLatestTagVersion()).toBe('5.0.0');
+    });
+
+    it('should return null when latest tag does not match MODULE_TAG_REGEX', () => {
+      // Mock getLatestTag to return an invalid format that won't match the regex
+      vi.spyOn(module, 'getLatestTag').mockReturnValue('invalid-tag-format');
+
+      expect(module.getLatestTagVersion()).toBeNull();
+
+      // Restore the original method
+      vi.restoreAllMocks();
+    });
+
     it('should handle complex version sorting', () => {
       const tags = [
         'tf-modules/test-module/v1.2.10',
@@ -275,14 +308,14 @@ describe('TerraformModule', () => {
     it('should throw error for tag with no slash (invalid format)', () => {
       const tags = ['v1.2.3'];
       expect(() => module.setTags(tags)).toThrow(
-        "Invalid tag format: 'v1.2.3'. Expected format: 'tf-modules/test-module/v#.#.#' or 'tf-modules/test-module/#.#.#' for module.",
+        "Invalid tag format: 'v1.2.3'. Expected format: 'tf-modules/test-module[separator]v#.#.#' or 'tf-modules/test-module[separator]#.#.#'.",
       );
     });
 
     it('should throw error for tag with incorrect module name', () => {
       const tags = ['foo/bar/v9.8.7'];
       expect(() => module.setTags(tags)).toThrow(
-        "Invalid tag format: 'foo/bar/v9.8.7'. Expected format: 'tf-modules/test-module/v#.#.#' or 'tf-modules/test-module/#.#.#' for module.",
+        "Invalid tag format: 'foo/bar/v9.8.7'. Expected format: 'tf-modules/test-module[separator]v#.#.#' or 'tf-modules/test-module[separator]#.#.#'.",
       );
     });
 
@@ -304,7 +337,6 @@ describe('TerraformModule', () => {
       expect(module.tags[1]).toBe('tf-modules/test-module/1.2.3');
     });
 
-    // Add tests for extractVersionFromTag
     describe('extractVersionFromTag()', () => {
       let module: TerraformModule;
 
@@ -473,7 +505,7 @@ describe('TerraformModule', () => {
       ];
 
       expect(() => module.setReleases(releases)).toThrow(
-        "Invalid tag format: 'tf-modules/test-module/v1.0'. Expected format: 'tf-modules/test-module/v#.#.#' or 'tf-modules/test-module/#.#.#' for module.",
+        "Invalid tag format: 'tf-modules/test-module/v1.0'. Expected format: 'tf-modules/test-module[separator]v#.#.#' or 'tf-modules/test-module[separator]#.#.#'.",
       );
     });
 
@@ -494,7 +526,7 @@ describe('TerraformModule', () => {
       ];
 
       expect(() => module.setReleases(releases)).toThrow(
-        "Invalid tag format: 'tf-modules/test-module/vbeta.1.0'. Expected format: 'tf-modules/test-module/v#.#.#' or 'tf-modules/test-module/#.#.#' for module.",
+        "Invalid tag format: 'tf-modules/test-module/vbeta.1.0'. Expected format: 'tf-modules/test-module[separator]v#.#.#' or 'tf-modules/test-module[separator]#.#.#'.",
       );
     });
 
@@ -788,6 +820,38 @@ describe('TerraformModule', () => {
           "Invalid version format: 'invalid-format'. Expected v#.#.# or #.#.# format.",
         );
       });
+
+      it('should respect useVersionPrefix setting when true (with v prefix)', () => {
+        // Set useVersionPrefix to true
+        config.set({
+          useVersionPrefix: true,
+        });
+
+        module.setTags(['tf-modules/test-module/v1.2.3']);
+        module.addCommit({
+          sha: 'abc123',
+          message: 'fix: bug fix',
+          files: ['main.tf'],
+        });
+
+        expect(module.getReleaseTagVersion()).toBe('v1.2.4');
+      });
+
+      it('should respect useVersionPrefix setting when false (without v prefix)', () => {
+        // Set useVersionPrefix to false
+        config.set({
+          useVersionPrefix: false,
+        });
+
+        module.setTags(['tf-modules/test-module/v1.2.3']);
+        module.addCommit({
+          sha: 'abc123',
+          message: 'fix: bug fix',
+          files: ['main.tf'],
+        });
+
+        expect(module.getReleaseTagVersion()).toBe('1.2.4'); // No 'v' prefix
+      });
     });
 
     describe('getReleaseTag()', () => {
@@ -885,44 +949,222 @@ describe('TerraformModule', () => {
 
   describe('static utilities', () => {
     describe('getTerraformModuleNameFromRelativePath()', () => {
-      it('should generate valid module names from paths', () => {
-        expect(TerraformModule.getTerraformModuleNameFromRelativePath('tf-modules/simple-module')).toBe(
-          'tf-modules/simple-module',
-        );
-
-        expect(TerraformModule.getTerraformModuleNameFromRelativePath('complex_module-name.with/chars')).toBe(
-          'complex_module-name-with/chars',
-        );
-
-        expect(TerraformModule.getTerraformModuleNameFromRelativePath('/leading/slash/')).toBe('leading/slash');
-
-        expect(TerraformModule.getTerraformModuleNameFromRelativePath('module...with...dots')).toBe('module-with-dots');
+      beforeEach(() => {
+        // Reset to default config for each test
+        config.set({
+          tagDirectorySeparator: '/',
+          majorKeywords: ['BREAKING CHANGE', 'major change'],
+          minorKeywords: ['feat:', 'feature:'],
+          defaultFirstTag: 'v0.1.0',
+          moduleChangeExcludePatterns: [],
+          modulePathIgnore: [],
+          useVersionPrefix: true,
+        });
       });
 
-      it('should handle leading and trailing slashes', () => {
-        expect(TerraformModule.getTerraformModuleNameFromRelativePath('/test-module/')).toBe('test-module');
+      describe('with different tag directory separators', () => {
+        it('should use forward slash separator by default', () => {
+          config.set({ tagDirectorySeparator: '/' });
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('tf-modules/simple-module')).toBe(
+            'tf-modules/simple-module',
+          );
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('complex\\module\\windows\\path')).toBe(
+            'complex/module/windows/path',
+          );
+        });
+
+        it('should use hyphen separator when configured', () => {
+          config.set({ tagDirectorySeparator: '-' });
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('tf-modules/simple-module')).toBe(
+            'tf-modules-simple-module',
+          );
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('complex\\module\\windows\\path')).toBe(
+            'complex-module-windows-path',
+          );
+        });
+
+        it('should use underscore separator when configured', () => {
+          config.set({ tagDirectorySeparator: '_' });
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('tf-modules/simple-module')).toBe(
+            'tf-modules_simple-module',
+          );
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('complex\\module\\windows\\path')).toBe(
+            'complex_module_windows_path',
+          );
+        });
+
+        it('should use dot separator when configured', () => {
+          config.set({ tagDirectorySeparator: '.' });
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('tf-modules/simple-module')).toBe(
+            'tf-modules.simple-module',
+          );
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('complex\\module\\windows\\path')).toBe(
+            'complex.module.windows.path',
+          );
+        });
       });
 
-      it('should handle multiple consecutive slashes', () => {
-        expect(TerraformModule.getTerraformModuleNameFromRelativePath('tf-modules//vpc//endpoint')).toBe(
-          'tf-modules/vpc/endpoint',
-        );
+      describe('character normalization and cleanup', () => {
+        beforeEach(() => {
+          config.set({ tagDirectorySeparator: '/' });
+        });
+
+        it('should normalize Windows backslashes to configured separator', () => {
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('windows\\path\\module')).toBe(
+            'windows/path/module',
+          );
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('mixed\\and/path\\separators')).toBe(
+            'mixed/and/path/separators',
+          );
+        });
+
+        it('should convert to lowercase', () => {
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('Test-Module')).toBe('test-module');
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('UPPERCASE/MODULE')).toBe('uppercase/module');
+        });
+
+        it('should replace invalid characters with hyphens', () => {
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('test@module!#$')).toBe('test-module');
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('module%with&special*chars')).toBe(
+            'module-with-special-chars',
+          );
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('test module with spaces')).toBe(
+            'test-module-with-spaces',
+          );
+        });
+
+        it('should normalize consecutive special characters', () => {
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('module...with...dots')).toBe(
+            'module.with.dots',
+          );
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('tf-modules//vpc//endpoint')).toBe(
+            'tf-modules/vpc/endpoint',
+          );
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('module---with---hyphens')).toBe(
+            'module-with-hyphens',
+          );
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('module___with___underscores')).toBe(
+            'module_with_underscores',
+          );
+        });
+
+        it('should remove leading and trailing special characters', () => {
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('/leading/slash/')).toBe('leading/slash');
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('...leading.dots')).toBe('leading.dots');
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('trailing.dots...')).toBe('trailing.dots');
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('---leading-hyphens')).toBe('leading-hyphens');
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('trailing-hyphens---')).toBe(
+            'trailing-hyphens',
+          );
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('___leading_underscores')).toBe(
+            'leading_underscores',
+          );
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('trailing_underscores___')).toBe(
+            'trailing_underscores',
+          );
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('/.-_mixed_leading')).toBe('mixed_leading');
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('mixed_trailing_.-/')).toBe('mixed_trailing');
+        });
+
+        it('should handle edge cases', () => {
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('  whitespace  ')).toBe('whitespace');
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('/test-module/')).toBe('test-module');
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('single')).toBe('single');
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('a')).toBe('a');
+        });
       });
 
-      it('should handle whitespace', () => {
-        expect(TerraformModule.getTerraformModuleNameFromRelativePath('  test module  ')).toBe('test-module');
+      describe('comprehensive scenarios with different separators', () => {
+        const testScenarios = [
+          {
+            separator: '/',
+            input: 'tf-modules/aws/vpc-endpoint',
+            expected: 'tf-modules/aws/vpc-endpoint',
+          },
+          {
+            separator: '-',
+            input: 'tf-modules/aws/vpc-endpoint',
+            expected: 'tf-modules-aws-vpc-endpoint',
+          },
+          {
+            separator: '_',
+            input: 'tf-modules/aws/vpc-endpoint',
+            expected: 'tf-modules_aws_vpc-endpoint',
+          },
+          {
+            separator: '.',
+            input: 'tf-modules/aws/vpc-endpoint',
+            expected: 'tf-modules.aws.vpc-endpoint',
+          },
+        ];
+
+        for (const { separator, input, expected } of testScenarios) {
+          it(`should handle complex paths with ${separator} separator`, () => {
+            config.set({ tagDirectorySeparator: separator });
+            expect(TerraformModule.getTerraformModuleNameFromRelativePath(input)).toBe(expected);
+          });
+        }
+
+        const complexTestScenarios = [
+          {
+            separator: '/',
+            input: '//tf-modules//aws..vpc--endpoint__',
+            expected: 'tf-modules/aws.vpc-endpoint',
+          },
+          {
+            separator: '-',
+            input: '//tf-modules//aws..vpc--endpoint__',
+            expected: 'tf-modules-aws.vpc-endpoint',
+          },
+          {
+            separator: '_',
+            input: '//tf-modules//aws..vpc--endpoint__',
+            expected: 'tf-modules_aws.vpc-endpoint',
+          },
+          {
+            separator: '.',
+            input: '//tf-modules//aws..vpc--endpoint__',
+            expected: 'tf-modules.aws.vpc-endpoint',
+          },
+        ];
+
+        for (const { separator, input, expected } of complexTestScenarios) {
+          it(`should handle complex normalization with ${separator} separator`, () => {
+            config.set({ tagDirectorySeparator: separator });
+            expect(TerraformModule.getTerraformModuleNameFromRelativePath(input)).toBe(expected);
+          });
+        }
       });
 
-      it('should convert to lowercase', () => {
-        expect(TerraformModule.getTerraformModuleNameFromRelativePath('Test-Module')).toBe('test-module');
-      });
+      describe('real-world terraform module scenarios', () => {
+        it('should handle typical terraform module paths', () => {
+          config.set({ tagDirectorySeparator: '/' });
 
-      it('should clean up invalid characters', () => {
-        expect(TerraformModule.getTerraformModuleNameFromRelativePath('test@module!#$')).toBe('test-module');
-      });
+          const testCases = [
+            { input: 'modules/networking/vpc', expected: 'modules/networking/vpc' },
+            { input: 'modules/compute/ec2-instance', expected: 'modules/compute/ec2-instance' },
+            { input: 'modules/storage/s3-bucket', expected: 'modules/storage/s3-bucket' },
+            { input: 'terraform/aws/rds_cluster', expected: 'terraform/aws/rds_cluster' },
+            { input: 'tf-modules/azure/storage.account', expected: 'tf-modules/azure/storage.account' },
+          ];
 
-      it('should remove trailing special characters', () => {
-        expect(TerraformModule.getTerraformModuleNameFromRelativePath('test-module-.')).toBe('test-module');
+          for (const { input, expected } of testCases) {
+            expect(TerraformModule.getTerraformModuleNameFromRelativePath(input)).toBe(expected);
+          }
+        });
+
+        it('should handle module paths with various separators configured', () => {
+          const separatorTests = [
+            { separator: '-', input: 'modules/aws/vpc', expected: 'modules-aws-vpc' },
+            { separator: '_', input: 'modules/aws/vpc', expected: 'modules_aws_vpc' },
+            { separator: '.', input: 'modules/aws/vpc', expected: 'modules.aws.vpc' },
+          ];
+
+          for (const { separator, input, expected } of separatorTests) {
+            config.set({ tagDirectorySeparator: separator });
+            expect(TerraformModule.getTerraformModuleNameFromRelativePath(input)).toBe(expected);
+          }
+        });
       });
     });
 
@@ -954,16 +1196,47 @@ describe('TerraformModule', () => {
           TerraformModule.isModuleAssociatedWithTag('tf-modules/vpc-endpoint', 'tf-modules/vpc-endpoint/v1.0.0'),
         ).toBe(true);
         expect(
-          TerraformModule.isModuleAssociatedWithTag('tf-modules/vpc-endpoint', 'tf-modules/vpc-endpoint/1.0.0'),
+          TerraformModule.isModuleAssociatedWithTag('tf-modules/vpc-endpoint', 'tf-modules-vpc-endpoint-v1.0.0'),
         ).toBe(true);
-        expect(TerraformModule.isModuleAssociatedWithTag('tf-modules/vpc-endpoint', 'tf-modules/vpc/v1.0.0')).toBe(
-          false,
-        );
+        expect(
+          TerraformModule.isModuleAssociatedWithTag('tf-modules/vpc-endpoint', 'tf-modules_vpc_endpoint_v1.0.0'),
+        ).toBe(true);
+        expect(
+          TerraformModule.isModuleAssociatedWithTag('tf-modules/vpc-endpoint', 'tf-modules.vpc.endpoint.v1.0.0'),
+        ).toBe(true);
       });
 
       it('should be case sensitive', () => {
         expect(TerraformModule.isModuleAssociatedWithTag('my-module', 'My-Module/v1.0.0')).toBe(false);
         expect(TerraformModule.isModuleAssociatedWithTag('my-module', 'my-module/V1.0.0')).toBe(false);
+      });
+
+      it('should handle tags with different directory separators', () => {
+        // Test that tags with different separators are properly associated after normalization
+        expect(TerraformModule.isModuleAssociatedWithTag('my-module', 'my-module/v1.0.0')).toBe(true);
+        expect(TerraformModule.isModuleAssociatedWithTag('my-module', 'my-module-v1.0.0')).toBe(true);
+        expect(TerraformModule.isModuleAssociatedWithTag('my-module', 'my-module_v1.0.0')).toBe(true);
+        expect(TerraformModule.isModuleAssociatedWithTag('my-module', 'my-module.v1.0.0')).toBe(true);
+
+        // Test complex module names with separators
+        expect(
+          TerraformModule.isModuleAssociatedWithTag('tf-modules/vpc-endpoint', 'tf-modules/vpc-endpoint/v1.0.0'),
+        ).toBe(true);
+        expect(
+          TerraformModule.isModuleAssociatedWithTag('tf-modules/vpc-endpoint', 'tf-modules-vpc-endpoint-v1.0.0'),
+        ).toBe(true);
+        expect(
+          TerraformModule.isModuleAssociatedWithTag('tf-modules/vpc-endpoint', 'tf-modules_vpc_endpoint_v1.0.0'),
+        ).toBe(true);
+        expect(
+          TerraformModule.isModuleAssociatedWithTag('tf-modules/vpc-endpoint', 'tf-modules.vpc.endpoint.v1.0.0'),
+        ).toBe(true);
+
+        // Test that wrong associations still return false
+        expect(TerraformModule.isModuleAssociatedWithTag('my-module', 'other-module/v1.0.0')).toBe(false);
+        expect(TerraformModule.isModuleAssociatedWithTag('my-module', 'other-module-v1.0.0')).toBe(false);
+        expect(TerraformModule.isModuleAssociatedWithTag('my-module', 'other-module_v1.0.0')).toBe(false);
+        expect(TerraformModule.isModuleAssociatedWithTag('my-module', 'other-module.v1.0.0')).toBe(false);
       });
     });
 
@@ -1146,6 +1419,45 @@ describe('TerraformModule', () => {
         const tagsToDelete = TerraformModule.getTagsToDelete(allTags, terraformModules);
 
         expect(tagsToDelete).toEqual(['apple-module/v1.0.0', 'banana-module/v1.0.0', 'zebra-module/v1.0.0']);
+      });
+
+      it('should handle tags with different directory separators for same module', () => {
+        // Scenario: Module was originally using / separator, but tags exist with various separators
+        const allTags = [
+          'test-module/v1.0.0', // Forward slash (current format)
+          'test-module-v1.1.0', // Hyphen (old format)
+          'test-module_v1.2.0', // Underscore (old format)
+          'test-module.v1.3.0', // Dot (old format)
+          'other-module/v1.0.0', // Different module that no longer exists
+        ];
+        const existingModules = [createMockTerraformModule({ directory: join(tmpDir, 'test-module') })];
+
+        const tagsToDelete = TerraformModule.getTagsToDelete(allTags, existingModules);
+
+        // Only tags for non-existent modules should be deleted
+        // All test-module tags should be kept regardless of separator
+        expect(tagsToDelete).toEqual(['other-module/v1.0.0']);
+      });
+
+      it('should handle complex module names with various separators', () => {
+        const allTags = [
+          'tf-modules/vpc-endpoint/v1.0.0', // Current format
+          'tf-modules-vpc-endpoint-v1.1.0', // All hyphens
+          'tf-modules_vpc_endpoint_v1.2.0', // All underscores
+          'tf-modules.vpc.endpoint.v1.3.0', // All dots
+          'tf-modules/vpc-endpoint-v1.4.0', // Mixed separators
+          'removed-module/v1.0.0', // Module that no longer exists
+        ];
+        const existingModules = [
+          createMockTerraformModule({
+            directory: join(tmpDir, 'tf-modules', 'vpc-endpoint'),
+          }),
+        ];
+
+        const tagsToDelete = TerraformModule.getTagsToDelete(allTags, existingModules);
+
+        // Only tags for non-existent modules should be deleted
+        expect(tagsToDelete).toEqual(['removed-module/v1.0.0']);
       });
     });
 
@@ -1535,6 +1847,102 @@ describe('TerraformModule', () => {
 
         expect(releasesToDelete).toHaveLength(2);
         expect(releasesToDelete.map((r) => r.tagName)).toEqual(['legacy-module/v1.0.0', 'legacy-module/v1.2.0']);
+      });
+
+      it('should handle releases with different directory separators for same module', () => {
+        // Scenario: Module was originally using / separator, but releases exist with various separators
+        const allReleases: GitHubRelease[] = [
+          {
+            id: 1,
+            title: 'test-module/v1.0.0',
+            tagName: 'test-module/v1.0.0',
+            body: 'Forward slash format',
+          },
+          {
+            id: 2,
+            title: 'test-module-v1.1.0',
+            tagName: 'test-module-v1.1.0',
+            body: 'Hyphen format',
+          },
+          {
+            id: 3,
+            title: 'test-module_v1.2.0',
+            tagName: 'test-module_v1.2.0',
+            body: 'Underscore format',
+          },
+          {
+            id: 4,
+            title: 'test-module.v1.3.0',
+            tagName: 'test-module.v1.3.0',
+            body: 'Dot format',
+          },
+          {
+            id: 5,
+            title: 'other-module/v1.0.0',
+            tagName: 'other-module/v1.0.0',
+            body: 'Different module that no longer exists',
+          },
+        ];
+        const existingModules = [createMockTerraformModule({ directory: join(tmpDir, 'test-module') })];
+
+        const releasesToDelete = TerraformModule.getReleasesToDelete(allReleases, existingModules);
+
+        // Only releases for non-existent modules should be deleted
+        // All test-module releases should be kept regardless of separator
+        expect(releasesToDelete).toHaveLength(1);
+        expect(releasesToDelete[0].tagName).toBe('other-module/v1.0.0');
+      });
+
+      it('should handle complex module names with various separators in releases', () => {
+        const allReleases: GitHubRelease[] = [
+          {
+            id: 1,
+            title: 'tf-modules/vpc-endpoint/v1.0.0',
+            tagName: 'tf-modules/vpc-endpoint/v1.0.0',
+            body: 'Current format',
+          },
+          {
+            id: 2,
+            title: 'tf-modules-vpc-endpoint-v1.1.0',
+            tagName: 'tf-modules-vpc-endpoint-v1.1.0',
+            body: 'All hyphens',
+          },
+          {
+            id: 3,
+            title: 'tf-modules_vpc_endpoint_v1.2.0',
+            tagName: 'tf-modules_vpc_endpoint_v1.2.0',
+            body: 'All underscores',
+          },
+          {
+            id: 4,
+            title: 'tf-modules.vpc.endpoint.v1.3.0',
+            tagName: 'tf-modules.vpc.endpoint.v1.3.0',
+            body: 'All dots',
+          },
+          {
+            id: 5,
+            title: 'tf-modules/vpc-endpoint-v1.4.0',
+            tagName: 'tf-modules/vpc-endpoint-v1.4.0',
+            body: 'Mixed separators',
+          },
+          {
+            id: 6,
+            title: 'removed-module/v1.0.0',
+            tagName: 'removed-module/v1.0.0',
+            body: 'Module that no longer exists',
+          },
+        ];
+        const existingModules = [
+          createMockTerraformModule({
+            directory: join(tmpDir, 'tf-modules', 'vpc-endpoint'),
+          }),
+        ];
+
+        const releasesToDelete = TerraformModule.getReleasesToDelete(allReleases, existingModules);
+
+        // Only releases for non-existent modules should be deleted
+        expect(releasesToDelete).toHaveLength(1);
+        expect(releasesToDelete[0].tagName).toBe('removed-module/v1.0.0');
       });
     });
 

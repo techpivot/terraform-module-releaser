@@ -251,7 +251,7 @@ describe('terraform-docs', async () => {
       for (const file of cleanupFiles) {
         try {
           unlinkSync(file);
-        } catch (err) {
+        } catch (_err) {
           // Ignore cleanup errors
         }
       }

@@ -51,6 +51,19 @@ inputs:
       Adjust this value to control the visibility of changelog entries in the module sidebar.
     required: true
     default: "5"
+  wiki-usage-template:
+    description: A raw, multi-line string to override the default 'Usage' section in the generated wiki. If not provided, a default usage block will be generated.
+    required: false
+    default: |
+      To use this module in your Terraform, refer to the below module example:
+
+      ```hcl
+      module "{{module_name_terraform}}" {
+        source = "{{module_source}}?ref={{latest_tag}}"
+
+        # See inputs below for additional required parameters
+      }
+      ```
   disable-branding:
     description: >
       Flag to control whether the small branding link should be disabled or not in the
@@ -102,19 +115,6 @@ inputs:
       If enabled, all links to source code in generated Wiki documentation will use SSH format instead of HTTPS format.
     required: true
     default: "false"
-  wiki-usage-template:
-    description: A raw, multi-line string to override the default 'Usage' section in the generated wiki. If not provided, a default usage block will be generated.
-    required: false
-    default: |
-      To use this module in your Terraform, refer to the below module example:
-
-      ```hcl
-      module "{{module_name_terraform}}" {
-        source = "git::{{module_source}}?ref={{latest_tag}}"
-
-        # See inputs below for additional required parameters
-      }
-      ```
   github_token:
     description: >
       Required for retrieving pull request metadata, tags, releases, updating PR comments, wiki, and creating 
@@ -122,6 +122,27 @@ inputs:
       specific requirements.
     required: true
     default: ${{ github.token }}
+  tag-directory-separator:
+    description: >
+      Character used to separate directory path components in Git tags. This separator is used to convert 
+      module directory paths into tag names (e.g., 'modules/aws/s3-bucket' becomes 'modules-aws-s3-bucket-v1.0.0' 
+      when using '-'). Must be a single character from: /, -, _, or .
+
+      Examples with different separators:
+      - "/" (default): modules/aws/s3-bucket/v1.0.0
+      - "-": modules-aws-s3-bucket-v1.0.0  
+      - "_": modules_aws_s3_bucket_v1.0.0
+      - ".": modules.aws.s3.bucket.v1.0.0
+    required: true
+    default: /
+  use-version-prefix:
+    description: >
+      Whether to include the 'v' prefix on version tags (e.g., v1.2.3 vs 1.2.3). When enabled, all new version 
+      tags will include the 'v' prefix. For initial releases, this setting takes precedence over any 'v' prefix 
+      specified in the default-first-tag - if use-version-prefix is false and default-first-tag contains 'v', 
+      the 'v' will be automatically removed to ensure consistency.
+    required: true
+    default: "true"
 
 outputs:
   changed-module-names:

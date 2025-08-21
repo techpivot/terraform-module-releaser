@@ -4,7 +4,7 @@ import { createPullRequestMock } from '@/mocks/context';
 import { info, startGroup } from '@actions/core';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Mock node:fs. (Note: Appears we can't spy on functions via node:fs)
+// Mock node:fs required for reading pull-request file information (Note: Appears we can't spy on functions via node:fs)
 vi.mock('node:fs', async () => {
   const original = await vi.importActual('node:fs');
   return {
@@ -46,7 +46,9 @@ describe('context', () => {
   describe('environment variable validation', () => {
     for (const envVar of requiredEnvVars) {
       it(`should throw an error if ${envVar} is not set`, () => {
+        // Set the specific environment variable to undefined, but keep others set
         vi.stubEnv(envVar, undefined);
+
         expect(() => getContext()).toThrow(
           new Error(
             `The ${envVar} environment variable is missing or invalid. This variable should be automatically set by GitHub for each workflow run. If this variable is missing or not correctly set, it indicates a serious issue with the GitHub Actions environment, potentially affecting the execution of subsequent steps in the workflow. Please review the workflow setup or consult the documentation for proper configuration.`,
@@ -182,9 +184,6 @@ describe('context', () => {
       const customApiUrl = 'https://github.example.com/api/v3';
       vi.stubEnv('GITHUB_API_URL', customApiUrl);
 
-      // Clear context to force reinitialization
-      clearContextForTesting();
-
       const context = getContext();
 
       // Check that the context was created (which means the custom API URL was used)
@@ -195,9 +194,6 @@ describe('context', () => {
     it('should use default GITHUB_API_URL when not provided', () => {
       // Ensure GITHUB_API_URL is not set to test the default fallback
       vi.stubEnv('GITHUB_API_URL', undefined);
-
-      // Clear context to force reinitialization
-      clearContextForTesting();
 
       const context = getContext();
 
@@ -220,7 +216,7 @@ describe('context', () => {
       vi.mocked(startGroup).mockClear();
 
       // Second access should not trigger initialization
-      const prNumber = context.prNumber; // Intentionally access a property with no usage
+      const _prNumber = context.prNumber; // Intentionally access a property with no usage
       expect(startGroup).not.toHaveBeenCalled();
       expect(info).not.toHaveBeenCalled();
     });

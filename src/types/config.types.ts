@@ -26,7 +26,8 @@ export interface Config {
 
   /**
    * Default first tag for initializing repositories without existing tags.
-   * This serves as the fallback tag when no tags are found in the repository.
+   * This serves as the fallback tag when no tags are found in the repository. Note this may
+   * be in the format of `v#.#.#` or `#.#.#` (e.g., `v1.0.0` or `1.0.0`).
    */
   defaultFirstTag: string;
 
@@ -53,6 +54,17 @@ export interface Config {
   wikiSidebarChangelogMax: number;
 
   /**
+   * A raw, multi-line string to override the default 'Usage' section in the generated wiki.
+   * If not provided, a default usage block will be generated. Supports template variables like:
+   * - {{module_name}}: The name of the module
+   * - {{latest_tag}}: The latest git tag for the module
+   * - {{latest_tag_version_number}}: The version number from the latest tag
+   * - {{module_source}}: The source URL for the module
+   * - {{module_name_terraform}}: The module name formatted for Terraform usage (alphanumeric and underscores only)
+   */
+  wikiUsageTemplate: string;
+
+  /**
    * Flag to control whether the small branding link should be disabled or not in the
    * pull request (PR) comments. When branding is enabled, a link to the action's
    * repository is added at the bottom of comments. Setting this flag to `true`
@@ -66,6 +78,13 @@ export interface Config {
    * This token is required to make secure API requests to GitHub during the action.
    */
   githubToken: string;
+
+  /**
+   * A list of module paths to completely ignore when processing. Any module whose path matches
+   * one of these patterns will not be processed for versioning, release, or documentation.
+   * Paths are relative to the workspace directory.
+   */
+  modulePathIgnore: string[];
 
   /**
    * A comma-separated list of file patterns to exclude from triggering version changes in Terraform modules.
@@ -97,15 +116,38 @@ export interface Config {
   useSSHSourceFormat: boolean;
 
   /**
-   * A list of module paths to completely ignore when processing. Any module whose path matches
-   * one of these patterns will not be processed for versioning, release, or documentation.
-   * Paths are relative to the workspace directory.
+   * The character used to separate directory path components when creating Git tags from module paths.
+   * This separator is applied throughout the entire directory structure conversion process, not just
+   * between the module name and version.
+   *
+   * Must be a single character and one of: -, _, /, .
+   *
+   * When converting a module path like 'modules/aws/s3-bucket' to a Git tag, this separator determines
+   * how directory separators (/) are replaced in the tag name portion:
+   *
+   * Examples with module path 'modules/aws/s3-bucket' and version 'v1.0.0':
+   * - "/" (default): modules/aws/s3-bucket/v1.0.0
+   * - "-": modules-aws-s3-bucket-v1.0.0
+   * - "_": modules_aws_s3_bucket_v1.0.0
+   * - ".": modules.aws.s3-bucket.v1.0.0
+   *
+   * This setting affects tag creation, tag parsing, and tag association logic throughout the system.
    */
-  modulePathIgnore: string[];
+  tagDirectorySeparator: string;
 
   /**
-   * A raw, multi-line string to override the default 'Usage' section in the generated wiki.
-   * If not provided, a default usage block will be generated.
+   * Whether to include the "v" prefix in version tags.
+   *
+   * When true (default), version tags will include the "v" prefix:
+   * - Example: module/v1.2.3
+   *
+   * When false, version tags will not include the "v" prefix:
+   * - Example: module/1.2.3
+   *
+   * For initial releases, this setting takes precedence over any "v" prefix specified in the
+   * defaultFirstTag configuration. If useVersionPrefix is false and defaultFirstTag contains
+   * a "v" prefix (e.g., "v1.0.0"), the "v" will be automatically removed to ensure consistency
+   * with the useVersionPrefix setting (resulting in "1.0.0").
    */
-  wikiUsageTemplate?: string;
+  useVersionPrefix: boolean;
 }

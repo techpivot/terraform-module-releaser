@@ -165,7 +165,7 @@ export const getContext = (): Context => {
 
 // For backward compatibility and existing usage
 export const context: Context = new Proxy({} as Context, {
-  get(target, prop) {
+  get(_target, prop) {
     return getContext()[prop as keyof Context];
   },
 });

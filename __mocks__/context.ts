@@ -59,7 +59,7 @@ let currentContext: Context = { ...defaultContext };
  * Context proxy handler
  */
 const contextProxyHandler: ProxyHandler<ContextWithMethods> = {
-  set(target: ContextWithMethods, key: string, value: unknown): boolean {
+  set(_target: ContextWithMethods, key: string, value: unknown): boolean {
     if (!validContextKeys.includes(key as ValidContextKey)) {
       throw new Error(`Invalid context key: ${key}`);
     }
@@ -68,7 +68,7 @@ const contextProxyHandler: ProxyHandler<ContextWithMethods> = {
     const expectedValue = defaultContext[typedKey];
 
     if (typeof expectedValue === typeof value || (typedKey === 'octokit' && typeof value === 'object')) {
-      // @ts-ignore - we know the key is valid and value type is correct
+      // @ts-expect-error - we know the key is valid and value type is correct
       currentContext[typedKey] = value;
       return true;
     }
@@ -76,7 +76,7 @@ const contextProxyHandler: ProxyHandler<ContextWithMethods> = {
     throw new TypeError(`Invalid value type for context key: ${key}`);
   },
 
-  get(target: ContextWithMethods, prop: string | symbol): unknown {
+  get(_target: ContextWithMethods, prop: string | symbol): unknown {
     if (typeof prop === 'string') {
       if (prop === 'set') {
         return (overrides: Partial<Context> = {}) => {

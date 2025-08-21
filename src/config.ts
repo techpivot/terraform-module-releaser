@@ -1,29 +1,10 @@
 import type { Config } from '@/types';
-import { endGroup, getBooleanInput, getInput, info, startGroup } from '@actions/core';
+import { VALID_TAG_DIRECTORY_SEPARATORS, VERSION_TAG_REGEX } from '@/utils/constants';
+import { createConfigFromInputs } from '@/utils/metadata';
+import { endGroup, info, startGroup } from '@actions/core';
 
 // Keep configInstance private to this module
 let configInstance: Config | null = null;
-
-/**
- * Retrieves an array of values from a comma-separated input string. Duplicates any empty values
- * are removed and each value is trimmed of whitespace.
- *
- * @param inputName - Name of the input to retrieve.
- * @param required - Whether the input is required.
- * @returns An array of trimmed and filtered values.
- */
-const getArrayInput = (inputName: string, required: boolean): string[] => {
-  const input = getInput(inputName, { required });
-
-  return Array.from(
-    new Set(
-      input
-        .split(',')
-        .map((item: string) => item.trim())
-        .filter(Boolean),
-    ),
-  );
-};
 
 /**
  * Clears the cached config instance during testing.
@@ -58,24 +39,8 @@ function initializeConfig(): Config {
   try {
     startGroup('Initializing Config');
 
-    // Initialize the config instance
-    configInstance = {
-      majorKeywords: getArrayInput('major-keywords', true),
-      minorKeywords: getArrayInput('minor-keywords', true),
-      patchKeywords: getArrayInput('patch-keywords', true),
-      defaultFirstTag: getInput('default-first-tag', { required: true }),
-      terraformDocsVersion: getInput('terraform-docs-version', { required: true }),
-      deleteLegacyTags: getBooleanInput('delete-legacy-tags', { required: true }),
-      disableWiki: getBooleanInput('disable-wiki', { required: true }),
-      wikiSidebarChangelogMax: Number.parseInt(getInput('wiki-sidebar-changelog-max', { required: true }), 10),
-      disableBranding: getBooleanInput('disable-branding', { required: true }),
-      githubToken: getInput('github_token', { required: true }),
-      modulePathIgnore: getArrayInput('module-path-ignore', false),
-      moduleChangeExcludePatterns: getArrayInput('module-change-exclude-patterns', false),
-      moduleAssetExcludePatterns: getArrayInput('module-asset-exclude-patterns', false),
-      useSSHSourceFormat: getBooleanInput('use-ssh-source-format', { required: true }),
-      wikiUsageTemplate: getInput('wiki-usage-template', { required: false }),
-    };
+    // Initialize the config instance using action metadata
+    configInstance = createConfigFromInputs();
 
     // Validate that *.tf is not in excludePatterns
     if (configInstance.moduleChangeExcludePatterns.some((pattern) => pattern === '*.tf')) {
@@ -85,11 +50,33 @@ function initializeConfig(): Config {
       throw new TypeError('Asset exclude patterns cannot contain "*.tf" as these files are required');
     }
 
-    // Validate that we have a valid first tag. For now, must be v#.#.#
-
     // Validate WikiSidebar Changelog Max is a number and greater than zero
     if (configInstance.wikiSidebarChangelogMax < 1 || Number.isNaN(configInstance.wikiSidebarChangelogMax)) {
       throw new TypeError('Wiki Sidebar Change Log Max must be an integer greater than or equal to one');
+    }
+
+    // Validate tag directory separator
+    if (configInstance.tagDirectorySeparator.length !== 1) {
+      throw new TypeError('Tag directory separator must be exactly one character');
+    }
+    if (!VALID_TAG_DIRECTORY_SEPARATORS.includes(configInstance.tagDirectorySeparator)) {
+      throw new TypeError(
+        `Tag directory separator must be one of: ${VALID_TAG_DIRECTORY_SEPARATORS.join(', ')}. Got: '${
+          configInstance.tagDirectorySeparator
+        }'`,
+      );
+    }
+    // Validate default first tag format
+    if (!VERSION_TAG_REGEX.test(configInstance.defaultFirstTag)) {
+      throw new TypeError(
+        `Default first tag must be in format v#.#.# or #.#.# (e.g., v1.0.0 or 1.0.0). Got: '${configInstance.defaultFirstTag}'`,
+      );
+    }
+
+    // If we aren't using "v" prefix but the default first tag was specified with a "v"
+    // prefix, then strip this to enforce.
+    if (!configInstance.useVersionPrefix && configInstance.defaultFirstTag.startsWith('v')) {
+      configInstance.defaultFirstTag = configInstance.defaultFirstTag.substring(1);
     }
 
     info(`Major Keywords: ${configInstance.majorKeywords.join(', ')}`);
@@ -104,6 +91,8 @@ function initializeConfig(): Config {
     info(`Module Change Exclude Patterns: ${configInstance.moduleChangeExcludePatterns.join(', ')}`);
     info(`Module Asset Exclude Patterns: ${configInstance.moduleAssetExcludePatterns.join(', ')}`);
     info(`Use SSH Source Format: ${configInstance.useSSHSourceFormat}`);
+    info(`Tag Directory Separator: ${configInstance.tagDirectorySeparator}`);
+    info(`Use Version Prefix: ${configInstance.useVersionPrefix}`);
 
     return configInstance;
   } finally {
@@ -118,7 +107,7 @@ export function getConfig(): Config {
 
 // For backward compatibility and existing usage
 export const config: Config = new Proxy({} as Config, {
-  get(target, prop) {
+  get(_target, prop) {
     return getConfig()[prop as keyof Config];
   },
 });

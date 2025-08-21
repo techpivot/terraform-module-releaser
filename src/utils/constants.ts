@@ -1,4 +1,20 @@
 /**
+ * Defines valid separator characters for tag directory paths in Terraform module releases.
+ *
+ * When finding a Terraform module like `modules/aws/s3-bucket`, the release tag would typically be
+ * `modules/aws/s3-bucket/v1.0.0`. This constant allows for alternative separators in the tag path.
+ *
+ * For example, with these separators, the following tag formats would all be valid:
+ * - `modules/aws/s3-bucket/v1.0.0` (using '/')
+ * - `modules-aws-s3-bucket-v1.0.0` (using '-')
+ * - `modules_aws_s3_bucket_v1.0.0` (using '_')
+ * - `modules.aws.s3.bucket.v1.0.0` (using '.')
+ *
+ * The default separator is '/' as defined in action.yml.
+ */
+export const VALID_TAG_DIRECTORY_SEPARATORS = ['-', '_', '/', '.'];
+
+/**
  * Regular expression that matches version tags in the format of semantic versioning.
  * This regex validates version strings like "1.2.3" or "v1.2.3" and includes capture groups.
  * Group 1: Major version number
@@ -8,13 +24,32 @@
  * It allows either a numerical portion (e.g., "1.2.3") or one prefixed with 'v' (e.g., "v1.2.3"),
  * which is the proper semver default format.
  */
-export const VERSION_TAG_REGEX = /^v?(\d+)\.(\d+)\.(\d+)$/;
+export const VERSION_TAG_REGEX = /^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 
 /**
  * Matches a Terraform module tag in the format: module-name/v1.2.3 or module-name/1.2.3
  * Group 1: module name, Group 2: version (with or without 'v' prefix)
  */
-export const MODULE_TAG_REGEX = /^(.+)\/(v?\d+\.\d+\.\d+)$/;
+/**
+ * Regular expression pattern to match a module tag in the format: prefix + separator + version
+ * Where:
+ * - Group 1: prefix (e.g., "module", "feature")
+ * - Group 2: separator (one of: '-', '_', '/', '.')
+ * - Group 3: Complete version string with optional 'v' prefix (e.g., "v1.0.0", "1.0.0")
+ * - Group 4: Major version number
+ * - Group 5: Minor version number
+ * - Group 6: Patch version number
+ *
+ * Example matches:
+ * - "module-v1.0.0" → ["module-v1.0.0", "module", "-", "v1.0.0", "1", "0", "0"]
+ * - "feature_2.3.4" → ["feature_2.3.4", "feature", "_", "2.3.4", "2", "3", "4"]
+ * - "service/v0.1.0" → ["service/v0.1.0", "service", "/", "v0.1.0", "0", "1", "0"]
+ *
+ * Note: In the character class [-_/.], only the dot (.) requires escaping to match literal periods.
+ * The hyphen (-) doesn't need escaping when at the start/end of the character class.
+ * The forward slash (/) doesn't need escaping in JavaScript regex character classes.
+ */
+export const MODULE_TAG_REGEX = /^(.+)([-_/.])(v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*))$/;
 
 /**
  * Release type constants for semantic versioning

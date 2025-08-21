@@ -1,4 +1,7 @@
+import { setupTestInputs } from '@/tests/helpers/inputs';
 import type { Config } from '@/types';
+import type { ActionInputMetadata } from '@/types';
+import { ACTION_INPUTS, createConfigFromInputs } from '@/utils/metadata';
 
 /**
  * Configuration interface with added utility methods
@@ -9,55 +12,24 @@ interface ConfigWithMethods extends Config {
 }
 
 /**
- * Default configuration object.
+ * Load default configuration from action.yml.
  */
-const defaultConfig: Config = {
-  majorKeywords: ['BREAKING CHANGE', '!', 'MAJOR CHANGE'],
-  minorKeywords: ['feat', 'feature'],
-  patchKeywords: ['fix', 'chore'],
-  defaultFirstTag: 'v1.0.0',
-  terraformDocsVersion: 'v0.20.0',
-  deleteLegacyTags: false,
-  disableWiki: false,
-  wikiSidebarChangelogMax: 10,
-  disableBranding: false,
-  modulePathIgnore: ['tf-modules/kms/examples/complete'],
-  moduleChangeExcludePatterns: ['.gitignore', '*.md'],
-  moduleAssetExcludePatterns: ['tests/**', 'examples/**'],
-  githubToken: 'ghp_test_token_2c6912E7710c838347Ae178B4',
-  useSSHSourceFormat: false,
-  wikiUsageTemplate: `
-      To use this module in your Terraform, refer to the below module example:
-
-      \`\`\`hcl
-      module "{{module_name_terraform}}" {
-        source = "git::{{module_source}}?ref={{latest_tag}}"
-
-        # See inputs below for additional required parameters
-      }
-      \`\`\`
-`
+const createDefaultConfig = (): Config => {
+  setupTestInputs();
+  return createConfigFromInputs();
 };
 
 /**
- * Valid configuration keys.
+ * Default configuration object loaded from action.yml.
  */
-const validConfigKeys = [
-  'majorKeywords',
-  'minorKeywords',
-  'patchKeywords',
-  'defaultFirstTag',
-  'terraformDocsVersion',
-  'deleteLegacyTags',
-  'disableWiki',
-  'wikiSidebarChangelogMax',
-  'disableBranding',
-  'modulePathIgnore',
-  'moduleChangeExcludePatterns',
-  'moduleAssetExcludePatterns',
-  'githubToken',
-  'useSSHSourceFormat',
-] as const;
+const defaultConfig: Config = createDefaultConfig();
+
+/**
+ * Valid configuration keys derived from ACTION_INPUTS.
+ */
+const validConfigKeys = (Object.values(ACTION_INPUTS) as ActionInputMetadata[]).map(
+  (metadata) => metadata.configKey,
+) as Array<keyof Config>;
 
 type ValidConfigKey = (typeof validConfigKeys)[number];
 
@@ -68,7 +40,7 @@ let currentConfig: Config = { ...defaultConfig };
  * Config proxy handler.
  */
 const configProxyHandler: ProxyHandler<ConfigWithMethods> = {
-  set(target: ConfigWithMethods, key: string, value: unknown): boolean {
+  set(_target: ConfigWithMethods, key: string, value: unknown): boolean {
     if (!validConfigKeys.includes(key as ValidConfigKey)) {
       throw new Error(`Invalid config key: ${key}`);
     }
@@ -77,7 +49,7 @@ const configProxyHandler: ProxyHandler<ConfigWithMethods> = {
     const expectedValue = defaultConfig[typedKey];
 
     if ((Array.isArray(expectedValue) && Array.isArray(value)) || typeof expectedValue === typeof value) {
-      // @ts-ignore - we know that the key is valid and that the value is correct
+      // @ts-expect-error - we know that the key is valid and that the value is correct
       currentConfig[typedKey] = value as typeof expectedValue;
       return true;
     }
@@ -85,7 +57,7 @@ const configProxyHandler: ProxyHandler<ConfigWithMethods> = {
     throw new TypeError(`Invalid value type for config key: ${key}`);
   },
 
-  get(target: ConfigWithMethods, prop: string | symbol): unknown {
+  get(_target: ConfigWithMethods, prop: string | symbol): unknown {
     if (typeof prop === 'string') {
       if (prop === 'set') {
         return (overrides: Partial<Config> = {}) => {

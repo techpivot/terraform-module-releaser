@@ -2,8 +2,14 @@ import { relative } from 'node:path';
 import { config } from '@/config';
 import { context } from '@/context';
 import type { CommitDetails, GitHubRelease, ReleaseReason, ReleaseType } from '@/types';
-import { MODULE_TAG_REGEX, RELEASE_REASON, RELEASE_TYPE, VERSION_TAG_REGEX } from '@/utils/constants';
-import { removeTrailingCharacters } from '@/utils/string';
+import {
+  MODULE_TAG_REGEX,
+  RELEASE_REASON,
+  RELEASE_TYPE,
+  VALID_TAG_DIRECTORY_SEPARATORS,
+  VERSION_TAG_REGEX,
+} from '@/utils/constants';
+import { removeLeadingCharacters, removeTrailingCharacters } from '@/utils/string';
 import { endGroup, info, startGroup } from '@actions/core';
 
 /**
@@ -213,11 +219,14 @@ export class TerraformModule {
    * @returns {string | null} The version string including any prefixes (e.g., 'v1.2.3' or '1.2.3'), or null if no tags exist.
    */
   public getLatestTagVersion(): string | null {
-    if (this.tags.length === 0) {
+    const latestTag = this.getLatestTag();
+    if (latestTag === null) {
       return null;
     }
 
-    return this.tags[0].replace(`${this.name}/`, '');
+    const match = MODULE_TAG_REGEX.exec(latestTag);
+
+    return match ? match[3] : null;
   }
 
   /**
@@ -452,8 +461,7 @@ export class TerraformModule {
       semver[2]++;
     }
 
-    // Hard coding "v" for now. Potentially fixing in the future.
-    return `v${semver.join('.')}`;
+    return `${config.useVersionPrefix ? 'v' : ''}${semver.join('.')}`;
   }
 
   /**
@@ -476,41 +484,49 @@ export class TerraformModule {
       return null;
     }
 
-    return `${this.name}/${releaseTagVersion}`;
+    return `${this.name}${config.tagDirectorySeparator}${releaseTagVersion}`;
   }
 
   //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   // Helper
   //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
   /**
-   * Safely extracts the numerical version string from a tag, avoiding regex vulnerabilities.
-   * Handles tags in format: moduleName/vX.Y.Z or moduleName/X.Y.Z
-   * Also validates that tag format matches expected pattern and returns only the numerical part.
+   * Extracts and validates the version string from a Terraform module tag.
    *
-   * @param {string} tag - The tag string to extract version from
-   * @returns {string} The numerical version string (e.g., "1.2.3")
-   * @throws {Error} If the tag does not match the required format
+   * Uses the MODULE_TAG_REGEX to validate the tag format and extract version components.
+   * This method leverages the static validation logic to ensure consistent tag processing
+   * across different separator formats (/, -, _, .).
+   *
+   * @param {string} tag - The tag string to extract version from (e.g., "module/v1.2.3", "module-v1.2.3")
+   * @returns {string} The numerical version string without prefix (e.g., "1.2.3")
+   * @throws {Error} If the tag does not match the required format or is not associated with this module
    */
   private extractVersionFromTag(tag: string): string {
-    // Validate tag format - must start with module name followed by slash
-    if (!tag.startsWith(`${this.name}/`)) {
+    // Use the static validation method to ensure the tag is associated with this module
+    if (!TerraformModule.isModuleAssociatedWithTag(this.name, tag)) {
       throw new Error(
-        `Invalid tag format: '${tag}'. Expected format: '${this.name}/v#.#.#' or '${this.name}/#.#.#' for module.`,
+        `Invalid tag format: '${tag}'. Expected format: '${this.name}[separator]v#.#.#' or '${this.name}[separator]#.#.#'.`,
       );
     }
 
-    // Extract everything after the last slash
-    const versionPart = tag.substring(tag.lastIndexOf('/') + 1);
-
-    // Validate that the version part matches the expected format
-    if (!VERSION_TAG_REGEX.test(versionPart)) {
+    // Parse the tag using MODULE_TAG_REGEX to extract version components
+    // Note: This will never be null since TerraformModule.isModuleAssociatedWithTag already checks for this;
+    // however, for typing, we'll just recheck.
+    const match = MODULE_TAG_REGEX.exec(tag);
+    /* v8 ignore next 5 */
+    if (!match) {
       throw new Error(
-        `Invalid tag format: '${tag}'. Expected format: '${this.name}/v#.#.#' or '${this.name}/#.#.#' for module.`,
+        `Invalid tag format: '${tag}'. Expected format: '${this.name}[separator]v#.#.#' or '${this.name}[separator]#.#.#'.`,
       );
     }
 
-    // Return only the numerical part, stripping the 'v' prefix if present
-    return versionPart.startsWith('v') ? versionPart.substring(1) : versionPart;
+    // Extract the numerical version components (groups 4, 5, 6 are major.minor.patch)
+    const major = match[4];
+    const minor = match[5];
+    const patch = match[6];
+
+    return `${major}.${minor}.${patch}`;
   }
 
   /**
@@ -614,50 +630,68 @@ export class TerraformModule {
    *
    * The function transforms the directory path by:
    * - Trimming whitespace
-   * - Replacing invalid characters with hyphens
-   * - Normalizing slashes
-   * - Removing leading/trailing slashes
-   * - Handling consecutive dots and hyphens
-   * - Removing any remaining whitespace
    * - Converting to lowercase (for consistency)
-   * - Removing trailing dots, hyphens, and underscores
+   * - Normalizing path separators (both backslashes and forward slashes) to the configured tag directory separator
+   * - Replacing invalid characters with hyphens (preserving only alphanumeric, "/", ".", "-", "_")
+   * - Normalizing consecutive special characters ("/", ".", "-", "_") to single instances
+   * - Removing leading/trailing special characters ("/", ".", "-", "_") using safe string operations
    *
    * @param {string} terraformDirectory - The relative directory path from which to generate the module name.
    * @returns {string} A valid Terraform module name based on the provided directory path.
    */
   public static getTerraformModuleNameFromRelativePath(terraformDirectory: string): string {
-    const cleanedDirectory = terraformDirectory
+    let name = terraformDirectory
       .trim()
-      .replace(/[^a-zA-Z0-9/_-]+/g, '-')
-      .replace(/\/{2,}/g, '/')
-      .replace(/\/\.+/g, '/')
-      .replace(/(^\/|\/$)/g, '')
-      .replace(/\.\.+/g, '.')
-      .replace(/--+/g, '-')
-      .replace(/\s+/g, '')
-      .toLowerCase();
-    return removeTrailingCharacters(cleanedDirectory, ['.', '-', '_']);
+      .toLowerCase()
+      .replace(/[/\\]/g, config.tagDirectorySeparator) // Normalize backslashes and forward slashes to configured separator
+      .replace(/[^a-zA-Z0-9/._-]+/g, '-') // Replace invalid characters with hyphens (preserve alphanumeric, /, ., _, -)
+      .replace(/[/._-]{2,}/g, (match) => match[0]); // Normalize consecutive special characters to single instances
+
+    // Remove leading/trailing special characters safely without regex backtracking
+    name = removeLeadingCharacters(name, VALID_TAG_DIRECTORY_SEPARATORS);
+    name = removeTrailingCharacters(name, VALID_TAG_DIRECTORY_SEPARATORS);
+
+    return name;
   }
 
   /**
    * Static utility to check if a tag is associated with a given module name.
-   * Supports both versioned tags ({moduleName}/v#.#.#) and non-versioned tags ({moduleName}/#.#.#).
+   * Supports multiple directory separators and handles cases where tagging schemes
+   * may have changed over time (e.g., from 'module-name/v1.0.0' to 'module-name-v1.1.0').
    *
-   * @param {string} moduleName - The Terraform module name
+   * @param {string} moduleName - The Terraform module name (assumed to be cleaned)
    * @param {string} tag - The tag to check
    * @returns {boolean} True if the tag belongs to the module and has valid version format
    */
   public static isModuleAssociatedWithTag(moduleName: string, tag: string): boolean {
-    // Check if tag starts with exactly the module name followed by a slash
-    if (!tag.startsWith(`${moduleName}/`)) {
+    // Use the existing MODULE_TAG_REGEX to parse the tag and extract module name + version
+    const match = MODULE_TAG_REGEX.exec(tag);
+    if (!match) {
+      // The tag doesn't match the expected "module-name/version" format
       return false;
     }
 
-    // Extract the version part after the module name and slash
-    const versionPart = tag.substring(moduleName.length + 1);
+    // Extract the module name part from the tag (group 1)
+    const moduleNameFromTag = match[1];
 
-    // Check if version part matches either v#.#.# or #.#.# format
-    return VERSION_TAG_REGEX.test(versionPart);
+    // Define a consistent separator to normalize module names
+    const NORMALIZE_SEPARATOR = '|';
+
+    // Normalize both the input moduleName and the extracted module name from the tag.
+    // This allows for comparison even if the tagging scheme changed over time
+    // (e.g., from 'my/module/v1.0.0' to 'my-module-v1.1.0').
+    const normalizeName = (name: string): string => {
+      // Replace all valid tag directory separators with a consistent separator
+      // This handles cases where different separators were used in different tags
+      let normalized = name;
+      for (const separator of VALID_TAG_DIRECTORY_SEPARATORS) {
+        normalized = normalized.replaceAll(separator, NORMALIZE_SEPARATOR);
+      }
+      return normalized;
+    };
+
+    // Compare the normalized names to determine if they match
+    return normalizeName(moduleName) === normalizeName(moduleNameFromTag);
   }
 
   /**
@@ -696,8 +730,9 @@ export class TerraformModule {
    * Determines an array of Terraform tags that need to be deleted.
    *
    * Identifies tags that belong to modules no longer present in the current
-   * module list by filtering tags that match the pattern {moduleName}/vX.Y.Z
-   * where the module name is not in the current modules.
+   * module list by checking if any current module is associated with each tag.
+   * This approach leverages the robust tag association logic that handles
+   * different separator schemes over time.
    *
    * @param {string[]} allTags - A list of all tags associated with the modules.
    * @param {TerraformModule[]} terraformModules - An array of Terraform modules.
@@ -706,16 +741,12 @@ export class TerraformModule {
   public static getTagsToDelete(allTags: string[], terraformModules: TerraformModule[]): string[] {
     startGroup('Finding all Terraform tags that should be deleted');
 
-    // Get module names from current terraformModules (these exist in source)
-    const moduleNamesFromModules = new Set(terraformModules.map((module) => module.name));
-
-    // Filter tags that belong to modules no longer in the current module list
+    // Filter tags that are not associated with any current module
     const tagsToRemove = allTags
       .filter((tag) => {
-        // Extract the Terraform module name from tag by removing the version suffix
-        const match = MODULE_TAG_REGEX.exec(tag);
-        const moduleName = match ? match[1] : tag;
-        return !moduleNamesFromModules.has(moduleName);
+        // Check if ANY current module is associated with this tag
+        // This handles cases where tagging schemes changed over time
+        return !terraformModules.some((module) => TerraformModule.isModuleAssociatedWithTag(module.name, tag));
       })
       .sort((a, b) => a.localeCompare(b));
 
@@ -731,8 +762,9 @@ export class TerraformModule {
    * Determines an array of Terraform releases that need to be deleted.
    *
    * Identifies releases that belong to modules no longer present in the current
-   * module list by filtering releases that match the pattern {moduleName}/vX.Y.Z
-   * where the module name is not in the current modules.
+   * module list by checking if any current module is associated with each release tag.
+   * This approach leverages the robust tag association logic that handles
+   * different separator schemes over time.
    *
    * @param {GitHubRelease[]} allReleases - A list of all releases associated with the modules.
    * @param {TerraformModule[]} terraformModules - An array of Terraform modules.
@@ -749,16 +781,14 @@ export class TerraformModule {
   ): GitHubRelease[] {
     startGroup('Finding all Terraform releases that should be deleted');
 
-    // Get module names from current terraformModules (these exist in source)
-    const moduleNamesFromModules = new Set(terraformModules.map((module) => module.name));
-
-    // Filter releases that belong to modules no longer in the current module list
+    // Filter releases that are not associated with any current module
     const releasesToRemove = allReleases
       .filter((release) => {
-        // Extract module name from versioned release tag
-        const match = MODULE_TAG_REGEX.exec(release.tagName);
-        const moduleName = match ? match[1] : release.tagName;
-        return !moduleNamesFromModules.has(moduleName);
+        // Check if ANY current module is associated with this release tag
+        // This handles cases where tagging schemes changed over time
+        return !terraformModules.some((module) =>
+          TerraformModule.isModuleAssociatedWithTag(module.name, release.tagName),
+        );
       })
       .sort((a, b) => a.tagName.localeCompare(b.tagName));
 

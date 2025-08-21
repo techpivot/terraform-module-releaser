@@ -10,9 +10,9 @@ on:
     types: [opened, synchronize, reopened]
 
 jobs:
-  tests:
+  Tests:
     runs-on: ubuntu-latest
-    name: Test
+    name: TypeScript Tests
     permissions:
       contents: read
     steps:
@@ -33,9 +33,10 @@ jobs:
       - name: Run Tests Typescript
         run: npm run test
         env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN_REPO_CI_TESTING }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # Note: SonarQube requires the results from tests to get the coverage report
       - name: SonarQube Scan
-        uses: SonarSource/sonarqube-scan-action@v5
+        uses: SonarSource/sonarqube-scan-action@2500896589ef8f7247069a56136f8dc177c27ccf # v5
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

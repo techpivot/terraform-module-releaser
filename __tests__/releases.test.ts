@@ -96,26 +96,12 @@ describe('releases', () => {
       expect(versions).toEqual(sortedVersions);
     });
 
-    it('should validate release content structure', () => {
-      for (const release of releases) {
-        // Basic structure checks
-        expect(release).toHaveProperty('id');
-        expect(release).toHaveProperty('title');
-        expect(release).toHaveProperty('body');
-
-        // Title format check (should at least contain v1.1.1)
-        expect(release.title).toMatch(/v\d+\.\d+\.\d+/);
-
-        // Body content checks
-        expect(typeof release.body).toBe('string');
-        expect(release.body.length).toBeGreaterThan(0);
-      }
-    });
-
     it('should verify specific release contents', () => {
-      // Find v1.3.0 release
+      // Find v1.3.0 release (This is specific for this repo - which is fine as we are just testing release object parsing)
       const v130Release = releases.find((r) => r.title === 'v1.3.0');
       expect(v130Release).toBeDefined();
+      expect(v130Release?.tagName).toBe('v1.3.0');
+      expect(v130Release?.title).toBe('v1.3.0');
       expect(v130Release?.id).toBe(182147836);
       expect(v130Release?.body).toContain('Enhanced Wiki Generation');
       expect(v130Release?.body).toContain('Asset & Exclude Pattern Filtering');

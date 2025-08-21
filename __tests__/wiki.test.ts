@@ -103,7 +103,7 @@ describe('wiki', async () => {
 
     it('should handle unsetting config extraheader and throwing error accordingly', () => {
       const mockExecFileSync = vi.fn(
-        (command: string, args?: readonly string[] | undefined, options?: ExecFileSyncOptions) => {
+        (_command: string, args?: readonly string[] | undefined, _options?: ExecFileSyncOptions) => {
           if (args?.includes('--unset-all') && args.includes('http.https://github.com/.extraheader')) {
             const error = new Error('git config error') as ExecSyncError;
             error.status = 10;
@@ -131,7 +131,7 @@ describe('wiki', async () => {
 
     it('should handle unsetting config extraheader gracefully', () => {
       const mockExecFileSync = vi.fn(
-        (command: string, args?: readonly string[] | undefined, options?: ExecFileSyncOptions) => {
+        (_command: string, args?: readonly string[] | undefined, _options?: ExecFileSyncOptions) => {
           if (args?.includes('--unset-all') && args.includes('http.https://github.com/.extraheader')) {
             const error = new Error('git config error') as ExecSyncError;
             error.status = 5;
@@ -168,7 +168,7 @@ describe('wiki', async () => {
 
       // Reset mocks and configure remote command to return "origin"
       vi.clearAllMocks();
-      vi.mocked(execFileSync).mockImplementation((cmd, args = []) => {
+      vi.mocked(execFileSync).mockImplementation((_cmd, args = []) => {
         if (args[0] === 'remote') {
           return Buffer.from('origin');
         }
@@ -305,7 +305,6 @@ describe('wiki', async () => {
           basename(file) !== '_Footer.md'
         ) {
           const content = readFileSync(file, 'utf8');
-          const moduleName = basename(file, '.md');
           expect(content).toContain(`# Usage\n\nModule: ${terraformModule.name}, Missing: {{missing_variable}}`);
         }
       }
@@ -314,7 +313,7 @@ describe('wiki', async () => {
     it('should handle all variables in the custom usage template', async () => {
       const customUsage =
         'Name: {{module_name}}, Tag: {{latest_tag}}, Version: {{latest_tag_version_number}}, Source: {{module_source}}, TFName: {{module_name_terraform}}';
-      config.set({ wikiUsageTemplate: customUsage });
+      config.set({ useSSHSourceFormat: true, wikiUsageTemplate: customUsage });
       const files = await generateWikiFiles(terraformModules);
       for (const file of files) {
         if (
@@ -328,7 +327,7 @@ describe('wiki', async () => {
           // vpc-endpoint is the only one with a tag in the test setup
           if (moduleName === 'vpc‒endpoint') {
             expect(content).toContain(
-              'Name: vpc-endpoint, Tag: vpc-endpoint/v1.0.0, Version: 1.0.0, Source: https://github.com/techpivot/terraform-module-releaser.git, TFName: vpc_endpoint',
+              'Name: vpc-endpoint, Tag: vpc-endpoint/v1.0.0, Version: 1.0.0, Source: git::ssh://git@github.com/techpivot/terraform-module-releaser.git, TFName: vpc_endpoint',
             );
           }
         }
