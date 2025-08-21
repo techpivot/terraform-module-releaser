@@ -207,14 +207,12 @@ configuring the following optional input parameters as needed.
 
 - **`module-path-ignore`**: Completely ignores specified module paths. Any module whose path matches any pattern in this
   list will not be processed at all by the action. This is useful for:
-
   - Excluding example modules (e.g., `**/examples/**`)
   - Skipping test modules (e.g., `**/test/**`)
   - Ignoring documentation-focused modules (e.g., `**/docs/**`)
   - Excluding entire directories or paths that contain Terraform files but shouldn't be versioned as modules
 
   **Important pattern matching notes:**
-
   - Patterns are relative to the workspace directory (no leading slash)
   - A pattern like `dir/**` will match files and directories INSIDE `dir` but NOT the `dir` directory itself
   - To match both a directory and its contents, you need both patterns: `dir,dir/**`
@@ -230,7 +228,6 @@ configuring the following optional input parameters as needed.
   a new module release.
 
   **Key details:**
-
   - Patterns are relative to each **module directory**, not the workspace root
   - Uses `matchBase: true` for pattern matching, so `*.md` will match any Markdown file in any subdirectory
   - Applied only after a module is identified but before determining if it needs a version change
@@ -238,7 +235,6 @@ configuring the following optional input parameters as needed.
   - Use this for files that should be part of the module but don't affect its functionality
 
   **Common use cases:**
-
   - Documentation files (`*.md`, `docs/**`)
   - Test files (`tests/**`, `*.tftest.hcl`)
   - Examples (`examples/**`)
@@ -256,7 +252,6 @@ configuring the following optional input parameters as needed.
   are _excluded_ from the asset. This helps reduce the asset size by omitting test files, examples, documentation, etc.
 
   **Key details:**
-
   - Patterns are relative to each **module directory**, not the workspace root
   - Uses `matchBase: true` for pattern matching (same as `module-change-exclude-patterns`)
   - Applied during the bundle/archive creation phase for GitHub releases
@@ -264,7 +259,6 @@ configuring the following optional input parameters as needed.
   - These patterns do NOT affect versioning decisions - only the contents of release assets
 
   **Common use cases:**
-
   - Test directories and files (`tests/**`, `*.tftest.hcl`)
   - Documentation that's not needed for module functionality (`*.md`)
   - Development-specific files (`.gitignore`, `CHANGELOG.md`)

@@ -9,7 +9,16 @@
     "enabled": false
   },
   "files": {
-    "includes": ["*.md", "*.ts", "__mocks__/**/*.ts", "__tests__/**/*.ts", "src/**/*.ts", "scripts/**/*.ts"]
+    "includes": [
+      "*.md",
+      "*.ts",
+      "*.json",
+      "__mocks__/**/*.ts",
+      "__tests__/**/*.ts",
+      ".devcontainer/*.json",
+      "src/**/*.ts",
+      "scripts/**/*"
+    ]
   },
   "formatter": {
     "enabled": true,

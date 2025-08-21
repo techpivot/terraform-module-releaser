@@ -13,7 +13,13 @@
   "bugs": {
     "url": "https://github.com/techpivot/terraform-module-releaser/issues"
   },
-  "keywords": ["terraform", "module", "releaser", "github-action", "monorepo"],
+  "keywords": [
+    "terraform",
+    "module",
+    "releaser",
+    "github-action",
+    "monorepo"
+  ],
   "license": "MIT",
   "exports": {
     ".": "./dist/index.js"
@@ -36,6 +42,7 @@
     "bundle": "npm run check:fix && npm run package",
     "check": "biome check ./src",
     "check:fix": "biome check --write --unsafe .",
+    "prettier": "npx prettier -w *.md",
     "dev:parse-modules": "tsx scripts/dev-parse-modules.ts",
     "textlint": "textlint -c .github/linters/.textlintrc **/*.md",
     "textlint:fix": "textlint -c .github/linters/.textlintrc --fix **/*.md",
@@ -43,9 +50,10 @@
     "package": "ncc build src/index.ts --source-map -o dist",
     "test": "vitest run --coverage",
     "test:watch": "vitest",
+    "test:parse-modules": "tsx scripts/parse-modules-test.ts",
+    "changelog": "node scripts/changelog.js 10.0.0",
     "coverage": "make-coverage-badge --output-path ./assets/coverage-badge.svg",
-    "terraform-docs-version": "gh api repos/terraform-docs/terraform-docs/releases/latest --jq '.tag_name'",
-    "changelog:test": "node .github/scripts/changelog.js 10.0.0"
+    "terraform-docs-version": "gh api repos/terraform-docs/terraform-docs/releases/latest --jq '.tag_name'"
   },
   "dependencies": {
     "@actions/core": "^1.11.1",

@@ -127,7 +127,7 @@ inputs:
       Character used to separate directory path components in Git tags. This separator is used to convert 
       module directory paths into tag names (e.g., 'modules/aws/s3-bucket' becomes 'modules-aws-s3-bucket-v1.0.0' 
       when using '-'). Must be a single character from: /, -, _, or .
-      
+
       Examples with different separators:
       - "/" (default): modules/aws/s3-bucket/v1.0.0
       - "-": modules-aws-s3-bucket-v1.0.0  

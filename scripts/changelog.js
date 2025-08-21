@@ -8,8 +8,8 @@
  * USAGE:
  * ------
  * 1. Set up environment variables (see below)
- * 2. Run via npm script: `npm run changelog:test -- "1.2.3"`
- * 3. Or import and use: `import { generateChangelog } from './.github/scripts/changelog.js'`
+ * 2. Run via npm script: `npm run changelog -- "1.2.3"`
+ * 3. Or import and use: `import { generateChangelog } from './scripts/changelog.js'`
  *
  * TESTING LOCALLY:
  * ----------------
@@ -21,10 +21,10 @@
  * export GITHUB_TOKEN="your_github_token_here"
  *
  * # Run the test script
- * npm run changelog:test -- "1.2.3"
+ * npm run changelog"
  *
- * # Or test with different versions
- * npm run changelog:test -- "2.0.0"
+ * # Or test with different next version (Only used for display purposes)
+ * npm run changelog -- "2.0.0"
  *
  * Required Environment Variables:
  * ------------------------------
@@ -62,7 +62,7 @@ import https from 'node:https';
 import OpenAI from 'openai';
 
 const ENDPOINT = 'https://models.github.ai/inference';
-const MODEL = 'openai/gpt-4.1';
+const MODEL = 'openai/gpt-4.1'; // gpt-5 has max request size of 4000 tokens on free
 const PROMPT = `
 You're the head of developer relations at a SaaS company. Write a concise, professional, and engaging changelog that prioritizes user-impacting changes and tells a story about the release.
 
@@ -542,9 +542,6 @@ export { generateChangelog };
 
 /**
  * CLI interface for testing the changelog generator locally.
- *
- * Usage: node .github/scripts/changelog.js [version]
- * Example: node .github/scripts/changelog.js "1.2.3"
  */
 async function main() {
   // Check if this script is being run directly (not imported)
@@ -552,9 +549,9 @@ async function main() {
     const version = process.argv[2];
 
     if (!version) {
-      console.error('❌ Error: Version argument is required');
-      console.error('Usage: node .github/scripts/changelog.js [version]');
-      console.error('Example: node .github/scripts/changelog.js "1.2.3"');
+      console.error('❌ Error: Next version argument is required');
+      console.error('Usage: node scripts/changelog.js [next-version]');
+      console.error('Example: node scripts/changelog.js "1.2.3"');
       process.exit(1);
     }
 
