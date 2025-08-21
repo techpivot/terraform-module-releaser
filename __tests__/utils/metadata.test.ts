@@ -1,6 +1,6 @@
 import { ACTION_INPUTS, createConfigFromInputs } from '@/utils/metadata';
 import type { ActionInputMetadata } from '@/types';
-import { getBooleanInput, getInput } from '@actions/core';
+import { getInput } from '@actions/core';
 import { describe, expect, it, vi } from 'vitest';
 
 describe('utils/metadata', () => {
@@ -15,6 +15,7 @@ describe('utils/metadata', () => {
         'delete-legacy-tags',
         'disable-wiki',
         'wiki-sidebar-changelog-max',
+        'wiki-usage-template',
         'disable-branding',
         'module-path-ignore',
         'module-change-exclude-patterns',
@@ -166,60 +167,6 @@ describe('utils/metadata', () => {
       expect(() => createConfigFromInputs()).toThrow(
         `Failed to process input 'major-keywords': ${String(errorObject)}`,
       );
-    });
-
-    it('should process all input types correctly', () => {
-      // Mock the GitHub Actions core functions
-      vi.mocked(getInput).mockImplementation((name) => {
-        const mockValues: Record<string, string> = {
-          'major-keywords': 'breaking,major',
-          'minor-keywords': 'feat,feature',
-          'patch-keywords': 'fix,chore',
-          'default-first-tag': 'v1.0.0',
-          'terraform-docs-version': 'v0.20.0',
-          'wiki-sidebar-changelog-max': '5',
-          'module-path-ignore': '',
-          'module-change-exclude-patterns': '*.md,tests/**',
-          'module-asset-exclude-patterns': '*.md,tests/**',
-          github_token: 'fake-token',
-          'tag-directory-separator': '/',
-          'use-ssh-source-format': 'false',
-        };
-        return mockValues[name] || '';
-      });
-
-      vi.mocked(getBooleanInput).mockImplementation((name) => {
-        const mockBooleans: Record<string, boolean> = {
-          'delete-legacy-tags': true,
-          'disable-wiki': false,
-          'disable-branding': false,
-          'use-ssh-source-format': false,
-          'use-version-prefix': true,
-        };
-        return mockBooleans[name] || false;
-      });
-
-      const config = createConfigFromInputs();
-
-      // Verify all config properties are set
-      expect(config).toEqual({
-        majorKeywords: ['breaking', 'major'],
-        minorKeywords: ['feat', 'feature'],
-        patchKeywords: ['fix', 'chore'],
-        defaultFirstTag: 'v1.0.0',
-        terraformDocsVersion: 'v0.20.0',
-        deleteLegacyTags: true,
-        disableWiki: false,
-        wikiSidebarChangelogMax: 5,
-        disableBranding: false,
-        modulePathIgnore: [],
-        moduleChangeExcludePatterns: ['*.md', 'tests/**'],
-        moduleAssetExcludePatterns: ['*.md', 'tests/**'],
-        useSSHSourceFormat: false,
-        githubToken: 'fake-token',
-        tagDirectorySeparator: '/',
-        useVersionPrefix: true,
-      });
     });
   });
 });

@@ -54,6 +54,17 @@ export interface Config {
   wikiSidebarChangelogMax: number;
 
   /**
+   * A raw, multi-line string to override the default 'Usage' section in the generated wiki.
+   * If not provided, a default usage block will be generated. Supports template variables like:
+   * - {{module_name}}: The name of the module
+   * - {{latest_tag}}: The latest git tag for the module
+   * - {{latest_tag_version_number}}: The version number from the latest tag
+   * - {{module_source}}: The source URL for the module
+   * - {{module_name_terraform}}: The module name formatted for Terraform usage (alphanumeric and underscores only)
+   */
+  wikiUsageTemplate: string;
+
+  /**
    * Flag to control whether the small branding link should be disabled or not in the
    * pull request (PR) comments. When branding is enabled, a link to the action's
    * repository is added at the bottom of comments. Setting this flag to `true`

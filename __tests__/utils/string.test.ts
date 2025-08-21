@@ -1,4 +1,4 @@
-import { removeLeadingCharacters, removeTrailingCharacters } from '@/utils/string';
+import { removeLeadingCharacters, removeTrailingCharacters, renderTemplate } from '@/utils/string';
 import { describe, expect, it } from 'vitest';
 
 describe('utils/string', () => {
@@ -89,6 +89,92 @@ describe('utils/string', () => {
     it('should handle forward slashes in trailing characters', () => {
       expect(removeTrailingCharacters('module-name/.', ['/', '.'])).toBe('module-name');
       expect(removeTrailingCharacters('example-_./', ['/', '.', '_', '-'])).toBe('example');
+    });
+  });
+
+  describe('renderTemplate', () => {
+    it('should replace a single placeholder', () => {
+      const template = 'Hello, {{name}}!';
+      const variables = { name: 'World' };
+      const result = renderTemplate(template, variables);
+      expect(result).toBe('Hello, World!');
+    });
+
+    it('should replace multiple placeholders', () => {
+      const template = '{{greeting}}, {{name}}!';
+      const variables = { greeting: 'Hi', name: 'There' };
+      const result = renderTemplate(template, variables);
+      expect(result).toBe('Hi, There!');
+    });
+
+    it('should handle templates with no placeholders', () => {
+      const template = 'Just a plain string.';
+      const variables = { name: 'World' };
+      const result = renderTemplate(template, variables);
+      expect(result).toBe('Just a plain string.');
+    });
+
+    it('should handle empty string values', () => {
+      const template = 'A{{key}}B';
+      const variables = { key: '' };
+      const result = renderTemplate(template, variables);
+      expect(result).toBe('AB');
+    });
+
+    it('should leave unmapped placeholders untouched', () => {
+      const template = 'Hello, {{name}} and {{unmapped}}!';
+      const variables = { name: 'World' };
+      const result = renderTemplate(template, variables);
+      expect(result).toBe('Hello, World and {{unmapped}}!');
+    });
+
+    it('should handle complex templates with multiple variables', () => {
+      const template = 'Module: {{module}}, Version: {{version}}, Author: {{author}}';
+      const variables = { module: 'vpc-endpoint', version: '1.0.0', author: 'TechPivot' };
+      const result = renderTemplate(template, variables);
+      expect(result).toBe('Module: vpc-endpoint, Version: 1.0.0, Author: TechPivot');
+    });
+
+    it('should handle numeric values as strings', () => {
+      const template = 'Port: {{port}}, Count: {{count}}';
+      const variables = { port: '8080', count: '3' };
+      const result = renderTemplate(template, variables);
+      expect(result).toBe('Port: 8080, Count: 3');
+    });
+
+    it('should handle special characters in values', () => {
+      const template = 'Path: {{path}}, Command: {{cmd}}';
+      const variables = { path: '/opt/bin/terraform', cmd: 'terraform init -backend=false' };
+      const result = renderTemplate(template, variables);
+      expect(result).toBe('Path: /opt/bin/terraform, Command: terraform init -backend=false');
+    });
+
+    it('should handle empty template', () => {
+      const template = '';
+      const variables = { name: 'World' };
+      const result = renderTemplate(template, variables);
+      expect(result).toBe('');
+    });
+
+    it('should handle empty variables object', () => {
+      const template = 'Hello, {{name}}!';
+      const variables = {};
+      const result = renderTemplate(template, variables);
+      expect(result).toBe('Hello, {{name}}!');
+    });
+
+    it('should handle placeholders with different casing', () => {
+      const template = 'Hello, {{Name}} and {{NAME}}!';
+      const variables = { Name: 'World', NAME: 'UNIVERSE' };
+      const result = renderTemplate(template, variables);
+      expect(result).toBe('Hello, World and UNIVERSE!');
+    });
+
+    it('should handle placeholders with numbers', () => {
+      const template = 'Item {{item1}} and {{item2}}';
+      const variables = { item1: 'first', item2: 'second' };
+      const result = renderTemplate(template, variables);
+      expect(result).toBe('Item first and second');
     });
   });
 });

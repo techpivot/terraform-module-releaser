@@ -305,7 +305,6 @@ describe('wiki', async () => {
           basename(file) !== '_Footer.md'
         ) {
           const content = readFileSync(file, 'utf8');
-          const moduleName = basename(file, '.md');
           expect(content).toContain(`# Usage\n\nModule: ${terraformModule.name}, Missing: {{missing_variable}}`);
         }
       }
@@ -314,7 +313,7 @@ describe('wiki', async () => {
     it('should handle all variables in the custom usage template', async () => {
       const customUsage =
         'Name: {{module_name}}, Tag: {{latest_tag}}, Version: {{latest_tag_version_number}}, Source: {{module_source}}, TFName: {{module_name_terraform}}';
-      config.set({ wikiUsageTemplate: customUsage });
+      config.set({ useSSHSourceFormat: true, wikiUsageTemplate: customUsage });
       const files = await generateWikiFiles(terraformModules);
       for (const file of files) {
         if (
@@ -328,7 +327,7 @@ describe('wiki', async () => {
           // vpc-endpoint is the only one with a tag in the test setup
           if (moduleName === 'vpc‒endpoint') {
             expect(content).toContain(
-              'Name: vpc-endpoint, Tag: vpc-endpoint/v1.0.0, Version: 1.0.0, Source: https://github.com/techpivot/terraform-module-releaser.git, TFName: vpc_endpoint',
+              'Name: vpc-endpoint, Tag: vpc-endpoint/v1.0.0, Version: 1.0.0, Source: git::ssh://git@github.com/techpivot/terraform-module-releaser.git, TFName: vpc_endpoint',
             );
           }
         }

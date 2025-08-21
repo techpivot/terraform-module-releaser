@@ -49,6 +49,7 @@ export const ACTION_INPUTS: Record<string, ActionInputMetadata> = {
   'delete-legacy-tags': requiredBoolean('deleteLegacyTags'),
   'disable-wiki': requiredBoolean('disableWiki'),
   'wiki-sidebar-changelog-max': requiredNumber('wikiSidebarChangelogMax'),
+  'wiki-usage-template': requiredString('wikiUsageTemplate'),
   'disable-branding': requiredBoolean('disableBranding'),
   'module-path-ignore': optionalArray('modulePathIgnore'),
   'module-change-exclude-patterns': optionalArray('moduleChangeExcludePatterns'),

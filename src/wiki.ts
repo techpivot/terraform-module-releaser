@@ -7,7 +7,7 @@ import { join, resolve } from 'node:path';
 import { getTerraformModuleFullReleaseChangelog } from '@/changelog';
 import { config } from '@/config';
 import { context } from '@/context';
-import { render } from '@/templating';
+import { renderTemplate } from '@/utils/string';
 import { generateTerraformDocs } from '@/terraform-docs';
 import type { TerraformModule } from '@/terraform-module';
 import type { ExecSyncError, WikiStatusResult } from '@/types';
@@ -239,24 +239,24 @@ export function getWikiLink(moduleName: string, relative = true): string {
 /**
  * Formats the module source URL based on configuration settings.
  *
- * Converts repository URLs to the appropriate format for module sourcing:
- * - SSH format: ssh://git@hostname/path.git
- * - HTTPS format: https://hostname/path.git
+ * Converts repository URLs to the appropriate format for Terraform module sourcing:
+ * - SSH format: git::ssh://git@hostname/path.git
+ * - HTTPS format: git::https://hostname/path.git
  *
  * @param repoUrl - The repository URL (must be a valid HTTPS URL)
  * @param useSSH - Whether to use SSH format instead of HTTPS
- * @returns The formatted source URL for the module
+ * @returns The formatted source URL for the module with git:: prefix
  * @throws {TypeError} When repoUrl is not a valid URL that can be parsed
  *
  * @example
  * ```typescript
  * // HTTPS format
  * getModuleSource('https://github.com/owner/repo', false)
- * // Returns: 'https://github.com/owner/repo.git'
+ * // Returns: 'git::https://github.com/owner/repo.git'
  *
  * // SSH format
  * getModuleSource('https://github.techpivot.com/owner/repo', true)
- * // Returns: 'ssh://git@github.techpivot.com/owner/repo.git'
+ * // Returns: 'git::ssh://git@github.techpivot.com/owner/repo.git'
  * ```
  */
 function getModuleSource(repoUrl: string, useSSH: boolean): string {
@@ -265,13 +265,14 @@ function getModuleSource(repoUrl: string, useSSH: boolean): string {
     const hostname = url.hostname;
     const pathname = url.pathname;
 
-    // Convert HTTPS URL to SSH format
+    // Convert HTTPS URL to SSH format with git:: prefix
     // From: https://github.techpivot.com/owner/repo
-    // To: ssh://git@github.techpivot.com/owner/repo.git
-    return `ssh://git@${hostname}${pathname}.git`;
+    // To: git::ssh://git@github.techpivot.com/owner/repo.git
+    return `git::ssh://git@${hostname}${pathname}.git`;
   }
 
-  return `${repoUrl}.git`;
+  // Return HTTPS format with git:: prefix
+  return `git::${repoUrl}.git`;
 }
 
 /**
@@ -306,10 +307,10 @@ async function generateWikiTerraformModule(terraformModule: TerraformModule): Pr
   const tfDocs = await generateTerraformDocs(terraformModule);
   const moduleSource = getModuleSource(context.repoUrl, config.useSSHSourceFormat);
 
-  const usage = render(config.wikiUsageTemplate, {
+  const usage = renderTemplate(config.wikiUsageTemplate, {
     module_name: terraformModule.name,
-    latest_tag: terraformModule.getLatestTag(),
-    latest_tag_version_number: terraformModule.getLatestTagVersionNumber(),
+    latest_tag: terraformModule.getLatestTag() ?? '',
+    latest_tag_version_number: terraformModule.getLatestTagVersionNumber() ?? '',
     module_source: moduleSource,
     module_name_terraform: terraformModule.name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase(),
   });

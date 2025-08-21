@@ -194,12 +194,12 @@ configuring the following optional input parameters as needed.
 | `delete-legacy-tags`             | Specifies a boolean that determines whether tags and releases from Terraform modules that have been deleted should be automatically removed                                                                                                                                        | `true`                                                                                               |
 | `disable-wiki`                   | Whether to disable wiki generation for Terraform modules                                                                                                                                                                                                                           | `false`                                                                                              |
 | `wiki-sidebar-changelog-max`     | An integer that specifies how many changelog entries are displayed in the sidebar per module                                                                                                                                                                                       | `5`                                                                                                  |
-| `wiki-usage-template`            | A raw, multi-line string to override the default 'Usage' section in the generated wiki. Allows using variables like {{module_name}}, {{latest_tag}}, {{latest_tag_version_number}} and more.<br><sub>[Read more here](#configuring-the-usage-template)</sub>                       | [See action.yml](https://github.com/polleuretan/terraform-module-releaser/blob/main/action.yml#L108) |
+| `wiki-usage-template`            | A raw, multi-line string to override the default 'Usage' section in the generated wiki. Allows using variables like {{module_name}}, {{latest_tag}}, {{latest_tag_version_number}} and more.<br><sub>[Read more here](#configuring-the-wiki-usage-template)</sub>                  | [See action.yml](https://github.com/polleuretan/terraform-module-releaser/blob/main/action.yml#L108) |
 | `disable-branding`               | Controls whether a small branding link to the action's repository is added to PR comments. Recommended to leave enabled to support OSS.                                                                                                                                            | `false`                                                                                              |
 | `module-path-ignore`             | Comma-separated list of module paths to completely ignore. Modules matching any pattern here are excluded from all versioning, releases, and documentation.<br><sub>[Read more here](#understanding-the-filtering-options)</sub>                                                   | `` (empty string)                                                                                    |
 | `module-change-exclude-patterns` | Comma-separated list of file patterns (relative to each module) to exclude from triggering version changes. Lets you release a module but control which files inside it do not force a version bump.<br><sub>[Read more here](#understanding-the-filtering-options)</sub>          | `.gitignore,*.md,*.tftest.hcl,tests/**`                                                              |
 | `module-asset-exclude-patterns`  | A comma-separated list of file patterns to exclude when bundling a Terraform module for tag/release. Patterns follow glob syntax (e.g., `tests/\*\*`) and are relative to each Terraform module directory. Files matching these patterns will be excluded from the bundled output. | `.gitignore,*.md,*.tftest.hcl,tests/**`                                                              |
-| `use-ssh-source-format`          | If enabled, all links to source code in generated Wiki documentation will use SSH standard format (e.g., `git::ssh://git@github.com/owner/repo.git`) instead of HTTPS format (`git::https://github.com/owner/repo.git`)                                                            | `false`                                                                                              |
+| `use-ssh-source-format`          | If enabled, all links to source code in generated Wiki documentation will use SSH format (e.g., `git::ssh://git@github.com/owner/repo.git`) instead of HTTPS format (`git::https://github.com/owner/repo.git`)                                                                     | `false`                                                                                              |
 | `tag-directory-separator`        | Character used to separate directory path components in Git tags. Supports `/`, `-`, `_`, or `.`                                                                                                                                                                                   | `/`                                                                                                  |
 | `use-version-prefix`             | Whether to include the 'v' prefix on version tags (e.g., v1.2.3 vs 1.2.3)                                                                                                                                                                                                          | `true`                                                                                               |
 
@@ -284,18 +284,18 @@ similar to those used in `.gitignore` files. For more details on the pattern mat
 [source code](https://github.com/techpivot/terraform-module-releaser/blob/main/src/utils/file.ts) or visit the
 [minimatch documentation](https://github.com/isaacs/minimatch).
 
-### Configuring the Usage Template
+### Configuring the Wiki Usage Template
 
 The `wiki-usage-template` input allows you to customize the "Usage" section of the generated wiki page for each module.
 You can use the following dynamic variables in your template:
 
-| Variable                        | Description                                                                                       | Example                                  |
-| ------------------------------- | ------------------------------------------------------------------------------------------------- | ---------------------------------------- |
-| `{{module_name}}`               | The name of the module.                                                                           | `aws/s3-bucket`                          |
-| `{{latest_tag}}`                | The latest Git tag for the module.                                                                | `aws/s3-bucket/v1.2.3`                   |
-| `{{latest_tag_version_number}}` | The version number of the latest tag.                                                             | `1.2.3`                                  |
-| `{{module_source}}`             | The Git source URL for the module, respecting the `use-ssh-source-format` input.                  | `git::https://github.com/owner/repo.git` |
-| `{{module_name_terraform}}`     | A Terraform-safe version of the module name (e.g., special characters replaced with underscores). | `aws_s3_bucket`                          |
+| Variable                        | Description                                                                                          | Example                                                         |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| `{{module_name}}`               | The name of the module.                                                                              | `aws/s3-bucket`                                                 |
+| `{{latest_tag}}`                | The latest Git tag for the module.                                                                   | `aws/s3-bucket/v1.2.3`                                          |
+| `{{latest_tag_version_number}}` | The version number of the latest tag (Always excludes any `v` prefix)                                | `1.2.3`                                                         |
+| `{{module_source}}`             | The Git source URL for the module with `git::` prefix, respecting the `use-ssh-source-format` input. | `git::ssh://github.com/techpivot/terraform-module-releaser.git` |
+| `{{module_name_terraform}}`     | A Terraform-safe version of the module name (e.g., special characters replaced with underscores).    | `aws_s3_bucket`                                                 |
 
 ### Example Usage with Inputs
 
@@ -325,29 +325,31 @@ jobs:
           minor-keywords: feat,feature
           patch-keywords: fix,chore,docs
           default-first-tag: v1.0.0
-          terraform-docs-version: v0.19.0
+          terraform-docs-version: v0.20.0
           delete-legacy-tags: true
           disable-wiki: false
           wiki-sidebar-changelog-max: 10
           module-path-ignore: path/to/ignore1,path/to/ignore2
           module-change-exclude-patterns: .gitignore,*.md,docs/**,examples/**,*.tftest.hcl,tests/**
           module-asset-exclude-patterns: .gitignore,*.md,*.tftest.hcl,tests/**
-          use-ssh-source-format: false
+          use-ssh-source-format: true
+          tag-directory-separator: /
+          use-version-prefix: true
           wiki-usage-template: |
-            # My Custom Usage Instructions
+            This is a custom wiki usage block that supports markdown.
 
-            This is a custom usage block.
-
-            You can add any markdown you want here.
-
-            And use variables like {{module_name}}, {{latest_tag}}, {{latest_tag_version_number}},
-            {{module_source}} and {{module_name_terraform}}.
+            The following variables are supported:
+            - {{module_name}}
+            - {{latest_tag}}
+            - {{latest_tag_version_number}}
+            - {{module_source}}
+            - {{module_name_terraform}}
 
             ```hcl
             module "{{module_name_terraform}}" {
-              source  = "{{module_source}}?ref={{latest_tag}}"
-              version = "{{latest_tag_version_number}}"
-              # ...
+              source = "{{module_source}}?ref={{latest_tag}}"
+
+              # See inputs below for additional required parameters
             }
             ```
 ````
@@ -369,6 +371,8 @@ The following outputs are available from this action:
 
 ```json
 {
+  "changed-module-names": ["aws/vpc"],
+  "changed-module-paths": ["/home/runner/work/terraform-module-releaser/terraform-module-releaser/aws/vpc"],
   "changed-modules-map": {
     "aws/vpc": {
       "path": "modules/aws/vpc",
@@ -377,16 +381,21 @@ The following outputs are available from this action:
       "releaseType": "minor"
     }
   },
+  "all-module-names": ["aws/s3", "aws/vpc"],
+  "all-module-paths": [
+    "/home/runner/work/terraform-module-releaser/terraform-module-releaser/aws/s3",
+    "/home/runner/work/terraform-module-releaser/terraform-module-releaser/aws/vpc"
+  ],
   "all-modules-map": {
-    "aws/vpc": {
-      "path": "modules/aws/vpc",
-      "latestTag": "aws/vpc/v1.0.0",
-      "latestTagVersion": "v1.0.0"
-    },
     "aws/s3": {
       "path": "modules/aws/s3",
       "latestTag": "aws/s3/v2.1.0",
       "latestTagVersion": "v2.1.0"
+    },
+    "aws/vpc": {
+      "path": "modules/aws/vpc",
+      "latestTag": "aws/vpc/v1.0.0",
+      "latestTagVersion": "v1.0.0"
     }
   }
 }

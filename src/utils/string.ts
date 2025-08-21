@@ -55,3 +55,24 @@ export function removeLeadingCharacters(input: string, charactersToRemove: strin
 
   return input.slice(startIndex);
 }
+
+/**
+ * Renders a template string by replacing placeholders with provided values.
+ *
+ * @param template The template string containing placeholders in the format `{{key}}`.
+ * @param variables An object where keys correspond to placeholder names and values are their replacements.
+ * @returns The rendered string with placeholders replaced.
+ *
+ * @example
+ * // Returns "Hello, World!"
+ * renderTemplate("Hello, {{name}}!", { name: "World" })
+ *
+ * @example
+ * // Returns "Hi, There!"
+ * renderTemplate("{{greeting}}, {{name}}!", { greeting: "Hi", name: "There" })
+ */
+export function renderTemplate(template: string, variables: Record<string, string>): string {
+  return template.replace(/\{\{(\w+)\}\}/g, (placeholder, key) => {
+    return key in variables ? variables[key] : placeholder;
+  });
+}
