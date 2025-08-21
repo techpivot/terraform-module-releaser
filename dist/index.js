@@ -3180,285 +3180,6 @@ function copyFile(srcFile, destFile, force) {
 
 /***/ }),
 
-/***/ 9380:
-/***/ ((module) => {
-
-
-module.exports = balanced;
-function balanced(a, b, str) {
-  if (a instanceof RegExp) a = maybeMatch(a, str);
-  if (b instanceof RegExp) b = maybeMatch(b, str);
-
-  var r = range(a, b, str);
-
-  return r && {
-    start: r[0],
-    end: r[1],
-    pre: str.slice(0, r[0]),
-    body: str.slice(r[0] + a.length, r[1]),
-    post: str.slice(r[1] + b.length)
-  };
-}
-
-function maybeMatch(reg, str) {
-  var m = str.match(reg);
-  return m ? m[0] : null;
-}
-
-balanced.range = range;
-function range(a, b, str) {
-  var begs, beg, left, right, result;
-  var ai = str.indexOf(a);
-  var bi = str.indexOf(b, ai + 1);
-  var i = ai;
-
-  if (ai >= 0 && bi > 0) {
-    if(a===b) {
-      return [ai, bi];
-    }
-    begs = [];
-    left = str.length;
-
-    while (i >= 0 && !result) {
-      if (i == ai) {
-        begs.push(i);
-        ai = str.indexOf(a, i + 1);
-      } else if (begs.length == 1) {
-        result = [ begs.pop(), bi ];
-      } else {
-        beg = begs.pop();
-        if (beg < left) {
-          left = beg;
-          right = bi;
-        }
-
-        bi = str.indexOf(b, i + 1);
-      }
-
-      i = ai < bi && ai >= 0 ? ai : bi;
-    }
-
-    if (begs.length) {
-      result = [ left, right ];
-    }
-  }
-
-  return result;
-}
-
-
-/***/ }),
-
-/***/ 4691:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-var balanced = __nccwpck_require__(9380);
-
-module.exports = expandTop;
-
-var escSlash = '\0SLASH'+Math.random()+'\0';
-var escOpen = '\0OPEN'+Math.random()+'\0';
-var escClose = '\0CLOSE'+Math.random()+'\0';
-var escComma = '\0COMMA'+Math.random()+'\0';
-var escPeriod = '\0PERIOD'+Math.random()+'\0';
-
-function numeric(str) {
-  return parseInt(str, 10) == str
-    ? parseInt(str, 10)
-    : str.charCodeAt(0);
-}
-
-function escapeBraces(str) {
-  return str.split('\\\\').join(escSlash)
-            .split('\\{').join(escOpen)
-            .split('\\}').join(escClose)
-            .split('\\,').join(escComma)
-            .split('\\.').join(escPeriod);
-}
-
-function unescapeBraces(str) {
-  return str.split(escSlash).join('\\')
-            .split(escOpen).join('{')
-            .split(escClose).join('}')
-            .split(escComma).join(',')
-            .split(escPeriod).join('.');
-}
-
-
-// Basically just str.split(","), but handling cases
-// where we have nested braced sections, which should be
-// treated as individual members, like {a,{b,c},d}
-function parseCommaParts(str) {
-  if (!str)
-    return [''];
-
-  var parts = [];
-  var m = balanced('{', '}', str);
-
-  if (!m)
-    return str.split(',');
-
-  var pre = m.pre;
-  var body = m.body;
-  var post = m.post;
-  var p = pre.split(',');
-
-  p[p.length-1] += '{' + body + '}';
-  var postParts = parseCommaParts(post);
-  if (post.length) {
-    p[p.length-1] += postParts.shift();
-    p.push.apply(p, postParts);
-  }
-
-  parts.push.apply(parts, p);
-
-  return parts;
-}
-
-function expandTop(str) {
-  if (!str)
-    return [];
-
-  // I don't know why Bash 4.3 does this, but it does.
-  // Anything starting with {} will have the first two bytes preserved
-  // but *only* at the top level, so {},a}b will not expand to anything,
-  // but a{},b}c will be expanded to [a}c,abc].
-  // One could argue that this is a bug in Bash, but since the goal of
-  // this module is to match Bash's rules, we escape a leading {}
-  if (str.substr(0, 2) === '{}') {
-    str = '\\{\\}' + str.substr(2);
-  }
-
-  return expand(escapeBraces(str), true).map(unescapeBraces);
-}
-
-function embrace(str) {
-  return '{' + str + '}';
-}
-function isPadded(el) {
-  return /^-?0\d/.test(el);
-}
-
-function lte(i, y) {
-  return i <= y;
-}
-function gte(i, y) {
-  return i >= y;
-}
-
-function expand(str, isTop) {
-  var expansions = [];
-
-  var m = balanced('{', '}', str);
-  if (!m) return [str];
-
-  // no need to expand pre, since it is guaranteed to be free of brace-sets
-  var pre = m.pre;
-  var post = m.post.length
-    ? expand(m.post, false)
-    : [''];
-
-  if (/\$$/.test(m.pre)) {    
-    for (var k = 0; k < post.length; k++) {
-      var expansion = pre+ '{' + m.body + '}' + post[k];
-      expansions.push(expansion);
-    }
-  } else {
-    var isNumericSequence = /^-?\d+\.\.-?\d+(?:\.\.-?\d+)?$/.test(m.body);
-    var isAlphaSequence = /^[a-zA-Z]\.\.[a-zA-Z](?:\.\.-?\d+)?$/.test(m.body);
-    var isSequence = isNumericSequence || isAlphaSequence;
-    var isOptions = m.body.indexOf(',') >= 0;
-    if (!isSequence && !isOptions) {
-      // {a},b}
-      if (m.post.match(/,.*\}/)) {
-        str = m.pre + '{' + m.body + escClose + m.post;
-        return expand(str);
-      }
-      return [str];
-    }
-
-    var n;
-    if (isSequence) {
-      n = m.body.split(/\.\./);
-    } else {
-      n = parseCommaParts(m.body);
-      if (n.length === 1) {
-        // x{{a,b}}y ==> x{a}y x{b}y
-        n = expand(n[0], false).map(embrace);
-        if (n.length === 1) {
-          return post.map(function(p) {
-            return m.pre + n[0] + p;
-          });
-        }
-      }
-    }
-
-    // at this point, n is the parts, and we know it's not a comma set
-    // with a single entry.
-    var N;
-
-    if (isSequence) {
-      var x = numeric(n[0]);
-      var y = numeric(n[1]);
-      var width = Math.max(n[0].length, n[1].length)
-      var incr = n.length == 3
-        ? Math.abs(numeric(n[2]))
-        : 1;
-      var test = lte;
-      var reverse = y < x;
-      if (reverse) {
-        incr *= -1;
-        test = gte;
-      }
-      var pad = n.some(isPadded);
-
-      N = [];
-
-      for (var i = x; test(i, y); i += incr) {
-        var c;
-        if (isAlphaSequence) {
-          c = String.fromCharCode(i);
-          if (c === '\\')
-            c = '';
-        } else {
-          c = String(i);
-          if (pad) {
-            var need = width - c.length;
-            if (need > 0) {
-              var z = new Array(need + 1).join('0');
-              if (i < 0)
-                c = '-' + z + c.slice(1);
-              else
-                c = z + c;
-            }
-          }
-        }
-        N.push(c);
-      }
-    } else {
-      N = [];
-
-      for (var j = 0; j < n.length; j++) {
-        N.push.apply(N, expand(n[j], false));
-      }
-    }
-
-    for (var j = 0; j < N.length; j++) {
-      for (var k = 0; k < post.length; k++) {
-        var expansion = pre + N[j] + post[k];
-        if (!isTop || isSequence || expansion)
-          expansions.push(expansion);
-      }
-    }
-  }
-
-  return expansions;
-}
-
-
-
-/***/ }),
-
 /***/ 770:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
@@ -28237,27 +27958,238 @@ const checkStat = (stat, path, options) => stat.isFile() && checkPathExt(path, o
 /************************************************************************/
 var __webpack_exports__ = {};
 
+;// CONCATENATED MODULE: ./src/utils/constants.ts
+/**
+ * Defines valid separator characters for tag directory paths in Terraform module releases.
+ *
+ * When finding a Terraform module like `modules/aws/s3-bucket`, the release tag would typically be
+ * `modules/aws/s3-bucket/v1.0.0`. This constant allows for alternative separators in the tag path.
+ *
+ * For example, with these separators, the following tag formats would all be valid:
+ * - `modules/aws/s3-bucket/v1.0.0` (using '/')
+ * - `modules-aws-s3-bucket-v1.0.0` (using '-')
+ * - `modules_aws_s3_bucket_v1.0.0` (using '_')
+ * - `modules.aws.s3.bucket.v1.0.0` (using '.')
+ *
+ * The default separator is '/' as defined in action.yml.
+ */
+const VALID_TAG_DIRECTORY_SEPARATORS = ['-', '_', '/', '.'];
+/**
+ * Regular expression that matches version tags in the format of semantic versioning.
+ * This regex validates version strings like "1.2.3" or "v1.2.3" and includes capture groups.
+ * Group 1: Major version number
+ * Group 2: Minor version number
+ * Group 3: Patch version number
+ *
+ * It allows either a numerical portion (e.g., "1.2.3") or one prefixed with 'v' (e.g., "v1.2.3"),
+ * which is the proper semver default format.
+ */
+const VERSION_TAG_REGEX = /^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+/**
+ * Matches a Terraform module tag in the format: module-name/v1.2.3 or module-name/1.2.3
+ * Group 1: module name, Group 2: version (with or without 'v' prefix)
+ */
+/**
+ * Regular expression pattern to match a module tag in the format: prefix + separator + version
+ * Where:
+ * - Group 1: prefix (e.g., "module", "feature")
+ * - Group 2: separator (one of: '-', '_', '/', '.')
+ * - Group 3: Complete version string with optional 'v' prefix (e.g., "v1.0.0", "1.0.0")
+ * - Group 4: Major version number
+ * - Group 5: Minor version number
+ * - Group 6: Patch version number
+ *
+ * Example matches:
+ * - "module-v1.0.0" → ["module-v1.0.0", "module", "-", "v1.0.0", "1", "0", "0"]
+ * - "feature_2.3.4" → ["feature_2.3.4", "feature", "_", "2.3.4", "2", "3", "4"]
+ * - "service/v0.1.0" → ["service/v0.1.0", "service", "/", "v0.1.0", "0", "1", "0"]
+ *
+ * Note: In the character class [-_/.], only the dot (.) requires escaping to match literal periods.
+ * The hyphen (-) doesn't need escaping when at the start/end of the character class.
+ * The forward slash (/) doesn't need escaping in JavaScript regex character classes.
+ */
+const MODULE_TAG_REGEX = /^(.+)([-_/.])(v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*))$/;
+/**
+ * Release type constants for semantic versioning
+ */
+const RELEASE_TYPE = {
+    MAJOR: 'major',
+    MINOR: 'minor',
+    PATCH: 'patch',
+};
+/**
+ * Release reason constants - why a module needs a release
+ */
+const RELEASE_REASON = {
+    INITIAL: 'initial',
+    DIRECT_CHANGES: 'direct-changes',
+    LOCAL_DEPENDENCY_UPDATE: 'local-dependency-update',
+};
+/**
+ * Wiki status constants - status of wiki operations
+ */
+const WIKI_STATUS = {
+    SUCCESS: 'SUCCESS',
+    FAILURE: 'FAILURE',
+    DISABLED: 'DISABLED',
+};
+const WIKI_HOME_FILENAME = 'Home.md';
+const WIKI_SIDEBAR_FILENAME = '_Sidebar.md';
+const WIKI_FOOTER_FILENAME = '_Footer.md';
+const GITHUB_ACTIONS_BOT_NAME = 'GitHub Actions';
+const GITHUB_ACTIONS_BOT_USERNAME = 'github-actions[bot]';
+const PR_SUMMARY_MARKER = '<!-- techpivot/terraform-module-releaser — pr-summary-marker -->';
+const PR_RELEASE_MARKER = '<!-- techpivot/terraform-module-releaser — release-marker -->';
+const PROJECT_URL = 'https://github.com/techpivot/terraform-module-releaser';
+const BRANDING_COMMENT = `<h4 align="center"><sub align="middle">Powered by:&nbsp;&nbsp;<a href="${PROJECT_URL}"><img src="https://raw.githubusercontent.com/techpivot/terraform-module-releaser/refs/heads/main/assets/octicons-mark-github.svg" height="12" width="12" align="center" /></a> <a href="${PROJECT_URL}">techpivot/terraform-module-releaser</a></sub></h4>`;
+const BRANDING_WIKI = `<h3 align="center">Powered by:&nbsp;&nbsp;<a href="${PROJECT_URL}"><img src="https://raw.githubusercontent.com/techpivot/terraform-module-releaser/refs/heads/main/assets/octicons-mark-github.svg" height="14" width="14" align="center" /></a> <a href="${PROJECT_URL}">techpivot/terraform-module-releaser</a></h3>`;
+/**
+ * WIKI_TITLE_REPLACEMENTS - This object maps specific characters in wiki titles to visually
+ * similar Unicode alternatives to handle GitHub Wiki limitations related to directory structure,
+ * uniqueness, and consistent character visibility.
+ *
+ * ### GitHub Wiki Issues Addressed:
+ *
+ * - **Slash (`/`) Handling**:
+ *   GitHub Wiki does not interpret forward slashes (`/`) as part of a directory structure in titles.
+ *   When a title includes a slash, GitHub Wiki only recognizes the last segment (basename) for
+ *   navigation, leading to potential conflicts if multiple pages share the same basename but
+ *   reside in different contexts. By replacing `/` with a visually similar division slash (`∕`),
+ *   this mapping helps preserve the intended path within the title, avoiding structure-related conflicts.
+ *
+ * - **Hyphen (`-`) Behavior**:
+ *   If GitHub encounters a hyphen (`-`) in a title, it will automatically replace it with a figure dash (`‒`).
+ *   Additionally, GitHub may move the file to the root directory, overriding any intended subdirectory placement.
+ *   This behavior can lead to confusion and disorganization within the wiki. To maintain consistent naming
+ *   conventions and avoid unintended movements of files, the hyphen is replaced with a figure dash in titles
+ *   to ensure proper display and organization.
+ *
+ * ### Key-Value Pairs:
+ * - Each **key** represents an original character in the title that may be problematic in GitHub Wiki.
+ * - Each **value** is a Unicode replacement character chosen to visually resemble the original while
+ *   avoiding structural or display conflicts.
+ *
+ * ### Current Mappings:
+ * - `'/'` → `'∕'` (U+2215 Division Slash): Replaces forward slashes in titles to prevent directory
+ *   conflicts.
+ * - `'-'` → `'‒'` (U+2012 Figure Dash): Replaces hyphen with figure dash for better display and to avoid
+ *   GitHub's auto-movement to the root directory.
+ */
+const WIKI_TITLE_REPLACEMENTS = {
+    '/': '∕', // Replace forward slash with a visually similar division slash (U+2215)
+    '-': '‒', // Replace hyphen with figure dash (U+2012) for better display and to avoid GitHub's auto-movement
+};
+
 // EXTERNAL MODULE: ./node_modules/@actions/core/lib/core.js
 var core = __nccwpck_require__(7484);
+;// CONCATENATED MODULE: ./src/utils/metadata.ts
+
+/**
+ * Factory functions to reduce duplication in ACTION_INPUTS metadata definitions.
+ * These functions create standardized metadata objects for common input patterns.
+ */
+const requiredString = (configKey) => ({
+    configKey,
+    required: true,
+    type: 'string',
+});
+const requiredBoolean = (configKey) => ({
+    configKey,
+    required: true,
+    type: 'boolean',
+});
+const requiredArray = (configKey) => ({
+    configKey,
+    required: true,
+    type: 'array',
+});
+const requiredNumber = (configKey) => ({
+    configKey,
+    required: true,
+    type: 'number',
+});
+const optionalArray = (configKey) => ({
+    configKey,
+    required: false,
+    type: 'array',
+});
+/**
+ * Complete mapping of all GitHub Action inputs to their metadata.
+ * This is the single source of truth for input configuration.
+ * Note: defaultValue is removed as defaults come from action.yml at runtime
+ */
+const ACTION_INPUTS = {
+    'major-keywords': requiredArray('majorKeywords'),
+    'minor-keywords': requiredArray('minorKeywords'),
+    'patch-keywords': requiredArray('patchKeywords'),
+    'default-first-tag': requiredString('defaultFirstTag'),
+    'terraform-docs-version': requiredString('terraformDocsVersion'),
+    'delete-legacy-tags': requiredBoolean('deleteLegacyTags'),
+    'disable-wiki': requiredBoolean('disableWiki'),
+    'wiki-sidebar-changelog-max': requiredNumber('wikiSidebarChangelogMax'),
+    'wiki-usage-template': requiredString('wikiUsageTemplate'),
+    'disable-branding': requiredBoolean('disableBranding'),
+    'module-path-ignore': optionalArray('modulePathIgnore'),
+    'module-change-exclude-patterns': optionalArray('moduleChangeExcludePatterns'),
+    'module-asset-exclude-patterns': optionalArray('moduleAssetExcludePatterns'),
+    'use-ssh-source-format': requiredBoolean('useSSHSourceFormat'),
+    github_token: requiredString('githubToken'),
+    'tag-directory-separator': requiredString('tagDirectorySeparator'),
+    'use-version-prefix': requiredBoolean('useVersionPrefix'),
+};
+/**
+ * Creates a config object by reading inputs using GitHub Actions API and converting them
+ * according to the metadata definitions. This provides a dynamic way to build the config
+ * without manually mapping each input.
+ */
+function createConfigFromInputs() {
+    const config = {};
+    for (const [inputName, metadata] of Object.entries(ACTION_INPUTS)) {
+        const { configKey, required, type } = metadata;
+        try {
+            let value;
+            if (type === 'boolean') {
+                // Use getBooleanInput for boolean types for proper parsing
+                value = (0,core.getBooleanInput)(inputName, { required });
+            }
+            else if (type === 'array') {
+                // Handle array inputs with special parsing
+                const input = (0,core.getInput)(inputName, { required });
+                if (!input || input.trim() === '') {
+                    value = [];
+                }
+                else {
+                    value = Array.from(new Set(input
+                        .split(',')
+                        .map((item) => item.trim())
+                        .filter(Boolean)));
+                }
+            }
+            else if (type === 'number') {
+                // Handle number inputs with parseInt
+                const input = (0,core.getInput)(inputName, { required });
+                value = Number.parseInt(input, 10);
+            }
+            else {
+                // Handle string inputs
+                value = (0,core.getInput)(inputName, { required });
+            }
+            // Safely assign to config using the configKey
+            Object.assign(config, { [configKey]: value });
+        }
+        catch (error) {
+            throw new Error(`Failed to process input '${inputName}': ${error instanceof Error ? error.message : String(error)}`);
+        }
+    }
+    return config;
+}
+
 ;// CONCATENATED MODULE: ./src/config.ts
+
+
 
 // Keep configInstance private to this module
 let configInstance = null;
-/**
- * Retrieves an array of values from a comma-separated input string. Duplicates any empty values
- * are removed and each value is trimmed of whitespace.
- *
- * @param inputName - Name of the input to retrieve.
- * @param required - Whether the input is required.
- * @returns An array of trimmed and filtered values.
- */
-const getArrayInput = (inputName, required) => {
-    const input = (0,core.getInput)(inputName, { required });
-    return Array.from(new Set(input
-        .split(',')
-        .map((item) => item.trim())
-        .filter(Boolean)));
-};
 /**
  * Clears the cached config instance during testing.
  *
@@ -28288,23 +28220,8 @@ function initializeConfig() {
     }
     try {
         (0,core.startGroup)('Initializing Config');
-        // Initialize the config instance
-        configInstance = {
-            majorKeywords: getArrayInput('major-keywords', true),
-            minorKeywords: getArrayInput('minor-keywords', true),
-            patchKeywords: getArrayInput('patch-keywords', true),
-            defaultFirstTag: (0,core.getInput)('default-first-tag', { required: true }),
-            terraformDocsVersion: (0,core.getInput)('terraform-docs-version', { required: true }),
-            deleteLegacyTags: (0,core.getBooleanInput)('delete-legacy-tags', { required: true }),
-            disableWiki: (0,core.getBooleanInput)('disable-wiki', { required: true }),
-            wikiSidebarChangelogMax: Number.parseInt((0,core.getInput)('wiki-sidebar-changelog-max', { required: true }), 10),
-            disableBranding: (0,core.getBooleanInput)('disable-branding', { required: true }),
-            githubToken: (0,core.getInput)('github_token', { required: true }),
-            modulePathIgnore: getArrayInput('module-path-ignore', false),
-            moduleChangeExcludePatterns: getArrayInput('module-change-exclude-patterns', false),
-            moduleAssetExcludePatterns: getArrayInput('module-asset-exclude-patterns', false),
-            useSSHSourceFormat: (0,core.getBooleanInput)('use-ssh-source-format', { required: true }),
-        };
+        // Initialize the config instance using action metadata
+        configInstance = createConfigFromInputs();
         // Validate that *.tf is not in excludePatterns
         if (configInstance.moduleChangeExcludePatterns.some((pattern) => pattern === '*.tf')) {
             throw new TypeError('Exclude patterns cannot contain "*.tf" as it is required for module detection');
@@ -28315,6 +28232,22 @@ function initializeConfig() {
         // Validate WikiSidebar Changelog Max is a number and greater than zero
         if (configInstance.wikiSidebarChangelogMax < 1 || Number.isNaN(configInstance.wikiSidebarChangelogMax)) {
             throw new TypeError('Wiki Sidebar Change Log Max must be an integer greater than or equal to one');
+        }
+        // Validate tag directory separator
+        if (configInstance.tagDirectorySeparator.length !== 1) {
+            throw new TypeError('Tag directory separator must be exactly one character');
+        }
+        if (!VALID_TAG_DIRECTORY_SEPARATORS.includes(configInstance.tagDirectorySeparator)) {
+            throw new TypeError(`Tag directory separator must be one of: ${VALID_TAG_DIRECTORY_SEPARATORS.join(', ')}. Got: '${configInstance.tagDirectorySeparator}'`);
+        }
+        // Validate default first tag format
+        if (!VERSION_TAG_REGEX.test(configInstance.defaultFirstTag)) {
+            throw new TypeError(`Default first tag must be in format v#.#.# or #.#.# (e.g., v1.0.0 or 1.0.0). Got: '${configInstance.defaultFirstTag}'`);
+        }
+        // If we aren't using "v" prefix but the default first tag was specified with a "v"
+        // prefix, then strip this to enforce.
+        if (!configInstance.useVersionPrefix && configInstance.defaultFirstTag.startsWith('v')) {
+            configInstance.defaultFirstTag = configInstance.defaultFirstTag.substring(1);
         }
         (0,core.info)(`Major Keywords: ${configInstance.majorKeywords.join(', ')}`);
         (0,core.info)(`Minor Keywords: ${configInstance.minorKeywords.join(', ')}`);
@@ -28328,6 +28261,8 @@ function initializeConfig() {
         (0,core.info)(`Module Change Exclude Patterns: ${configInstance.moduleChangeExcludePatterns.join(', ')}`);
         (0,core.info)(`Module Asset Exclude Patterns: ${configInstance.moduleAssetExcludePatterns.join(', ')}`);
         (0,core.info)(`Use SSH Source Format: ${configInstance.useSSHSourceFormat}`);
+        (0,core.info)(`Tag Directory Separator: ${configInstance.tagDirectorySeparator}`);
+        (0,core.info)(`Use Version Prefix: ${configInstance.useVersionPrefix}`);
         return configInstance;
     }
     finally {
@@ -28340,7 +28275,7 @@ function getConfig() {
 }
 // For backward compatibility and existing usage
 const config = new Proxy({}, {
-    get(target, prop) {
+    get(_target, prop) {
         return getConfig()[prop];
     },
 });
@@ -28903,7 +28838,7 @@ class RequestError extends Error {
 
 
 // pkg/dist-src/version.js
-var dist_bundle_VERSION = "0.0.0-development";
+var dist_bundle_VERSION = "10.0.3";
 
 // pkg/dist-src/defaults.js
 var defaults_default = {
@@ -29274,7 +29209,7 @@ var createTokenAuth = function createTokenAuth2(token) {
 
 
 ;// CONCATENATED MODULE: ./node_modules/@octokit/core/dist-src/version.js
-const version_VERSION = "7.0.2";
+const version_VERSION = "7.0.3";
 
 
 ;// CONCATENATED MODULE: ./node_modules/@octokit/core/dist-src/index.js
@@ -29288,6 +29223,21 @@ const noop = () => {
 };
 const consoleWarn = console.warn.bind(console);
 const consoleError = console.error.bind(console);
+function createLogger(logger = {}) {
+  if (typeof logger.debug !== "function") {
+    logger.debug = noop;
+  }
+  if (typeof logger.info !== "function") {
+    logger.info = noop;
+  }
+  if (typeof logger.warn !== "function") {
+    logger.warn = consoleWarn;
+  }
+  if (typeof logger.error !== "function") {
+    logger.error = consoleError;
+  }
+  return logger;
+}
 const userAgentTrail = `octokit-core.js/${version_VERSION} ${getUserAgent()}`;
 class Octokit {
   static VERSION = version_VERSION;
@@ -29355,15 +29305,7 @@ class Octokit {
     }
     this.request = request.defaults(requestDefaults);
     this.graphql = withCustomRequest(this.request).defaults(requestDefaults);
-    this.log = Object.assign(
-      {
-        debug: noop,
-        info: noop,
-        warn: consoleWarn,
-        error: consoleError
-      },
-      options.log
-    );
+    this.log = createLogger(options.log);
     this.hook = hook;
     if (!options.authStrategy) {
       if (!options.auth) {
@@ -29423,14 +29365,16 @@ function normalizePaginatedListResponse(response) {
       data: []
     };
   }
-  const responseNeedsNormalization = "total_count" in response.data && !("url" in response.data);
+  const responseNeedsNormalization = ("total_count" in response.data || "total_commits" in response.data) && !("url" in response.data);
   if (!responseNeedsNormalization) return response;
   const incompleteResults = response.data.incomplete_results;
   const repositorySelection = response.data.repository_selection;
   const totalCount = response.data.total_count;
+  const totalCommits = response.data.total_commits;
   delete response.data.incomplete_results;
   delete response.data.repository_selection;
   delete response.data.total_count;
+  delete response.data.total_commits;
   const namespaceKey = Object.keys(response.data)[0];
   const data = response.data[namespaceKey];
   response.data = data;
@@ -29441,6 +29385,7 @@ function normalizePaginatedListResponse(response) {
     response.data.repository_selection = repositorySelection;
   }
   response.data.total_count = totalCount;
+  response.data.total_commits = totalCommits;
   return response;
 }
 
@@ -29461,6 +29406,16 @@ function iterator(octokit, route, parameters) {
           url = ((normalizedResponse.headers.link || "").match(
             /<([^<>]+)>;\s*rel="next"/
           ) || [])[1];
+          if (!url && "total_commits" in normalizedResponse.data) {
+            const parsedUrl = new URL(normalizedResponse.url);
+            const params = parsedUrl.searchParams;
+            const page = parseInt(params.get("page") || "1", 10);
+            const per_page = parseInt(params.get("per_page") || "250", 10);
+            if (page * per_page < normalizedResponse.data.total_commits) {
+              params.set("page", String(page + 1));
+              url = parsedUrl.toString();
+            }
+          }
           return { value: normalizedResponse };
         } catch (error) {
           if (error.status !== 409) throw error;
@@ -29655,6 +29610,8 @@ var paginatingEndpoints = (/* unused pure expression or super */ null && ([
   "GET /repos/{owner}/{repo}/commits/{ref}/check-suites",
   "GET /repos/{owner}/{repo}/commits/{ref}/status",
   "GET /repos/{owner}/{repo}/commits/{ref}/statuses",
+  "GET /repos/{owner}/{repo}/compare/{basehead}",
+  "GET /repos/{owner}/{repo}/compare/{base}...{head}",
   "GET /repos/{owner}/{repo}/contributors",
   "GET /repos/{owner}/{repo}/dependabot/alerts",
   "GET /repos/{owner}/{repo}/dependabot/secrets",
@@ -32056,7 +32013,7 @@ legacyRestEndpointMethods.VERSION = dist_src_version_VERSION;
 //# sourceMappingURL=index.js.map
 
 ;// CONCATENATED MODULE: ./package.json
-const package_namespaceObject = /*#__PURE__*/JSON.parse('{"rE":"1.6.0","TB":"https://github.com/techpivot/terraform-module-releaser"}');
+const package_namespaceObject = /*#__PURE__*/JSON.parse('{"rE":"1.7.0","TB":"https://github.com/techpivot/terraform-module-releaser"}');
 ;// CONCATENATED MODULE: ./src/context.ts
 
 
@@ -32163,7 +32120,7 @@ function initializeContext() {
             repoUrl: `${serverUrl}/${owner}/${repo}`,
             octokit: new OctokitRestApi({
                 baseUrl: apiUrl,
-                auth: `token ${config.githubToken}`,
+                auth: `Bearer ${config.githubToken}`,
                 userAgent: `[octokit] terraform-module-releaser/${package_namespaceObject.rE} (${package_namespaceObject.TB})`,
             }),
             prNumber: payload.pull_request.number,
@@ -32197,352 +32154,1052 @@ const getContext = () => {
 };
 // For backward compatibility and existing usage
 const context = new Proxy({}, {
-    get(target, prop) {
+    get(_target, prop) {
         return getContext()[prop];
     },
 });
 
-;// CONCATENATED MODULE: ./src/changelog.ts
-
-/**
- * Creates a changelog entry for a Terraform module.
- *
- * The changelog contains a heading and a list of commits formatted with a timestamp.
- *
- * @param {string} heading - The version or tag heading for the changelog entry.
- * @param {Array<string>} commits - An array of commit messages to include in the changelog.
- * @returns {string} A formatted changelog entry as a string.
- */
-function createModuleChangelogEntry(heading, commits) {
-    const { prNumber, prTitle, repoUrl } = context;
-    const currentDate = new Date().toISOString().split('T')[0]; // Format: YYYY-MM-DD
-    const changelogContent = [`## \`${heading}\` (${currentDate})\n`];
-    // Whether to hyperlink the PR number in the changelog entry. GitHub automatically
-    // links the PR in the pull request comments but not automatically in the wiki markdown. In the releases section
-    // it will automatically link just the #9 portion but not the PR part. If we link the whole section it
-    // ends up being much cleaner.
-    changelogContent.push(`- :twisted_rightwards_arrows:**[PR #${prNumber}](${repoUrl}/pull/${prNumber})** - ${prTitle}`);
-    // Perform some normalization
-    const normalizedCommitMessages = commits
-        // If the PR title equals the message exactly, we'll skip it
-        .filter((msg) => msg.trim() !== prTitle)
-        // Trim the commit message and for markdown, newlines that are part of a list format
-        // better if they use a <br> tag instead of a newline character.
-        .map((commitMessage) => commitMessage.trim().replace(/(\n)/g, '<br>'));
-    for (const normalizedCommit of normalizedCommitMessages) {
-        changelogContent.push(`- ${normalizedCommit}`);
-    }
-    return changelogContent.join('\n');
-}
-/**
- * Retrieves the global pull request changelog.
- *
- * Aggregates changelog entries from all changed Terraform modules into a single view.
- * This aggregated changelog is used explicitly as a comment in the pull request message,
- * providing a concise summary of all module changes.
- *
- * @param {TerraformChangedModule[]} terraformChangedModules - An array of changed Terraform modules.
- * @returns {string} The content of the global pull request changelog.
- */
-function getPullRequestChangelog(terraformChangedModules) {
-    const pullRequestChangelog = [];
-    for (const { nextTag, commitMessages } of terraformChangedModules) {
-        pullRequestChangelog.push(createModuleChangelogEntry(nextTag, commitMessages));
-    }
-    return pullRequestChangelog.join('\n\n');
-}
-/**
- * Retrieves the changelog for a specific Terraform module.
- *
- * @param {ChangedTerraformModule} changedTerraformModule - The Terraform module whose changelog is to be retrieved.
- * @returns {string} The content of the module's changelog.
- */
-function getModuleChangelog(terraformChangedModule) {
-    const { nextTagVersion, commitMessages } = terraformChangedModule;
-    return createModuleChangelogEntry(nextTagVersion, commitMessages);
-}
-/**
- * Generates a changelog for a given Terraform module by concatenating the body
- * content of each release associated with the module.
- *
- * @param {TerraformModule} terraformModule - The Terraform module for which to generate the changelog.
- * @returns {string} A string containing the concatenated body content of all releases.
- */
-function getModuleReleaseChangelog(terraformModule) {
-    // Enumerate over the releases of the given Terraform module
-    return terraformModule.releases.map((release) => `${release.body}`).join('\n\n');
-}
-
-;// CONCATENATED MODULE: ./src/utils/constants.ts
-const GITHUB_ACTIONS_BOT_USER_ID = 41898282;
-const GITHUB_ACTIONS_BOT_NAME = 'GitHub Actions';
-const GITHUB_ACTIONS_BOT_EMAIL = '41898282+github-actions[bot]@users.noreply.github.com';
-const PR_SUMMARY_MARKER = '<!-- techpivot/terraform-module-releaser — pr-summary-marker -->';
-const PR_RELEASE_MARKER = '<!-- techpivot/terraform-module-releaser — release-marker -->';
-const PROJECT_URL = 'https://github.com/techpivot/terraform-module-releaser';
-const BRANDING_COMMENT = `<h4 align="center"><sub align="middle">Powered by:&nbsp;&nbsp;<a href="${PROJECT_URL}"><img src="https://raw.githubusercontent.com/techpivot/terraform-module-releaser/refs/heads/main/assets/octicons-mark-github.svg" height="12" width="12" align="center" /></a> <a href="${PROJECT_URL}">techpivot/terraform-module-releaser</a></sub></h4>`;
-const BRANDING_WIKI = `<h3 align="center">Powered by:&nbsp;&nbsp;<a href="${PROJECT_URL}"><img src="https://raw.githubusercontent.com/techpivot/terraform-module-releaser/refs/heads/main/assets/octicons-mark-github.svg" height="14" width="14" align="center" /></a> <a href="${PROJECT_URL}">techpivot/terraform-module-releaser</a></h3>`;
-/**
- * WIKI_TITLE_REPLACEMENTS - This object maps specific characters in wiki titles to visually
- * similar Unicode alternatives to handle GitHub Wiki limitations related to directory structure,
- * uniqueness, and consistent character visibility.
- *
- * ### GitHub Wiki Issues Addressed:
- *
- * - **Slash (`/`) Handling**:
- *   GitHub Wiki does not interpret forward slashes (`/`) as part of a directory structure in titles.
- *   When a title includes a slash, GitHub Wiki only recognizes the last segment (basename) for
- *   navigation, leading to potential conflicts if multiple pages share the same basename but
- *   reside in different contexts. By replacing `/` with a visually similar division slash (`∕`),
- *   this mapping helps preserve the intended path within the title, avoiding structure-related conflicts.
- *
- * - **Hyphen (`-`) Behavior**:
- *   If GitHub encounters a hyphen (`-`) in a title, it will automatically replace it with a figure dash (`‒`).
- *   Additionally, GitHub may move the file to the root directory, overriding any intended subdirectory placement.
- *   This behavior can lead to confusion and disorganization within the wiki. To maintain consistent naming
- *   conventions and avoid unintended movements of files, the hyphen is replaced with a figure dash in titles
- *   to ensure proper display and organization.
- *
- * ### Key-Value Pairs:
- * - Each **key** represents an original character in the title that may be problematic in GitHub Wiki.
- * - Each **value** is a Unicode replacement character chosen to visually resemble the original while
- *   avoiding structural or display conflicts.
- *
- * ### Current Mappings:
- * - `'/'` → `'∕'` (U+2215 Division Slash): Replaces forward slashes in titles to prevent directory
- *   conflicts.
- * - `'-'` → `'‒'` (U+2012 Figure Dash): Replaces hyphen with figure dash for better display and to avoid
- *   GitHub's auto-movement to the root directory.
- */
-const WIKI_TITLE_REPLACEMENTS = {
-    '/': '∕', // Replace forward slash with a visually similar division slash (U+2215)
-    '-': '‒', // Replace hyphen with figure dash (U+2012) for better display and to avoid GitHub's auto-movement
-};
-
-;// CONCATENATED MODULE: external "node:child_process"
-const external_node_child_process_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:child_process");
-;// CONCATENATED MODULE: external "node:fs/promises"
-const promises_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:fs/promises");
-;// CONCATENATED MODULE: external "node:os"
-const external_node_os_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:os");
 ;// CONCATENATED MODULE: external "node:path"
 const external_node_path_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:path");
-// EXTERNAL MODULE: external "node:util"
-var external_node_util_ = __nccwpck_require__(7975);
-// EXTERNAL MODULE: ./node_modules/which/lib/index.js
-var lib = __nccwpck_require__(1189);
-var lib_default = /*#__PURE__*/__nccwpck_require__.n(lib);
-;// CONCATENATED MODULE: ./src/terraform-docs.ts
-
-
-
-
-
-
-
-
-const execFilePromisified = (0,external_node_util_.promisify)(external_node_child_process_namespaceObject.execFile);
-const platformConfigs = {
-    darwin: {
-        platform: 'darwin',
-        supportedArch: ['amd64', 'arm64'],
-        extension: '.tar.gz',
-    },
-    linux: {
-        platform: 'linux',
-        supportedArch: ['amd64', 'arm', 'arm64'],
-        extension: '.tar.gz',
-    },
-    freebsd: {
-        platform: 'freebsd',
-        supportedArch: ['amd64', 'arm', 'arm64'],
-        extension: '.tar.gz',
-    },
-    win32: {
-        platform: 'windows',
-        supportedArch: ['amd64', 'arm64'],
-        extension: '.zip',
-    },
-};
-const nodeArchToGoArch = {
-    x64: 'amd64',
-    arm: 'arm',
-    arm64: 'arm64',
-};
+;// CONCATENATED MODULE: ./src/utils/string.ts
 /**
- * Type guard for NodePlatform
- */
-function isNodePlatform(platform) {
-    return Object.keys(platformConfigs).includes(platform);
-}
-/**
- * Type guard for NodeArch
- */
-function isNodeArch(arch) {
-    return Object.keys(nodeArchToGoArch).includes(arch);
-}
-/**
- * Converts Node platform to Go platform
- */
-function getGoPlatform(nodePlatform) {
-    return platformConfigs[nodePlatform].platform;
-}
-/**
- * Validates and returns the platform configuration for terraform-docs
+ * Removes trailing characters from a string without using regex.
  *
- * @param nodePlatform - The Node.js platform
- * @param nodeArch - The Node.js architecture
- * @returns The validated platform configuration and Go architecture
- * @throws {Error} If the platform or architecture combination is not supported
- */
-function getValidatedPlatformConfig(nodePlatform, nodeArch) {
-    // Validate platform
-    if (!isNodePlatform(nodePlatform)) {
-        throw new Error(`Unsupported platform: ${nodePlatform}. Supported platforms are: ${Object.keys(platformConfigs).join(', ')}`);
-    }
-    // Validate architecture
-    if (!isNodeArch(nodeArch)) {
-        throw new Error(`Unsupported architecture: ${nodeArch}. Supported architectures are: ${Object.keys(nodeArchToGoArch).join(', ')}`);
-    }
-    const platformConfig = platformConfigs[nodePlatform];
-    const goPlatform = getGoPlatform(nodePlatform);
-    const goArch = nodeArchToGoArch[nodeArch];
-    // Validate platform-architecture combination
-    if (!platformConfig.supportedArch.includes(goArch)) {
-        throw new Error(`Architecture ${goArch} is not supported for platform ${goPlatform}. ` +
-            `Supported architectures for ${goPlatform} are: ${platformConfig.supportedArch.join(', ')}`);
-    }
-    return {
-        goPlatform,
-        goArch,
-        extension: platformConfig.extension,
-    };
-}
-/**
- * Validates that the terraform-docs version string matches the expected format (v#.#.#)
- * @param version - Version string to validate
- * @throws {Error} If the version string is invalid
- */
-function validateTerraformDocsVersion(version) {
-    const versionPattern = /^v\d+\.\d+\.\d+$/;
-    if (!versionPattern.test(version)) {
-        throw new Error(`Invalid terraform-docs version format: ${version}. Version must match the format v#.#.# (e.g., v0.19.0)`);
-    }
-}
-/**
- * Installs the specified version of terraform-docs.
+ * This function iteratively checks each character from the end of the string
+ * and removes any consecutive characters that match the specified characters to remove.
+ * It uses a direct character-by-character approach instead of regex to avoid potential
+ * backtracking issues and ensure consistent O(n) performance.
  *
- * @param {string} terraformDocsVersion - The version of terraform-docs to install.
- * @throws {Error} If the platform or architecture combination is not supported
+ * @param {string} input - The string to process
+ * @param {string[]} charactersToRemove - Array of characters to remove from the end
+ * @returns {string} The input string with all trailing specified characters removed
+ *
+ * @example
+ * // Returns "example"
+ * removeTrailingCharacters("example...", ["."])
+ *
+ * @example
+ * // Returns "module-name"
+ * removeTrailingCharacters("module-name-_.", [".", "-", "_"])
  */
-function installTerraformDocs(terraformDocsVersion) {
-    console.time('Elapsed time installing terraform-docs');
-    (0,core.startGroup)(`Installing terraform-docs ${terraformDocsVersion}`);
-    const cwd = process.cwd();
-    let tmpDir = null;
-    try {
-        validateTerraformDocsVersion(terraformDocsVersion);
-        const { goPlatform, goArch, extension } = getValidatedPlatformConfig(process.platform, process.arch);
-        const downloadFilename = `terraform-docs-${terraformDocsVersion}-${goPlatform}-${goArch}${extension}`;
-        const downloadUrl = `https://terraform-docs.io/dl/${terraformDocsVersion}/${downloadFilename}`;
-        // Create a temp directory to handle the extraction so this doesn't clobber our
-        // current working directory.
-        tmpDir = (0,external_node_fs_namespaceObject.mkdtempSync)((0,external_node_path_namespaceObject.join)((0,external_node_os_namespaceObject.tmpdir)(), 'terraform-docs-'));
-        process.chdir(tmpDir);
-        if (goPlatform === 'windows') {
-            const powershellPath = lib_default().sync('powershell');
-            (0,core.info)('Downloading terraform-docs...');
-            (0,external_node_child_process_namespaceObject.execFileSync)(powershellPath, [
-                '-Command',
-                `Invoke-WebRequest -Uri "${downloadUrl}" -OutFile "./terraform-docs.zip"`,
-            ]);
-            (0,core.info)('Unzipping terraform-docs...');
-            (0,external_node_child_process_namespaceObject.execFileSync)(powershellPath, [
-                '-Command',
-                `Expand-Archive -Path "./terraform-docs.zip" -DestinationPath "./terraform-docs" -Force`,
-            ]);
-            (0,core.info)('Getting Windows system dir...');
-            const systemDir = (0,external_node_child_process_namespaceObject.execFileSync)(powershellPath, [
-                '-Command',
-                `Write-Output ([System.IO.Path]::GetFullPath([System.Environment]::GetFolderPath('System')))`,
-            ])
-                .toString()
-                .trim();
-            (0,core.info)(`Copying executable to system dir (${systemDir})...`);
-            (0,external_node_child_process_namespaceObject.execFileSync)(powershellPath, [
-                '-Command',
-                `Move-Item -Path "./terraform-docs/terraform-docs.exe" -Destination "${systemDir}\\terraform-docs.exe"`,
-            ]);
-            // terraform-docs version v0.19.0 af31cc6 windows/amd64
-            (0,external_node_child_process_namespaceObject.execFileSync)(`${systemDir}\\terraform-docs.exe`, ['--version'], { stdio: 'inherit' });
+function removeTrailingCharacters(input, charactersToRemove) {
+    let endIndex = input.length;
+    while (endIndex > 0 && charactersToRemove.includes(input[endIndex - 1])) {
+        endIndex--;
+    }
+    return input.slice(0, endIndex);
+}
+/**
+ * Removes leading characters from a string without using regex.
+ *
+ * This function iteratively checks each character from the beginning of the string
+ * and removes any consecutive characters that match the specified characters to remove.
+ * It uses a direct character-by-character approach instead of regex to avoid potential
+ * backtracking issues and ensure consistent O(n) performance.
+ *
+ * @param {string} input - The string to process
+ * @param {string[]} charactersToRemove - Array of characters to remove from the beginning
+ * @returns {string} The input string with all leading specified characters removed
+ *
+ * @example
+ * // Returns "example"
+ * removeLeadingCharacters("...example", ["."])
+ *
+ * @example
+ * // Returns "module-name"
+ * removeLeadingCharacters("._-module-name", [".", "-", "_"])
+ */
+function removeLeadingCharacters(input, charactersToRemove) {
+    let startIndex = 0;
+    while (startIndex < input.length && charactersToRemove.includes(input[startIndex])) {
+        startIndex++;
+    }
+    return input.slice(startIndex);
+}
+/**
+ * Renders a template string by replacing placeholders with provided values.
+ *
+ * @param template The template string containing placeholders in the format `{{key}}`.
+ * @param variables An object where keys correspond to placeholder names and values are their replacements.
+ *                   If a value is undefined or null, the placeholder will be left unchanged.
+ * @returns The rendered string with placeholders replaced.
+ *
+ * @example
+ * // Returns "Hello, World!"
+ * renderTemplate("Hello, {{name}}!", { name: "World" })
+ *
+ * @example
+ * // Returns "Hi, There!"
+ * renderTemplate("{{greeting}}, {{name}}!", { greeting: "Hi", name: "There" })
+ *
+ * @example
+ * // Returns "Hello, {{name}}!" (undefined value leaves placeholder unchanged)
+ * renderTemplate("Hello, {{name}}!", { name: undefined })
+ *
+ * @example
+ * // Returns "Hello, {{name}}!" (null value leaves placeholder unchanged)
+ * renderTemplate("Hello, {{name}}!", { name: null })
+ */
+function renderTemplate(template, variables) {
+    return template.replace(/\{\{(\w+)\}\}/g, (placeholder, key) => {
+        const value = variables[key];
+        return value !== undefined && value !== null ? value : placeholder;
+    });
+}
+
+;// CONCATENATED MODULE: ./src/terraform-module.ts
+
+
+
+
+
+
+/**
+ * Represents a Terraform module with its associated metadata, commits, and release information.
+ *
+ * The TerraformModule class provides functionality to track changes to a Terraform module,
+ * manage its release lifecycle, and compute appropriate version updates based on changes.
+ * It handles both direct changes to module files and dependency-triggered updates.
+ */
+class TerraformModule {
+    /**
+     * The Terraform module name used for tagging with some special characters removed.
+     */
+    name;
+    /**
+     * The full path to the directory where the module is located.
+     */
+    directory;
+    /**
+     * Map of commits that affect this module, keyed by SHA to prevent duplicates.
+     */
+    _commits = new Map();
+    /**
+     * Private list of tags relevant to this module.
+     */
+    _tags = [];
+    /**
+     * Private list of releases relevant to this module.
+     */
+    _releases = [];
+    constructor(directory) {
+        this.directory = directory;
+        // Handle modules outside workspace directory (primarily for testing scenarios)
+        // Falls back to directory name when relative path contains '../'
+        const relativePath = (0,external_node_path_namespaceObject.relative)(context.workspaceDir, directory);
+        // If relative path starts with '../', the module is outside the workspace directory
+        // Fall back to using the directory name directly to avoid invalid module names
+        const pathForModuleName = relativePath.startsWith('../') ? directory : relativePath;
+        this.name = TerraformModule.getTerraformModuleNameFromRelativePath(pathForModuleName);
+    }
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Commits
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    /**
+     * Gets all commits that affect this Terraform module.
+     *
+     * Returns a read-only array of commit details that have been associated with this module
+     * through files changes. Each commit includes the SHA, message, and affected file paths.
+     *
+     * @returns {ReadonlyArray<CommitDetails>} A read-only array of commit details affecting this module
+     *
+     * @example
+     * ```typescript
+     * const module = new TerraformModule('/path/to/module');
+     * const commits = module.commits;
+     * console.log(`Module has ${commits.length} commits`);
+     * ```
+     */
+    get commits() {
+        return Array.from(this._commits.values());
+    }
+    /**
+     * Gets all commit messages for commits that affect this Terraform module.
+     *
+     * Extracts just the commit messages from the full commit details, providing
+     * a convenient way to access commit messages for analysis or display purposes.
+     *
+     * @returns {ReadonlyArray<string>} A read-only array of commit messages
+     *
+     * @example
+     * ```typescript
+     * const module = new TerraformModule('/path/to/module');
+     * const messages = module.commitMessages;
+     * console.log('Recent changes:', messages.join(', '));
+     * ```
+     */
+    get commitMessages() {
+        return this.commits.map((c) => c.message);
+    }
+    /**
+     * Adds a commit to this module's commit collection with automatic deduplication.
+     *
+     * This method safely adds commit details to the module's internal commit tracking.
+     * It prevents duplicate entries by using the commit SHA as a unique identifier.
+     * Multiple file changes from the same commit will only result in one commit entry.
+     *
+     * @param {CommitDetails} commit - The commit details to add, including SHA, message, and file paths
+     * @returns {void}
+     *
+     * @example
+     * ```typescript
+     * const module = new TerraformModule('/path/to/module');
+     * module.addCommit({
+     *   sha: 'abc123def456',
+     *   message: 'feat: add new feature',
+     *   files: ['module/main.tf', 'module/variables.tf']
+     * });
+     * ```
+     */
+    addCommit(commit) {
+        if (!this._commits.has(commit.sha)) {
+            this._commits.set(commit.sha, commit);
+        }
+    }
+    /**
+     * Clears all commits associated with this Terraform module.
+     *
+     * This method removes all commit details from the module's internal commit tracking.
+     * It is typically called after a module has been successfully released to prevent
+     * the module from being released again for the same commits.
+     *
+     * @returns {void}
+     */
+    clearCommits() {
+        this._commits.clear();
+    }
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Tags
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    /**
+     * Sets the Git tags associated with this Terraform module.
+     *
+     * Accepts an array of tag strings and automatically sorts them by semantic version
+     * in descending order (newest first). Tags must follow the format `{moduleName}/v{x.y.z}` or `{moduleName}/x.y.z`.
+     * This method replaces any previously set tags. Throws if any tag is invalid.
+     *
+     * @param {ReadonlyArray<string>} tags - Array of Git tag strings to associate with this module
+     * @throws {Error} If any tag does not match the required format
+     * @returns {void}
+     *
+     * @example
+     * ```typescript
+     * const module = new TerraformModule('/path/to/module');
+     * module.setTags([
+     *   'my-module/v1.0.0',
+     *   'my-module/v1.1.0',
+     *   'my-module/v2.0.0'
+     * ]);
+     * // Tags will be automatically sorted: v2.0.0, v1.1.0, v1.0.0
+     * ```
+     */
+    setTags(tags) {
+        // Extract versions once and validate during the process
+        const tagVersionMap = new Map();
+        // First pass: validate all tags and extract versions
+        for (const tag of tags) {
+            tagVersionMap.set(tag, this.extractVersionFromTag(tag));
+        }
+        // Second pass: Sort using pre-extracted versions (create copy to avoid mutating input)
+        this._tags = [...tags].sort((a, b) => {
+            const aVersion = tagVersionMap.get(a);
+            const bVersion = tagVersionMap.get(b);
+            if (!aVersion || !bVersion) {
+                throw new Error('Internal error: version not found in map');
+            }
+            return this.compareSemanticVersions(bVersion, aVersion); // Descending
+        });
+    }
+    /**
+     * Gets all Git tags relevant to this Terraform module.
+     *
+     * Returns a read-only array of tag strings that have been filtered and sorted
+     * for this specific module. Tags are sorted by semantic version in descending order.
+     *
+     * @returns {ReadonlyArray<string>} A read-only array of Git tag strings for this module
+     */
+    get tags() {
+        return this._tags;
+    }
+    /**
+     * Returns the latest full tag for this module.
+     *
+     * @returns {string | null} The latest tag string (e.g., 'module-name/v1.2.3'), or null if no tags exist.
+     */
+    getLatestTag() {
+        if (this.tags.length === 0) {
+            return null;
+        }
+        return this.tags[0];
+    }
+    /**
+     * Returns the version part of the latest tag for this module.
+     *
+     * Preserves any version prefixes (such as "v") that may be present or configured.
+     *
+     * @returns {string | null} The version string including any prefixes (e.g., 'v1.2.3' or '1.2.3'), or null if no tags exist.
+     */
+    getLatestTagVersion() {
+        const latestTag = this.getLatestTag();
+        if (latestTag === null) {
+            return null;
+        }
+        const match = MODULE_TAG_REGEX.exec(latestTag);
+        return match ? match[3] : null;
+    }
+    /**
+     * Returns the version part of the latest tag for this module, without any "v" prefix.
+     *
+     * @returns {string | null} The version string without any prefixes (e.g., '1.2.3'), or null if no tags exist.
+     */
+    getLatestTagVersionNumber() {
+        const version = this.getLatestTagVersion();
+        if (!version) {
+            return null;
+        }
+        return version.replace(/^v/, '');
+    }
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Releases
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    /**
+     * Sets the GitHub releases associated with this Terraform module.
+     *
+     * Accepts an array of GitHub release objects and automatically sorts them by semantic version
+     * in descending order (newest first). Releases must have tagName following the format
+     * `{moduleName}/v{x.y.z}` or `{moduleName}/x.y.z`. Throws if any release is invalid.
+     * This method replaces any previously set releases.
+     *
+     * @param {ReadonlyArray<GitHubRelease>} releases - Array of GitHub release objects to associate with this module
+     * @throws {Error} If any release tagName does not match the required format
+     * @returns {void}
+     *
+     * @example
+     * ```typescript
+     * const module = new TerraformModule('/path/to/module');
+     * module.setReleases([
+     *   { id: 1, title: 'my-module/v1.0.0', body: 'Initial release', tagName: 'my-module/v1.0.0' },
+     *   { id: 2, title: 'my-module/v1.1.0', body: 'Feature update', tagName: 'my-module/v1.1.0' }
+     * ]);
+     * // Releases will be automatically sorted by version (newest first)
+     * ```
+     */
+    setReleases(releases) {
+        // Extract versions once and validate during the process
+        const releaseVersionMap = new Map();
+        // First pass: validate all releases and extract versions
+        for (const release of releases) {
+            releaseVersionMap.set(release, this.extractVersionFromTag(release.tagName));
+        }
+        // Second pass: Sort using pre-extracted versions
+        // Second pass: Sort using pre-extracted versions (create copy to avoid mutating input)
+        this._releases = [...releases].sort((a, b) => {
+            const aVersion = releaseVersionMap.get(a);
+            const bVersion = releaseVersionMap.get(b);
+            if (!aVersion || !bVersion) {
+                throw new Error('Internal error: version not found in map');
+            }
+            return this.compareSemanticVersions(bVersion, aVersion); // Descending
+        });
+    }
+    /**
+     * Gets all GitHub releases relevant to this Terraform module.
+     *
+     * Returns a read-only array of GitHub release objects that have been filtered and sorted
+     * for this specific module. Releases are sorted by semantic version in descending order.
+     * Each release contains the ID, title, body content, and associated tag name.
+     *
+     * @returns {ReadonlyArray<GitHubRelease>} A read-only array of GitHub release objects for this module
+     *
+     * @example
+     * ```typescript
+     * const module = new TerraformModule('/path/to/module');
+     * const releases = module.releases;
+     * console.log('Latest release:', releases[0]?.title); // Most recent version
+     * console.log('Release count:', releases.length);
+     *
+     * // Access release details
+     * releases.forEach(release => {
+     *   console.log(`Release ${release.title}: ${release.body}`);
+     * });
+     * ```
+     */
+    get releases() {
+        return this._releases;
+    }
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Release Management
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    /**
+     * Determines if this module represents an initial release with no existing version tags.
+     *
+     * @returns {boolean} True if this is the first release for the module, false otherwise.
+     */
+    isInitialRelease() {
+        return this.tags.length === 0;
+    }
+    /**
+     * Checks if the module has direct file changes based on commit history.
+     *
+     * @returns {boolean} True if the module has commits with direct file changes, false otherwise.
+     */
+    hasDirectChanges() {
+        return this.commitMessages.length > 0;
+    }
+    /**
+     * Evaluates whether the module needs any type of release based on changes, dependencies, or initial state.
+     *
+     * @returns {boolean} True if the module requires a release for any reason, false otherwise.
+     */
+    needsRelease() {
+        return this.isInitialRelease() || this.hasDirectChanges();
+    }
+    /**
+     * Computes the appropriate semantic version release type based on commit analysis and module state.
+     * Analyzes commit messages against configured keywords to determine if changes warrant major, minor, or patch releases.
+     *
+     * @returns {ReleaseType | null} The computed release type (major, minor, or patch), or null if no release is needed.
+     */
+    getReleaseType() {
+        // If we have commits, analyze them for release type
+        if (this.hasDirectChanges()) {
+            const { majorKeywords, minorKeywords } = config;
+            let computedReleaseType = RELEASE_TYPE.PATCH;
+            // Analyze each commit message and determine highest release type
+            for (const message of this.commitMessages) {
+                const messageCleaned = message.toLowerCase().trim();
+                // Determine release type from current message
+                let currentReleaseType = RELEASE_TYPE.PATCH;
+                if (majorKeywords.some((keyword) => messageCleaned.includes(keyword.toLowerCase()))) {
+                    currentReleaseType = RELEASE_TYPE.MAJOR;
+                }
+                else if (minorKeywords.some((keyword) => messageCleaned.includes(keyword.toLowerCase()))) {
+                    currentReleaseType = RELEASE_TYPE.MINOR;
+                }
+                // Determine the next release type considering the previous release type
+                if (currentReleaseType === RELEASE_TYPE.MAJOR || computedReleaseType === RELEASE_TYPE.MAJOR) {
+                    computedReleaseType = RELEASE_TYPE.MAJOR;
+                }
+                else if (currentReleaseType === RELEASE_TYPE.MINOR || computedReleaseType === RELEASE_TYPE.MINOR) {
+                    computedReleaseType = RELEASE_TYPE.MINOR;
+                }
+            }
+            return computedReleaseType;
+        }
+        // If this is initial release, return patch
+        if (this.isInitialRelease()) {
+            return RELEASE_TYPE.PATCH;
+        }
+        // Otherwise, return null
+        return null;
+    }
+    /**
+     * Identifies all release reasons that apply to this module based on its current state.
+     * A module can have multiple reasons for requiring a release, such as both direct changes and dependency updates.
+     *
+     * @returns {ReleaseReason[]} An array of release reasons, or an empty array if no release is needed.
+     */
+    getReleaseReasons() {
+        if (!this.needsRelease()) {
+            return [];
+        }
+        const reasons = [];
+        if (this.isInitialRelease()) {
+            reasons.push(RELEASE_REASON.INITIAL);
+        }
+        if (this.hasDirectChanges()) {
+            reasons.push(RELEASE_REASON.DIRECT_CHANGES);
+        }
+        return reasons;
+    }
+    /**
+     * Computes the next release tag version for this module based on its current state.
+     *
+     * Analyzes the latest tag and determines the next version number according to the
+     * computed release type (major, minor, or patch). Returns null if no release is needed.
+     *
+     * @returns {string | null} The next release tag version (e.g., 'v1.2.3' or '1.2.3'), or null if no release is needed.
+     *
+     * @example
+     * ```typescript
+     * const module = new TerraformModule('/path/to/module');
+     * const version = module.getReleaseTagVersion(); // Returns 'v1.2.4' if release needed
+     * ```
+     */
+    getReleaseTagVersion() {
+        const releaseType = this.getReleaseType();
+        if (releaseType === null) {
+            return null;
+        }
+        const latestTagVersion = this.getLatestTagVersion();
+        if (latestTagVersion === null) {
+            return config.defaultFirstTag;
+        }
+        // Note: At this point, we'll always have a valid format either 'v1.2.3' or '1.2.3' based on how we validate
+        // via the setTags() and setReleases(). But we'll check anyways for robustness.
+        const versionMatch = VERSION_TAG_REGEX.exec(latestTagVersion);
+        if (!versionMatch) {
+            // We should not reach here due to our validation, so throw an error instead of returning default tag
+            throw new Error(`Invalid version format: '${latestTagVersion}'. Expected v#.#.# or #.#.# format.`);
+        }
+        const [, major, minor, patch] = versionMatch;
+        const semver = [Number(major), Number(minor), Number(patch)];
+        if (releaseType === RELEASE_TYPE.MAJOR) {
+            semver[0]++;
+            semver[1] = 0;
+            semver[2] = 0;
+        }
+        else if (releaseType === RELEASE_TYPE.MINOR) {
+            semver[1]++;
+            semver[2] = 0;
         }
         else {
-            const commands = ['curl', 'tar', 'chmod', 'sudo'];
-            const paths = {};
-            for (const command of commands) {
-                paths[command] = lib_default().sync(command);
-                (0,core.info)(`Found ${command} at: ${paths[command]}`);
+            semver[2]++;
+        }
+        return `${config.useVersionPrefix ? 'v' : ''}${semver.join('.')}`;
+    }
+    /**
+     * Returns the full release tag that would be created for this module based on its current state.
+     *
+     * Combines the module name with the computed release version to form a complete tag
+     * in the format '{moduleName}/v{x.y.z}'. Returns null if no release is needed.
+     *
+     * @returns {string | null} The full release tag string (e.g., 'module-name/v1.2.3'), or null if no release is needed.
+     *
+     * @example
+     * ```typescript
+     * const module = new TerraformModule('/path/to/module');
+     * const tag = module.getReleaseTag(); // Returns 'my-module/v1.2.4' if release needed
+     * ```
+     */
+    getReleaseTag() {
+        const releaseTagVersion = this.getReleaseTagVersion();
+        if (releaseTagVersion === null) {
+            return null;
+        }
+        return `${this.name}${config.tagDirectorySeparator}${releaseTagVersion}`;
+    }
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Helper
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    /**
+     * Extracts and validates the version string from a Terraform module tag.
+     *
+     * Uses the MODULE_TAG_REGEX to validate the tag format and extract version components.
+     * This method leverages the static validation logic to ensure consistent tag processing
+     * across different separator formats (/, -, _, .).
+     *
+     * @param {string} tag - The tag string to extract version from (e.g., "module/v1.2.3", "module-v1.2.3")
+     * @returns {string} The numerical version string without prefix (e.g., "1.2.3")
+     * @throws {Error} If the tag does not match the required format or is not associated with this module
+     */
+    extractVersionFromTag(tag) {
+        // Use the static validation method to ensure the tag is associated with this module
+        if (!TerraformModule.isModuleAssociatedWithTag(this.name, tag)) {
+            throw new Error(`Invalid tag format: '${tag}'. Expected format: '${this.name}[separator]v#.#.#' or '${this.name}[separator]#.#.#'.`);
+        }
+        // Parse the tag using MODULE_TAG_REGEX to extract version components
+        // Note: This will never be null since TerraformModule.isModuleAssociatedWithTag already checks for this;
+        // however, for typing, we'll just recheck.
+        const match = MODULE_TAG_REGEX.exec(tag);
+        /* v8 ignore next 5 */
+        if (!match) {
+            throw new Error(`Invalid tag format: '${tag}'. Expected format: '${this.name}[separator]v#.#.#' or '${this.name}[separator]#.#.#'.`);
+        }
+        // Extract the numerical version components (groups 4, 5, 6 are major.minor.patch)
+        const major = match[4];
+        const minor = match[5];
+        const patch = match[6];
+        return `${major}.${minor}.${patch}`;
+    }
+    /**
+     * Compares two semantic version strings safely.
+     *
+     * @param {string} versionA - First version string in format "#.#.#" (e.g., "1.2.3")
+     * @param {string} versionB - Second version string in format "#.#.#" (e.g., "1.2.4")
+     * @returns {number} Negative if A < B, positive if A > B, zero if equal
+     *
+     * @note Both parameters are guaranteed to be in numerical format "#.#.#" without any prefix,
+     *       as they are processed through extractVersionFromTag which strips any 'v' prefix.
+     */
+    compareSemanticVersions(versionA, versionB) {
+        const parseVersion = (version) => {
+            const parts = version.split('.');
+            return [Number(parts[0]), Number(parts[1]), Number(parts[2])];
+        };
+        const [majorA, minorA, patchA] = parseVersion(versionA);
+        const [majorB, minorB, patchB] = parseVersion(versionB);
+        if (majorA !== majorB)
+            return majorA - majorB;
+        if (minorA !== minorB)
+            return minorA - minorB;
+        return patchA - patchB;
+    }
+    /**
+     * Returns a formatted string representation of the module for debugging and logging.
+     *
+     * The output includes the module name, directory path, recent commits (if any),
+     * and release information when a release is needed. Commits are displayed with
+     * their short SHA and first line of the commit message.
+     *
+     * @returns {string} A multi-line formatted string containing:
+     *   - Module name with package emoji
+     *   - Directory path
+     *   - List of tags (if present)
+     *   - List of releases with ID, title and tag (if present)
+     *   - List of commits with short SHA and message (if present)
+     *   - Release type, next tag, and version (if release needed)
+     *   - Dependency triggers (if applicable)
+     *
+     * @example
+     * ```
+     * 📦 [my-package]
+     *    Directory: /path/to/package
+     *    Tags:
+     *      - my-package/v1.0.0
+     *    Releases:
+     *      - [123] my-package/v1.0.0 -> tag: `my-package/v1.0.0`
+     *    Commits:
+     *      - [abc1234] feat: add new feature
+     *      - [def5678] fix: resolve bug
+     *    Release type: minor
+     *    Next tag: v1.2.0
+     *    Next version: 1.2.0
+     * ```
+     */
+    toString() {
+        const lines = [`📦 [${this.name}]`, `   Directory: ${this.directory}`];
+        if (this.tags.length > 0) {
+            lines.push('   Tags:');
+            for (const tag of this.tags) {
+                lines.push(`     - ${tag}`);
             }
-            (0,external_node_child_process_namespaceObject.execFileSync)(paths.curl, ['-sSLfo', './terraform-docs.tar.gz', downloadUrl]);
-            (0,external_node_child_process_namespaceObject.execFileSync)(paths.tar, ['-xzf', './terraform-docs.tar.gz']);
-            (0,external_node_child_process_namespaceObject.execFileSync)(paths.chmod, ['+x', 'terraform-docs']);
-            (0,external_node_child_process_namespaceObject.execFileSync)(paths.sudo, ['mv', 'terraform-docs', '/usr/local/bin/terraform-docs']);
-            // terraform-docs version v0.19.0 af31cc6 linux/amd64
-            (0,external_node_child_process_namespaceObject.execFileSync)('/usr/local/bin/terraform-docs', ['--version'], { stdio: 'inherit' });
         }
+        if (this.releases.length > 0) {
+            lines.push('   Releases:');
+            for (const release of this.releases) {
+                lines.push(`     - [#${release.id}] ${release.title}  (tag: ${release.tagName})`);
+            }
+        }
+        if (this.commits.length > 0) {
+            lines.push('   Commits:');
+            for (const commit of this.commits) {
+                const shortSha = commit.sha.slice(0, 7);
+                const firstLine = commit.message.split('\n')[0];
+                lines.push(`     - [${shortSha}] ${firstLine}`);
+            }
+        }
+        // Add release-specific info if relevant
+        if (this.needsRelease()) {
+            lines.push(`   Release Type: ${this.getReleaseType()}`);
+            lines.push(`   Release Reasons: ${this.getReleaseReasons().join(', ')}`);
+            lines.push(`   Release Tag: ${this.getReleaseTag()}`);
+        }
+        return lines.join('\n');
     }
-    finally {
-        if (tmpDir !== null) {
-            (0,core.info)(`Removing temp dir ${tmpDir}`);
-            (0,external_node_fs_namespaceObject.rmSync)(tmpDir, { recursive: true });
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Static Utilities
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    /**
+     * Generates a valid Terraform module name from the given relative directory path.
+     *
+     * The function transforms the directory path by:
+     * - Trimming whitespace
+     * - Converting to lowercase (for consistency)
+     * - Normalizing path separators (both backslashes and forward slashes) to the configured tag directory separator
+     * - Replacing invalid characters with hyphens (preserving only alphanumeric, "/", ".", "-", "_")
+     * - Normalizing consecutive special characters ("/", ".", "-", "_") to single instances
+     * - Removing leading/trailing special characters ("/", ".", "-", "_") using safe string operations
+     *
+     * @param {string} terraformDirectory - The relative directory path from which to generate the module name.
+     * @returns {string} A valid Terraform module name based on the provided directory path.
+     */
+    static getTerraformModuleNameFromRelativePath(terraformDirectory) {
+        let name = terraformDirectory
+            .trim()
+            .toLowerCase()
+            .replace(/[/\\]/g, config.tagDirectorySeparator) // Normalize backslashes and forward slashes to configured separator
+            .replace(/[^a-zA-Z0-9/._-]+/g, '-') // Replace invalid characters with hyphens (preserve alphanumeric, /, ., _, -)
+            .replace(/[/._-]{2,}/g, (match) => match[0]); // Normalize consecutive special characters to single instances
+        // Remove leading/trailing special characters safely without regex backtracking
+        name = removeLeadingCharacters(name, VALID_TAG_DIRECTORY_SEPARATORS);
+        name = removeTrailingCharacters(name, VALID_TAG_DIRECTORY_SEPARATORS);
+        return name;
+    }
+    /**
+     * Static utility to check if a tag is associated with a given module name.
+     * Supports multiple directory separators and handles cases where tagging schemes
+     * may have changed over time (e.g., from 'module-name/v1.0.0' to 'module-name-v1.1.0').
+     *
+     * @param {string} moduleName - The Terraform module name (assumed to be cleaned)
+     * @param {string} tag - The tag to check
+     * @returns {boolean} True if the tag belongs to the module and has valid version format
+     */
+    static isModuleAssociatedWithTag(moduleName, tag) {
+        // Use the existing MODULE_TAG_REGEX to parse the tag and extract module name + version
+        const match = MODULE_TAG_REGEX.exec(tag);
+        if (!match) {
+            // The tag doesn't match the expected "module-name/version" format
+            return false;
         }
-        process.chdir(cwd);
-        console.timeEnd('Elapsed time installing terraform-docs');
+        // Extract the module name part from the tag (group 1)
+        const moduleNameFromTag = match[1];
+        // Define a consistent separator to normalize module names
+        const NORMALIZE_SEPARATOR = '|';
+        // Normalize both the input moduleName and the extracted module name from the tag.
+        // This allows for comparison even if the tagging scheme changed over time
+        // (e.g., from 'my/module/v1.0.0' to 'my-module-v1.1.0').
+        const normalizeName = (name) => {
+            // Replace all valid tag directory separators with a consistent separator
+            // This handles cases where different separators were used in different tags
+            let normalized = name;
+            for (const separator of VALID_TAG_DIRECTORY_SEPARATORS) {
+                normalized = normalized.replaceAll(separator, NORMALIZE_SEPARATOR);
+            }
+            return normalized;
+        };
+        // Compare the normalized names to determine if they match
+        return normalizeName(moduleName) === normalizeName(moduleNameFromTag);
+    }
+    /**
+     * Static utility to filter tags for a given module name.
+     *
+     * @param {string} moduleName - The Terraform module name to find current tags
+     * @param {string[]} allTags - An array of all available tags
+     * @returns {string[]} An array of all matching tags for the module
+     */
+    static getTagsForModule(moduleName, allTags) {
+        return allTags.filter((tag) => TerraformModule.isModuleAssociatedWithTag(moduleName, tag));
+    }
+    /**
+     * Static utility to filter releases for a given module name.
+     *
+     * @param {string} moduleName - The Terraform module name to find current releases
+     * @param {GitHubRelease[]} allReleases - An array of all available GitHub releases
+     * @returns {GitHubRelease[]} An array of all matching releases for the module
+     */
+    static getReleasesForModule(moduleName, allReleases) {
+        return allReleases.filter((release) => TerraformModule.isModuleAssociatedWithTag(moduleName, release.tagName));
+    }
+    /**
+     * Returns all modules that need a release from the provided list.
+     *
+     * @param {TerraformModule[]} modules - Array of TerraformModule instances
+     * @returns {TerraformModule[]} Array of modules that need a release
+     */
+    static getModulesNeedingRelease(modules) {
+        return modules.filter((module) => module.needsRelease());
+    }
+    /**
+     * Determines an array of Terraform tags that need to be deleted.
+     *
+     * Identifies tags that belong to modules no longer present in the current
+     * module list by checking if any current module is associated with each tag.
+     * This approach leverages the robust tag association logic that handles
+     * different separator schemes over time.
+     *
+     * @param {string[]} allTags - A list of all tags associated with the modules.
+     * @param {TerraformModule[]} terraformModules - An array of Terraform modules.
+     * @returns {string[]} An array of tag names that need to be deleted.
+     */
+    static getTagsToDelete(allTags, terraformModules) {
+        (0,core.startGroup)('Finding all Terraform tags that should be deleted');
+        // Filter tags that are not associated with any current module
+        const tagsToRemove = allTags
+            .filter((tag) => {
+            // Check if ANY current module is associated with this tag
+            // This handles cases where tagging schemes changed over time
+            return !terraformModules.some((module) => TerraformModule.isModuleAssociatedWithTag(module.name, tag));
+        })
+            .sort((a, b) => a.localeCompare(b));
+        (0,core.info)('Terraform tags to delete:');
+        (0,core.info)(JSON.stringify(tagsToRemove, null, 2));
         (0,core.endGroup)();
+        return tagsToRemove;
     }
-}
-/**
- * Ensures that the .terraform-docs.yml configuration file does not exist in the workspace directory.
- * If the file exists, it will be removed to prevent conflicts during Terraform documentation generation.
- *
- * @returns {void} This function does not return a value.
- */
-function ensureTerraformDocsConfigDoesNotExist() {
-    (0,core.info)('Ensuring .terraform-docs.yml does not exist');
-    const terraformDocsFile = (0,external_node_path_namespaceObject.join)(context.workspaceDir, '.terraform-docs.yml');
-    if ((0,external_node_fs_namespaceObject.existsSync)(terraformDocsFile)) {
-        (0,core.info)('Found .terraform-docs.yml file, removing.');
-        (0,external_node_fs_namespaceObject.unlinkSync)(terraformDocsFile);
+    /**
+     * Determines an array of Terraform releases that need to be deleted.
+     *
+     * Identifies releases that belong to modules no longer present in the current
+     * module list by checking if any current module is associated with each release tag.
+     * This approach leverages the robust tag association logic that handles
+     * different separator schemes over time.
+     *
+     * @param {GitHubRelease[]} allReleases - A list of all releases associated with the modules.
+     * @param {TerraformModule[]} terraformModules - An array of Terraform modules.
+     * @returns {GitHubRelease[]} An array of releases that need to be deleted.
+     *
+     * @example
+     * ```typescript
+     * const releasesToDelete = TerraformModule.getReleasesToDelete(allReleases, currentModules);
+     * ```
+     */
+    static getReleasesToDelete(allReleases, terraformModules) {
+        (0,core.startGroup)('Finding all Terraform releases that should be deleted');
+        // Filter releases that are not associated with any current module
+        const releasesToRemove = allReleases
+            .filter((release) => {
+            // Check if ANY current module is associated with this release tag
+            // This handles cases where tagging schemes changed over time
+            return !terraformModules.some((module) => TerraformModule.isModuleAssociatedWithTag(module.name, release.tagName));
+        })
+            .sort((a, b) => a.tagName.localeCompare(b.tagName));
+        (0,core.info)('Terraform releases to delete:');
+        (0,core.info)(JSON.stringify(releasesToRemove.map((release) => release.tagName), null, 2));
+        (0,core.endGroup)();
+        return releasesToRemove;
     }
-    else {
-        (0,core.info)('No .terraform-docs.yml found.');
-    }
-}
-/**
- * Generates Terraform documentation for a given module.
- *
- * This function runs the `terraform-docs` CLI tool to generate a Markdown table format of the Terraform documentation
- * for the specified module. It will sort the output by required fields.
- *
- * @param {TerraformModule} terraformModule - An object containing the module details, including:
- *   - `moduleName`: The name of the Terraform module.
- *   - `directory`: The directory path where the Terraform module is located.
- * @returns {Promise<string>} A promise that resolves with the generated Terraform documentation in Markdown format.
- * @throws {Error} Throws an error if the `terraform-docs` command fails or produces an error in the `stderr` output.
- */
-async function generateTerraformDocs({ moduleName, directory }) {
-    (0,core.info)(`Generating tf-docs for: ${moduleName}`);
-    const terraformDocsPath = lib_default().sync('terraform-docs');
-    const { stdout, stderr } = await execFilePromisified(terraformDocsPath, ['markdown', 'table', '--sort-by', 'required', directory], { encoding: 'utf-8' });
-    if (stderr) {
-        throw new Error(`Terraform-docs generation failed for module: ${moduleName}\n${stderr}`);
-    }
-    (0,core.info)(`Finished tf-docs for: ${moduleName}`);
-    return stdout;
 }
 
-// EXTERNAL MODULE: ./node_modules/brace-expansion/index.js
-var brace_expansion = __nccwpck_require__(4691);
+;// CONCATENATED MODULE: ./node_modules/@isaacs/balanced-match/dist/esm/index.js
+const balanced = (a, b, str) => {
+    const ma = a instanceof RegExp ? maybeMatch(a, str) : a;
+    const mb = b instanceof RegExp ? maybeMatch(b, str) : b;
+    const r = ma !== null && mb != null && range(ma, mb, str);
+    return (r && {
+        start: r[0],
+        end: r[1],
+        pre: str.slice(0, r[0]),
+        body: str.slice(r[0] + ma.length, r[1]),
+        post: str.slice(r[1] + mb.length),
+    });
+};
+const maybeMatch = (reg, str) => {
+    const m = str.match(reg);
+    return m ? m[0] : null;
+};
+const range = (a, b, str) => {
+    let begs, beg, left, right = undefined, result;
+    let ai = str.indexOf(a);
+    let bi = str.indexOf(b, ai + 1);
+    let i = ai;
+    if (ai >= 0 && bi > 0) {
+        if (a === b) {
+            return [ai, bi];
+        }
+        begs = [];
+        left = str.length;
+        while (i >= 0 && !result) {
+            if (i === ai) {
+                begs.push(i);
+                ai = str.indexOf(a, i + 1);
+            }
+            else if (begs.length === 1) {
+                const r = begs.pop();
+                if (r !== undefined)
+                    result = [r, bi];
+            }
+            else {
+                beg = begs.pop();
+                if (beg !== undefined && beg < left) {
+                    left = beg;
+                    right = bi;
+                }
+                bi = str.indexOf(b, i + 1);
+            }
+            i = ai < bi && ai >= 0 ? ai : bi;
+        }
+        if (begs.length && right !== undefined) {
+            result = [left, right];
+        }
+    }
+    return result;
+};
+//# sourceMappingURL=index.js.map
+;// CONCATENATED MODULE: ./node_modules/@isaacs/brace-expansion/dist/esm/index.js
+
+const escSlash = '\0SLASH' + Math.random() + '\0';
+const escOpen = '\0OPEN' + Math.random() + '\0';
+const escClose = '\0CLOSE' + Math.random() + '\0';
+const escComma = '\0COMMA' + Math.random() + '\0';
+const escPeriod = '\0PERIOD' + Math.random() + '\0';
+const escSlashPattern = new RegExp(escSlash, 'g');
+const escOpenPattern = new RegExp(escOpen, 'g');
+const escClosePattern = new RegExp(escClose, 'g');
+const escCommaPattern = new RegExp(escComma, 'g');
+const escPeriodPattern = new RegExp(escPeriod, 'g');
+const slashPattern = /\\\\/g;
+const openPattern = /\\{/g;
+const closePattern = /\\}/g;
+const commaPattern = /\\,/g;
+const periodPattern = /\\./g;
+function numeric(str) {
+    return !isNaN(str) ? parseInt(str, 10) : str.charCodeAt(0);
+}
+function escapeBraces(str) {
+    return str
+        .replace(slashPattern, escSlash)
+        .replace(openPattern, escOpen)
+        .replace(closePattern, escClose)
+        .replace(commaPattern, escComma)
+        .replace(periodPattern, escPeriod);
+}
+function unescapeBraces(str) {
+    return str
+        .replace(escSlashPattern, '\\')
+        .replace(escOpenPattern, '{')
+        .replace(escClosePattern, '}')
+        .replace(escCommaPattern, ',')
+        .replace(escPeriodPattern, '.');
+}
+/**
+ * Basically just str.split(","), but handling cases
+ * where we have nested braced sections, which should be
+ * treated as individual members, like {a,{b,c},d}
+ */
+function parseCommaParts(str) {
+    if (!str) {
+        return [''];
+    }
+    const parts = [];
+    const m = balanced('{', '}', str);
+    if (!m) {
+        return str.split(',');
+    }
+    const { pre, body, post } = m;
+    const p = pre.split(',');
+    p[p.length - 1] += '{' + body + '}';
+    const postParts = parseCommaParts(post);
+    if (post.length) {
+        ;
+        p[p.length - 1] += postParts.shift();
+        p.push.apply(p, postParts);
+    }
+    parts.push.apply(parts, p);
+    return parts;
+}
+function esm_expand(str) {
+    if (!str) {
+        return [];
+    }
+    // I don't know why Bash 4.3 does this, but it does.
+    // Anything starting with {} will have the first two bytes preserved
+    // but *only* at the top level, so {},a}b will not expand to anything,
+    // but a{},b}c will be expanded to [a}c,abc].
+    // One could argue that this is a bug in Bash, but since the goal of
+    // this module is to match Bash's rules, we escape a leading {}
+    if (str.slice(0, 2) === '{}') {
+        str = '\\{\\}' + str.slice(2);
+    }
+    return expand_(escapeBraces(str), true).map(unescapeBraces);
+}
+function embrace(str) {
+    return '{' + str + '}';
+}
+function isPadded(el) {
+    return /^-?0\d/.test(el);
+}
+function lte(i, y) {
+    return i <= y;
+}
+function gte(i, y) {
+    return i >= y;
+}
+function expand_(str, isTop) {
+    /** @type {string[]} */
+    const expansions = [];
+    const m = balanced('{', '}', str);
+    if (!m)
+        return [str];
+    // no need to expand pre, since it is guaranteed to be free of brace-sets
+    const pre = m.pre;
+    const post = m.post.length ? expand_(m.post, false) : [''];
+    if (/\$$/.test(m.pre)) {
+        for (let k = 0; k < post.length; k++) {
+            const expansion = pre + '{' + m.body + '}' + post[k];
+            expansions.push(expansion);
+        }
+    }
+    else {
+        const isNumericSequence = /^-?\d+\.\.-?\d+(?:\.\.-?\d+)?$/.test(m.body);
+        const isAlphaSequence = /^[a-zA-Z]\.\.[a-zA-Z](?:\.\.-?\d+)?$/.test(m.body);
+        const isSequence = isNumericSequence || isAlphaSequence;
+        const isOptions = m.body.indexOf(',') >= 0;
+        if (!isSequence && !isOptions) {
+            // {a},b}
+            if (m.post.match(/,(?!,).*\}/)) {
+                str = m.pre + '{' + m.body + escClose + m.post;
+                return expand_(str);
+            }
+            return [str];
+        }
+        let n;
+        if (isSequence) {
+            n = m.body.split(/\.\./);
+        }
+        else {
+            n = parseCommaParts(m.body);
+            if (n.length === 1 && n[0] !== undefined) {
+                // x{{a,b}}y ==> x{a}y x{b}y
+                n = expand_(n[0], false).map(embrace);
+                //XXX is this necessary? Can't seem to hit it in tests.
+                /* c8 ignore start */
+                if (n.length === 1) {
+                    return post.map(p => m.pre + n[0] + p);
+                }
+                /* c8 ignore stop */
+            }
+        }
+        // at this point, n is the parts, and we know it's not a comma set
+        // with a single entry.
+        let N;
+        if (isSequence && n[0] !== undefined && n[1] !== undefined) {
+            const x = numeric(n[0]);
+            const y = numeric(n[1]);
+            const width = Math.max(n[0].length, n[1].length);
+            let incr = n.length === 3 && n[2] !== undefined ? Math.abs(numeric(n[2])) : 1;
+            let test = lte;
+            const reverse = y < x;
+            if (reverse) {
+                incr *= -1;
+                test = gte;
+            }
+            const pad = n.some(isPadded);
+            N = [];
+            for (let i = x; test(i, y); i += incr) {
+                let c;
+                if (isAlphaSequence) {
+                    c = String.fromCharCode(i);
+                    if (c === '\\') {
+                        c = '';
+                    }
+                }
+                else {
+                    c = String(i);
+                    if (pad) {
+                        const need = width - c.length;
+                        if (need > 0) {
+                            const z = new Array(need + 1).join('0');
+                            if (i < 0) {
+                                c = '-' + z + c.slice(1);
+                            }
+                            else {
+                                c = z + c;
+                            }
+                        }
+                    }
+                }
+                N.push(c);
+            }
+        }
+        else {
+            N = [];
+            for (let j = 0; j < n.length; j++) {
+                N.push.apply(N, expand_(n[j], false));
+            }
+        }
+        for (let j = 0; j < N.length; j++) {
+            for (let k = 0; k < post.length; k++) {
+                const expansion = pre + N[j] + post[k];
+                if (!isTop || isSequence || expansion) {
+                    expansions.push(expansion);
+                }
+            }
+        }
+    }
+    return expansions;
+}
+//# sourceMappingURL=index.js.map
 ;// CONCATENATED MODULE: ./node_modules/minimatch/dist/esm/assert-valid-pattern.js
 const MAX_PATTERN_LENGTH = 1024 * 64;
 const assertValidPattern = (pattern) => {
@@ -33483,7 +34140,7 @@ const braceExpand = (pattern, options = {}) => {
         // shortcut. no need to expand.
         return [pattern];
     }
-    return brace_expansion(pattern);
+    return esm_expand(pattern);
 };
 minimatch.braceExpand = braceExpand;
 // parse a component of the expanded set.
@@ -34339,6 +34996,7 @@ minimatch.unescape = unescape_unescape;
 
 
 
+
 /**
  * Checks if a directory contains any Terraform (.tf) files.
  *
@@ -34351,8 +35009,9 @@ function isTerraformDirectory(dirPath) {
 /**
  * Checks if a module path should be ignored based on provided ignore patterns.
  *
- * This function evaluates whether a given module path matches any of the specified ignore patterns
- * using the minimatch library for glob pattern matching.
+ * This function evaluates whether a given relative module path matches any of the specified ignore patterns
+ * using the minimatch library for glob pattern matching. It is called after all Terraform module directories
+ * are found, to filter them using the patterns provided via the 'module-path-ignore' flag.
  *
  * @remarks
  * Important pattern matching behavior notes:
@@ -34360,42 +35019,118 @@ function isTerraformDirectory(dirPath) {
  * - To match both a directory and its contents, you must include both patterns:
  *   ["dir", "dir/**"]
  * - The function uses matchBase: false for precise path structure matching
+ * - The modulePath parameter must be a path relative to the workspace root directory
  *
  * @example
- * // Will return false (doesn't match the directory itself)
+ * // Will return { shouldIgnore: false }
  * shouldIgnoreModulePath('tf-modules/kms/examples/complete', ['tf-modules/kms/examples/complete/**']);
  *
  * @example
- * // Will return true (matches the exact path)
+ * // Will return { shouldIgnore: true, matchedPattern: 'tf-modules/kms/examples/complete' }
  * shouldIgnoreModulePath('tf-modules/kms/examples/complete', ['tf-modules/kms/examples/complete']);
  *
- * @param {string} modulePath - The path of the module to check.
+ * @param {string} relativeModulePath - The relative path of the module to check.
  * @param {string[]} ignorePatterns - Array of path patterns to ignore.
- * @returns {boolean} True if the module should be ignored, false otherwise.
+ * @returns {{ shouldIgnore: boolean, matchedPattern?: string }} Object containing whether to ignore and the matched pattern.
  */
-function shouldIgnoreModulePath(modulePath, ignorePatterns) {
+function shouldIgnoreModulePath(relativeModulePath, ignorePatterns) {
     if (!ignorePatterns || ignorePatterns.length === 0) {
-        return false;
+        return { shouldIgnore: false };
     }
-    return ignorePatterns.some((pattern) => minimatch(modulePath, pattern, { matchBase: false }));
+    for (const pattern of ignorePatterns) {
+        if (minimatch(relativeModulePath, pattern, { matchBase: false })) {
+            return { shouldIgnore: true, matchedPattern: pattern };
+        }
+    }
+    return { shouldIgnore: false };
 }
 /**
- * Checks if a file should be excluded from matching based on the defined exclude patterns
- * and relative paths from the base directory.
+ * Recursively finds Terraform module directories within a given workspace directory.
  *
- * @param {string} baseDirectory - The base directory to resolve relative paths against.
- * @param {string} filePath - The path of the file to check.
- * @param {string[]} excludePatterns - An array of patterns to match against for exclusion.
- * @returns {boolean} True if the file should be excluded, false otherwise.
+ * This function traverses the directory structure starting from the specified workspace directory
+ * and identifies directories that contain Terraform configurations. It skips '.terraform' directories
+ * and any paths that match the provided ignore patterns.
+ *
+ * @param workspaceDir - The root directory to start searching from
+ * @param modulePathIgnore - Optional array of patterns for module paths to ignore
+ * @returns An array of absolute paths to Terraform module directories
  */
-function shouldExcludeFile(baseDirectory, filePath, excludePatterns) {
-    const relativePath = (0,external_node_path_namespaceObject.relative)(baseDirectory, filePath);
-    // Expand patterns to include both directories and their contents, then remove duplicates
-    const expandedPatterns = Array.from(new Set(excludePatterns.flatMap((pattern) => [
-        pattern, // Original pattern
-        pattern.replace(/\/(?:\*\*)?$/, ''), // Match directories themselves, like `tests2/`
-    ])));
-    return expandedPatterns.some((pattern) => minimatch(relativePath, pattern, { matchBase: true }));
+function findTerraformModuleDirectories(workspaceDir, modulePathIgnore = []) {
+    const modulePaths = [];
+    const searchDirectory = (dir) => {
+        const files = (0,external_node_fs_namespaceObject.readdirSync)(dir);
+        for (const file of files) {
+            // Skip .terraform directories entirely
+            if (file === '.terraform') {
+                continue;
+            }
+            const fullPath = (0,external_node_path_namespaceObject.join)(dir, file);
+            const stat = (0,external_node_fs_namespaceObject.statSync)(fullPath);
+            // If this isn't a directory, skip it
+            if (!stat.isDirectory()) {
+                continue;
+            }
+            if (isTerraformDirectory(fullPath)) {
+                const relativeModulePath = (0,external_node_path_namespaceObject.relative)(workspaceDir, fullPath);
+                // Check if this module path should be ignored
+                const ignore = shouldIgnoreModulePath(relativeModulePath, modulePathIgnore);
+                if (ignore.shouldIgnore) {
+                    (0,core.info)(`Skipping module in '${relativeModulePath}' due to module-path-ignore match: "${ignore.matchedPattern}"`);
+                    continue;
+                }
+                modulePaths.push(fullPath);
+            }
+            // Recurse into subdirectories
+            searchDirectory(fullPath);
+        }
+    };
+    searchDirectory(workspaceDir);
+    return modulePaths;
+}
+/**
+ * Gets the relative path of the Terraform module directory associated with a specified file.
+ *
+ * Traverses upward from the file's directory to locate the nearest Terraform module directory.
+ * Returns the module's path relative to the current working directory.
+ *
+ * @param {string} filePath - The absolute or relative path of the file to analyze.
+ * @returns {string | null} Relative path to the associated Terraform module directory, or null
+ *                          if no directory is found.
+ */
+function getRelativeTerraformModulePathFromFilePath(filePath) {
+    const rootDir = (0,external_node_path_namespaceObject.resolve)(context.workspaceDir);
+    const absoluteFilePath = (0,external_node_path_namespaceObject.isAbsolute)(filePath) ? filePath : (0,external_node_path_namespaceObject.resolve)(context.workspaceDir, filePath); // Handle relative/absolute
+    let directory = (0,external_node_path_namespaceObject.dirname)(absoluteFilePath);
+    // Traverse upward until the current working directory (rootDir) is reached
+    while (directory !== rootDir && directory !== (0,external_node_path_namespaceObject.resolve)(directory, '..')) {
+        if (isTerraformDirectory(directory)) {
+            return (0,external_node_path_namespaceObject.relative)(rootDir, directory);
+        }
+        directory = (0,external_node_path_namespaceObject.resolve)(directory, '..'); // Move up a directory
+    }
+    // Return null if no Terraform module directory is found
+    return null;
+}
+/**
+ * Checks if a file should be excluded from triggering a module version bump based on exclude patterns.
+ * Returns an object with match status and the matched pattern (if any).
+ *
+ * @example
+ * // Given a file 'tests/sub/test.tftest.hcl' and patterns ['*.md', '*.tftest.hcl', 'tests/**']:
+ * // shouldExcludeFile('tests/sub/test.tftest.hcl', ['*.md', '*.tftest.hcl', 'tests/**'])
+ * //   => { shouldExclude: true, matchedPattern: 'tests/**' }
+ *
+ * @param relativeFilePath - The file path to check, relative to the module directory (no leading slash)
+ * @param excludePatterns - Array of glob patterns (relative to the module directory)
+ * @returns { shouldExclude: boolean, matchedPattern?: string }
+ */
+function shouldExcludeFile(relativeFilePath, excludePatterns) {
+    for (const pattern of excludePatterns) {
+        if (minimatch(relativeFilePath, pattern, { matchBase: true })) {
+            return { shouldExclude: true, matchedPattern: pattern };
+        }
+    }
+    return { shouldExclude: false };
 }
 /**
  * Recursively copies the contents of a directory to a temporary directory,
@@ -34422,7 +35157,7 @@ function copyModuleContents(directory, tmpDir, excludePatterns, baseDirectory) {
             // Note: Important we pass the original base directory.
             copyModuleContents(filePath, newDir, excludePatterns, baseDir); // Recursion for directory contents
         }
-        else if (!shouldExcludeFile(baseDir, filePath, excludePatterns)) {
+        else if (!shouldExcludeFile((0,external_node_path_namespaceObject.relative)(baseDir, filePath), excludePatterns).shouldExclude) {
             // Handle file copying
             (0,external_node_fs_namespaceObject.copyFileSync)(filePath, (0,external_node_path_namespaceObject.join)(tmpDir, file));
         }
@@ -34474,11 +35209,458 @@ function removeDirectoryContents(directory, exceptions = []) {
     for (const item of (0,external_node_fs_namespaceObject.readdirSync)(directory)) {
         const itemPath = (0,external_node_path_namespaceObject.join)(directory, item);
         // Skip removal for items listed in the exceptions array
-        if (!shouldExcludeFile(directory, itemPath, exceptions)) {
+        if (!shouldExcludeFile((0,external_node_path_namespaceObject.relative)(directory, itemPath), exceptions).shouldExclude) {
             (0,external_node_fs_namespaceObject.rmSync)(itemPath, { recursive: true, force: true });
         }
     }
     (0,core.info)(`Removed contents of directory [${directory}], preserving items: ${exceptions.join(', ')}`);
+}
+
+;// CONCATENATED MODULE: ./src/parser.ts
+
+
+
+
+
+/**
+ * Parses the workspace to identify and instantiate Terraform modules, tracking changes across commits.
+ *
+ * This function performs a three-phase parsing process:
+ * 1. Discovers all Terraform module directories in the workspace
+ * 2. Creates TerraformModule instances for each directory
+ * 3. Associates commits with their respective modules by analyzing changed files
+ *
+ * The implementation processes commits iteratively and adds each commit to the appropriate
+ * TerraformModule instance. This approach is more efficient than having each TerraformModule
+ * individually scan for relevant commits, as it only requires a single pass through the commit data.
+ * The TerraformModule class provides mutator methods to allow this externally-driven change association.
+ *
+ * @param commits - Array of commit details including message, SHA, and changed files
+ * @param allTags - Optional array of all Git tags in the repository
+ * @param allReleases - Optional array of all GitHub releases in the repository
+ * @returns Array of TerraformModule instances sorted alphabetically by module name
+ */
+function parseTerraformModules(commits, allTags = [], allReleases = []) {
+    (0,core.startGroup)('Parsing Terraform modules');
+    console.time('Elapsed time parsing terraform modules');
+    //
+    // Phase 1: Find all module directories
+    //
+    const workspaceDir = context.workspaceDir;
+    (0,core.info)(`Searching for Terraform modules in ${workspaceDir}`);
+    const moduleDirectories = findTerraformModuleDirectories(workspaceDir, config.modulePathIgnore);
+    (0,core.info)(`Found ${moduleDirectories.length} Terraform module ${moduleDirectories.length === 1 ? 'directory' : 'directories'}:`);
+    (0,core.info)(JSON.stringify(moduleDirectories, null, 2));
+    //
+    // Phase 2: Create TerraformModule instances for each directory
+    //
+    (0,core.info)('Creating TerraformModule instances for each module directory...');
+    const terraformModulesMap = {};
+    for (const directory of moduleDirectories) {
+        const module = new TerraformModule(directory);
+        terraformModulesMap[module.name] = module;
+    }
+    //
+    // Phase 3: Process commits to find changed modules
+    //
+    (0,core.info)('Processing commits to find changed modules...');
+    for (const commit of commits) {
+        const { message, sha, files } = commit;
+        (0,core.info)(`🔍 Parsing commit ${sha}: ${message.trim().split('\n')[0].trim()} (Changed Files = ${files.length})`);
+        // Track which modules should get this commit (only modules with at least one non-excluded file)
+        const modulesToCommitMap = new Map();
+        for (const relativeFilePath of files) {
+            const relativeModulePath = getRelativeTerraformModulePathFromFilePath(relativeFilePath);
+            if (relativeModulePath === null) {
+                // File isn't associated with a Terraform module - continue to next file.
+                (0,core.info)(`✗ Skipping file "${relativeFilePath}" ➜  No associated Terraform module`);
+                continue;
+            }
+            const moduleName = TerraformModule.getTerraformModuleNameFromRelativePath(relativeModulePath);
+            const module = terraformModulesMap[moduleName];
+            // If the module is not found in the map, it means the file's path does not correspond to any known
+            // Terraform module directory. This can happen if the module was deleted, renamed, or excluded via the
+            // modulePathIgnore flag during initial discovery. In such cases, any changed files in these directories
+            // are also excluded from release bumping, as they are not part of the current release set. This is not
+            // an error: we simply skip these files and do not attempt to process them for release logic.
+            if (!module) {
+                (0,core.info)(`✗ Skipping file "${relativeFilePath}" ➜  No associated active Terraform module "${moduleName}" (Likely due to module ignoring).`);
+                continue;
+            }
+            // For checking should exclude file, we need the relative path from the module root
+            // Example:
+            //  relativeFilePath         modules/vpc/main.tf
+            //  relativeModulePath       modules/vpc
+            //  relativeModuleFilePath   main.tf
+            const relativeModuleFilePath = relativeFilePath.replace(`${relativeModulePath}/`, '');
+            const excludeResult = shouldExcludeFile(relativeModuleFilePath, config.moduleChangeExcludePatterns);
+            if (excludeResult.shouldExclude) {
+                (0,core.info)(`✗ Skipping file "${relativeFilePath}" ➜  Excluded by via module-change-exclude-pattern "${excludeResult.matchedPattern}"`);
+                continue;
+            }
+            // Mark this module as having at least one non-excluded file
+            modulesToCommitMap.set(moduleName, true);
+            (0,core.info)(`✓ Found changed file "${relativeFilePath}" in module "${moduleName}"`);
+        }
+        // Only add the commit to modules that have at least one non-excluded file
+        for (const moduleName of modulesToCommitMap.keys()) {
+            const module = terraformModulesMap[moduleName];
+            module.addCommit(commit);
+        }
+    }
+    const terraformModules = Object.values(terraformModulesMap);
+    (0,core.info)('Adding tags and releases...');
+    for (const terraformModule of terraformModules) {
+        terraformModule.setTags(TerraformModule.getTagsForModule(terraformModule.name, allTags));
+        terraformModule.setReleases(TerraformModule.getReleasesForModule(terraformModule.name, allReleases));
+    }
+    (0,core.info)('Sorting by name...');
+    terraformModules.sort((a, b) => a.name.localeCompare(b.name));
+    (0,core.info)(`Successfully parsed and instantiated ${terraformModules.length} Terraform modules:`);
+    for (const terraformModule of terraformModules) {
+        (0,core.info)(terraformModule.toString());
+    }
+    console.timeEnd('Elapsed time parsing terraform modules');
+    (0,core.endGroup)();
+    return terraformModules;
+}
+
+;// CONCATENATED MODULE: ./src/changelog.ts
+
+/**
+ * Creates a changelog entry for a Terraform module.
+ *
+ * The changelog contains a heading and a list of commits formatted with a timestamp.
+ *
+ * @param {string} heading - The version or tag heading for the changelog entry.
+ * @param {readonly string[]} commits - An array of commit messages to include in the changelog.
+ * @returns {string} A formatted changelog entry as a string.
+ */
+function createTerraformModuleChangelogEntry(heading, commits) {
+    const { prNumber, prTitle, repoUrl } = context;
+    const currentDate = new Date().toISOString().split('T')[0]; // Format: YYYY-MM-DD
+    const changelogContent = [`## \`${heading}\` (${currentDate})\n`];
+    // Whether to hyperlink the PR number in the changelog entry. GitHub automatically
+    // links the PR in the pull request comments but not automatically in the wiki markdown. In the releases section
+    // it will automatically link just the #9 portion but not the PR part. If we link the whole section it
+    // ends up being much cleaner.
+    changelogContent.push(`- :twisted_rightwards_arrows:**[PR #${prNumber}](${repoUrl}/pull/${prNumber})** - ${prTitle}`);
+    // Perform some normalization
+    const normalizedCommitMessages = commits
+        // If the PR title equals the message exactly, we'll skip it
+        .filter((msg) => msg.trim() !== prTitle)
+        // Trim the commit message and for markdown, newlines that are part of a list format
+        // better if they use a <br> tag instead of a newline character.
+        .map((commitMessage) => commitMessage.trim().replace(/\n/g, '<br>'));
+    for (const normalizedCommit of normalizedCommitMessages) {
+        changelogContent.push(`- ${normalizedCommit}`);
+    }
+    return changelogContent.join('\n');
+}
+/**
+ * Retrieves the global pull request changelog.
+ *
+ * Aggregates changelog entries from all changed Terraform modules into a single view.
+ * This aggregated changelog is used explicitly as a comment in the pull request message,
+ * providing a concise summary of all module changes.
+ *
+ * @param {TerraformModule[]} terraformModules - An array of changed Terraform modules.
+ * @returns {string} The content of the global pull request changelog.
+ */
+function getPullRequestChangelog(terraformModules) {
+    const pullRequestChangelog = [];
+    for (const terraformModule of terraformModules) {
+        if (terraformModule.needsRelease()) {
+            const releaseTag = terraformModule.getReleaseTag();
+            if (releaseTag !== null) {
+                pullRequestChangelog.push(createTerraformModuleChangelogEntry(releaseTag, terraformModule.commitMessages));
+            }
+        }
+    }
+    return pullRequestChangelog.join('\n\n');
+}
+/**
+ * Creates formatted changelog entries for a specific Terraform module that needs release.
+ *
+ * @param {TerraformModule} terraformModule - The Terraform module whose changelog is to be retrieved.
+ * @returns {string} The content of the module's changelog, or empty string if no release is needed.
+ */
+function createTerraformModuleChangelog(terraformModule) {
+    if (terraformModule.needsRelease()) {
+        const releaseTagVersion = terraformModule.getReleaseTagVersion();
+        if (releaseTagVersion !== null) {
+            return createTerraformModuleChangelogEntry(releaseTagVersion, terraformModule.commitMessages);
+        }
+    }
+    return '';
+}
+/**
+ * Retrieves the complete changelog as a markdown string for the specified Terraform module.
+ *
+ * This function concatenates the release notes from all releases associated with the module,
+ * separated by double newlines to maintain proper markdown formatting. Empty release bodies
+ * are filtered out to avoid unnecessary whitespace in the final changelog.
+ *
+ * @param {TerraformModule} terraformModule - The Terraform module instance containing release data
+ * @returns {string} A markdown-formatted string containing all release notes, or an empty string if no releases exist
+ *
+ * @example
+ * ```typescript
+ * const changelog = getTerraformModuleFullReleaseChangelog(myModule);
+ * console.log(changelog);
+ * // Output:
+ * // ## Release v1.2.0
+ * // - Added new feature
+ * //
+ * // ## Release v1.1.0
+ * // - Bug fixes
+ * ```
+ */
+function getTerraformModuleFullReleaseChangelog(terraformModule) {
+    // Filter out releases with empty bodies and concatenate release notes with proper spacing
+    return terraformModule.releases
+        .map((release) => release.body?.trim())
+        .filter((body) => Boolean(body))
+        .join('\n\n');
+}
+
+;// CONCATENATED MODULE: external "node:child_process"
+const external_node_child_process_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:child_process");
+;// CONCATENATED MODULE: external "node:fs/promises"
+const promises_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:fs/promises");
+;// CONCATENATED MODULE: external "node:os"
+const external_node_os_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:os");
+// EXTERNAL MODULE: external "node:util"
+var external_node_util_ = __nccwpck_require__(7975);
+// EXTERNAL MODULE: ./node_modules/which/lib/index.js
+var lib = __nccwpck_require__(1189);
+var lib_default = /*#__PURE__*/__nccwpck_require__.n(lib);
+;// CONCATENATED MODULE: ./src/terraform-docs.ts
+
+
+
+
+
+
+
+
+const execFilePromisified = (0,external_node_util_.promisify)(external_node_child_process_namespaceObject.execFile);
+const platformConfigs = {
+    darwin: {
+        platform: 'darwin',
+        supportedArch: ['amd64', 'arm64'],
+        extension: '.tar.gz',
+    },
+    linux: {
+        platform: 'linux',
+        supportedArch: ['amd64', 'arm', 'arm64'],
+        extension: '.tar.gz',
+    },
+    freebsd: {
+        platform: 'freebsd',
+        supportedArch: ['amd64', 'arm', 'arm64'],
+        extension: '.tar.gz',
+    },
+    win32: {
+        platform: 'windows',
+        supportedArch: ['amd64', 'arm64'],
+        extension: '.zip',
+    },
+};
+const nodeArchToGoArch = {
+    x64: 'amd64',
+    arm: 'arm',
+    arm64: 'arm64',
+};
+/**
+ * Type guard for NodePlatform
+ */
+function isNodePlatform(platform) {
+    return Object.keys(platformConfigs).includes(platform);
+}
+/**
+ * Type guard for NodeArch
+ */
+function isNodeArch(arch) {
+    return Object.keys(nodeArchToGoArch).includes(arch);
+}
+/**
+ * Converts Node platform to Go platform
+ */
+function getGoPlatform(nodePlatform) {
+    return platformConfigs[nodePlatform].platform;
+}
+/**
+ * Validates and returns the platform configuration for terraform-docs
+ *
+ * @param nodePlatform - The Node.js platform
+ * @param nodeArch - The Node.js architecture
+ * @returns The validated platform configuration and Go architecture
+ * @throws {Error} If the platform or architecture combination is not supported
+ */
+function getValidatedPlatformConfig(nodePlatform, nodeArch) {
+    // Validate platform
+    if (!isNodePlatform(nodePlatform)) {
+        throw new Error(`Unsupported platform: ${nodePlatform}. Supported platforms are: ${Object.keys(platformConfigs).join(', ')}`);
+    }
+    // Validate architecture
+    if (!isNodeArch(nodeArch)) {
+        throw new Error(`Unsupported architecture: ${nodeArch}. Supported architectures are: ${Object.keys(nodeArchToGoArch).join(', ')}`);
+    }
+    const platformConfig = platformConfigs[nodePlatform];
+    const goPlatform = getGoPlatform(nodePlatform);
+    const goArch = nodeArchToGoArch[nodeArch];
+    // Validate platform-architecture combination
+    if (!platformConfig.supportedArch.includes(goArch)) {
+        throw new Error(`Architecture ${goArch} is not supported for platform ${goPlatform}. ` +
+            `Supported architectures for ${goPlatform} are: ${platformConfig.supportedArch.join(', ')}`);
+    }
+    return {
+        goPlatform,
+        goArch,
+        extension: platformConfig.extension,
+    };
+}
+/**
+ * Validates that the terraform-docs version string matches the expected format (v#.#.#)
+ * @param version - Version string to validate
+ * @throws {Error} If the version string is invalid
+ */
+function validateTerraformDocsVersion(version) {
+    const versionPattern = /^v\d+\.\d+\.\d+$/;
+    if (!versionPattern.test(version)) {
+        throw new Error(`Invalid terraform-docs version format: ${version}. Version must match the format v#.#.# (e.g., v0.19.0)`);
+    }
+}
+/**
+ * Installs the specified version of terraform-docs.
+ *
+ * @param {string} terraformDocsVersion - The version of terraform-docs to install.
+ * @throws {Error} If the platform or architecture combination is not supported
+ */
+function installTerraformDocs(terraformDocsVersion) {
+    console.time('Elapsed time installing terraform-docs');
+    (0,core.startGroup)(`Installing terraform-docs ${terraformDocsVersion}`);
+    const cwd = process.cwd();
+    let tmpDir = null;
+    try {
+        validateTerraformDocsVersion(terraformDocsVersion);
+        const { goPlatform, goArch, extension } = getValidatedPlatformConfig(process.platform, process.arch);
+        const downloadFilename = `terraform-docs-${terraformDocsVersion}-${goPlatform}-${goArch}${extension}`;
+        const downloadUrl = `https://terraform-docs.io/dl/${terraformDocsVersion}/${downloadFilename}`;
+        // Create a temp directory to handle the extraction so this doesn't clobber our
+        // current working directory.
+        tmpDir = (0,external_node_fs_namespaceObject.mkdtempSync)((0,external_node_path_namespaceObject.join)((0,external_node_os_namespaceObject.tmpdir)(), 'terraform-docs-'));
+        process.chdir(tmpDir);
+        if (goPlatform === 'windows') {
+            const powershellPath = lib_default().sync('powershell');
+            (0,core.info)('Downloading terraform-docs...');
+            (0,external_node_child_process_namespaceObject.execFileSync)(powershellPath, [
+                '-Command',
+                `Invoke-WebRequest -Uri "${downloadUrl}" -OutFile "./terraform-docs.zip"`,
+            ]);
+            (0,core.info)('Unzipping terraform-docs...');
+            (0,external_node_child_process_namespaceObject.execFileSync)(powershellPath, [
+                '-Command',
+                `Expand-Archive -Path "./terraform-docs.zip" -DestinationPath "./terraform-docs" -Force`,
+            ]);
+            (0,core.info)('Getting Windows system dir...');
+            const systemDir = (0,external_node_child_process_namespaceObject.execFileSync)(powershellPath, [
+                '-Command',
+                `Write-Output ([System.IO.Path]::GetFullPath([System.Environment]::GetFolderPath('System')))`,
+            ])
+                .toString()
+                .trim();
+            (0,core.info)(`Copying executable to system dir (${systemDir})...`);
+            (0,external_node_child_process_namespaceObject.execFileSync)(powershellPath, [
+                '-Command',
+                `Move-Item -Path "./terraform-docs/terraform-docs.exe" -Destination "${systemDir}\\terraform-docs.exe"`,
+            ]);
+            // terraform-docs version v0.19.0 af31cc6 windows/amd64
+            (0,external_node_child_process_namespaceObject.execFileSync)(`${systemDir}\\terraform-docs.exe`, ['--version'], { stdio: 'inherit' });
+        }
+        else {
+            const commands = ['curl', 'tar', 'chmod', 'sudo'];
+            const paths = {};
+            for (const command of commands) {
+                paths[command] = lib_default().sync(command);
+                (0,core.info)(`Found ${command} at: ${paths[command]}`);
+            }
+            (0,external_node_child_process_namespaceObject.execFileSync)(paths.curl, ['-sSLfo', './terraform-docs.tar.gz', downloadUrl]);
+            (0,external_node_child_process_namespaceObject.execFileSync)(paths.tar, ['-xzf', './terraform-docs.tar.gz']);
+            (0,external_node_child_process_namespaceObject.execFileSync)(paths.chmod, ['+x', 'terraform-docs']);
+            (0,external_node_child_process_namespaceObject.execFileSync)(paths.sudo, ['mv', 'terraform-docs', '/usr/local/bin/terraform-docs']);
+            // terraform-docs version v0.19.0 af31cc6 linux/amd64
+            (0,external_node_child_process_namespaceObject.execFileSync)('/usr/local/bin/terraform-docs', ['--version'], { stdio: 'inherit' });
+        }
+    }
+    finally {
+        if (tmpDir !== null) {
+            (0,core.info)(`Removing temp dir ${tmpDir}`);
+            (0,external_node_fs_namespaceObject.rmSync)(tmpDir, { recursive: true });
+        }
+        process.chdir(cwd);
+        console.timeEnd('Elapsed time installing terraform-docs');
+        (0,core.endGroup)();
+    }
+}
+/**
+ * Ensures that the .terraform-docs.yml configuration file does not exist in the workspace directory.
+ * If the file exists, it will be removed to prevent conflicts during Terraform documentation generation.
+ *
+ * @returns {void} This function does not return a value.
+ */
+function ensureTerraformDocsConfigDoesNotExist() {
+    (0,core.info)('Ensuring .terraform-docs.yml does not exist');
+    const terraformDocsFile = (0,external_node_path_namespaceObject.join)(context.workspaceDir, '.terraform-docs.yml');
+    if ((0,external_node_fs_namespaceObject.existsSync)(terraformDocsFile)) {
+        (0,core.info)('Found .terraform-docs.yml file, removing.');
+        (0,external_node_fs_namespaceObject.unlinkSync)(terraformDocsFile);
+    }
+    else {
+        (0,core.info)('No .terraform-docs.yml found.');
+    }
+}
+/**
+ * Generates Terraform documentation for a given module.
+ *
+ * This function runs the `terraform-docs` CLI tool to generate a Markdown table format of the Terraform documentation
+ * for the specified module. It will sort the output by required fields.
+ *
+ * @param {TerraformModule} terraformModule - An object containing the module details, including:
+ *   - `name`: The name of the Terraform module.
+ *   - `directory`: The directory path where the Terraform module is located.
+ * @returns {Promise<string>} A promise that resolves with the generated Terraform documentation in Markdown format.
+ * @throws {Error} Throws an error if the `terraform-docs` command fails or produces an error in the `stderr` output.
+ */
+async function generateTerraformDocs({ name, directory }) {
+    (0,core.info)(`Generating tf-docs for: ${name}`);
+    const terraformDocsPath = lib_default().sync('terraform-docs');
+    const { stdout, stderr } = await execFilePromisified(terraformDocsPath, ['markdown', 'table', '--sort-by', 'required', directory], { encoding: 'utf-8' });
+    if (stderr) {
+        throw new Error(`Terraform-docs generation failed for module: ${name}\n${stderr}`);
+    }
+    (0,core.info)(`Finished tf-docs for: ${name}`);
+    return stdout;
+}
+
+;// CONCATENATED MODULE: ./src/utils/github.ts
+
+
+/**
+ * Retrieves the GitHub Actions bot email address dynamically by querying the GitHub API.
+ * This function handles both GitHub.com and GitHub Enterprise Server environments.
+ *
+ * The email format follows GitHub's standard: {user_id}+{username}@users.noreply.github.com
+ *
+ * @returns {Promise<string>} The GitHub Actions bot email address
+ * @throws {Error} If the API request fails or the user information cannot be retrieved
+ */
+async function getGitHubActionsBotEmail() {
+    const response = await context.octokit.rest.users.getByUsername({
+        username: GITHUB_ACTIONS_BOT_USERNAME,
+    });
+    return `${response.data.id}+${GITHUB_ACTIONS_BOT_USERNAME}@users.noreply.github.com`;
 }
 
 ;// CONCATENATED MODULE: ./node_modules/yocto-queue/index.js
@@ -34577,51 +35759,47 @@ function pLimit(concurrency) {
 	let activeCount = 0;
 
 	const resumeNext = () => {
+		// Process the next queued function if we're under the concurrency limit
 		if (activeCount < concurrency && queue.size > 0) {
-			queue.dequeue()();
-			// Since `pendingCount` has been decreased by one, increase `activeCount` by one.
 			activeCount++;
+			queue.dequeue()();
 		}
 	};
 
 	const next = () => {
 		activeCount--;
-
 		resumeNext();
 	};
 
 	const run = async (function_, resolve, arguments_) => {
+		// Execute the function and capture the result promise
 		const result = (async () => function_(...arguments_))();
 
+		// Resolve immediately with the promise (don't wait for completion)
 		resolve(result);
 
+		// Wait for the function to complete (success or failure)
+		// We catch errors here to prevent unhandled rejections,
+		// but the original promise rejection is preserved for the caller
 		try {
 			await result;
 		} catch {}
 
+		// Decrement active count and process next queued function
 		next();
 	};
 
 	const enqueue = (function_, resolve, arguments_) => {
-		// Queue `internalResolve` instead of the `run` function
-		// to preserve asynchronous context.
-		new Promise(internalResolve => {
+		// Queue the internal resolve function instead of the run function
+		// to preserve the asynchronous execution context.
+		new Promise(internalResolve => { // eslint-disable-line promise/param-names
 			queue.enqueue(internalResolve);
-		}).then(
-			run.bind(undefined, function_, resolve, arguments_),
-		);
+		}).then(run.bind(undefined, function_, resolve, arguments_)); // eslint-disable-line promise/prefer-await-to-then
 
-		(async () => {
-			// This function needs to wait until the next microtask before comparing
-			// `activeCount` to `concurrency`, because `activeCount` is updated asynchronously
-			// after the `internalResolve` function is dequeued and called. The comparison in the if-statement
-			// needs to happen asynchronously as well to get an up-to-date value for `activeCount`.
-			await Promise.resolve();
-
-			if (activeCount < concurrency) {
-				resumeNext();
-			}
-		})();
+		// Start processing immediately if we haven't reached the concurrency limit
+		if (activeCount < concurrency) {
+			resumeNext();
+		}
 	};
 
 	const generator = (function_, ...arguments_) => new Promise(resolve => {
@@ -34655,13 +35833,19 @@ function pLimit(concurrency) {
 				});
 			},
 		},
+		map: {
+			async value(array, function_) {
+				const promises = array.map(value => this(function_, value));
+				return Promise.all(promises);
+			},
+		},
 	});
 
 	return generator;
 }
 
-function limitFunction(function_, option) {
-	const {concurrency} = option;
+function limitFunction(function_, options) {
+	const {concurrency} = options;
 	const limit = pLimit(concurrency);
 
 	return (...arguments_) => limit(() => function_(...arguments_));
@@ -34688,12 +35872,8 @@ function validateConcurrency(concurrency) {
 
 
 
-var WikiStatus;
-(function (WikiStatus) {
-    WikiStatus["SUCCESS"] = "SUCCESS";
-    WikiStatus["FAILURE"] = "FAILURE";
-    WikiStatus["DISABLED"] = "DISABLED";
-})(WikiStatus || (WikiStatus = {}));
+
+
 // Special subdirectory inside the primary repository where the wiki is checked out.
 const WIKI_SUBDIRECTORY_NAME = '.wiki';
 /**
@@ -34711,11 +35891,17 @@ const WIKI_SUBDIRECTORY_NAME = '.wiki';
  * has been manually enabled.
  *
  * @throws {Error} If the `git clone` command fails due to issues such as the wiki not existing.
+ * @throws {Error} If git is not found in PATH
+ * @throws {Error} If authentication configuration fails
  */
 function checkoutWiki() {
     const wikiHtmlUrl = `${context.repoUrl}.wiki`;
     const wikiDirectory = (0,external_node_path_namespaceObject.resolve)(context.workspaceDir, WIKI_SUBDIRECTORY_NAME);
-    const execWikiOpts = { cwd: wikiDirectory, stdio: 'inherit' };
+    const execWikiOpts = {
+        cwd: wikiDirectory,
+        //stdio: 'inherit',
+        stdio: ['inherit', 'inherit', 'pipe'], // stdin, stdout, stderr
+    };
     (0,core.startGroup)(`Checking out wiki repository [${wikiHtmlUrl}]`);
     const gitPath = lib_default().sync('git');
     (0,core.info)('Adding repository directory to the temporary git global config as a safe directory');
@@ -34749,8 +35935,8 @@ function checkoutWiki() {
         (0,external_node_child_process_namespaceObject.execFileSync)(gitPath, ['config', '--local', '--unset-all', extraHeaderKey], execWikiOpts);
     }
     catch (error) {
-        // Type guard to ensure we're handling the correct error type
-        // Only ignore specific status code if needed
+        // Git exits with status 5 if the config key doesn't exist to be unset.
+        // This is not a failure condition for us, so we ignore it.
         if (error instanceof Error && error.status !== 5) {
             throw error;
         }
@@ -34773,6 +35959,31 @@ function checkoutWiki() {
     }
     finally {
         (0,core.endGroup)();
+    }
+}
+/**
+ * Checks the status of the wiki operation for a Terraform module release.
+ *
+ * This function will never throw an error; all errors are caught and returned as part of the result.
+ *
+ * @returns {WikiStatusResult} The result of the wiki status check, including error details if any failure occurs.
+ */
+function getWikiStatus() {
+    try {
+        if (config.disableWiki) {
+            return { status: WIKI_STATUS.DISABLED };
+        }
+        checkoutWiki();
+        return { status: WIKI_STATUS.SUCCESS };
+    }
+    catch (err) {
+        // Since all errors in checkoutWiki() come from execFileSync, we can safely cast to ExecSyncError
+        const execError = err;
+        return {
+            status: WIKI_STATUS.FAILURE,
+            error: execError,
+            errorSummary: String(execError).trim(),
+        };
     }
 }
 /**
@@ -34852,65 +36063,79 @@ function getWikiLink(moduleName, relative = true) {
 /**
  * Formats the module source URL based on configuration settings.
  *
- * Converts repository URLs to the appropriate format for module sourcing:
- * - SSH format: ssh://git@hostname/path.git
- * - HTTPS format: https://hostname/path.git
+ * Converts repository URLs to the appropriate format for Terraform module sourcing:
+ * - SSH format: git::ssh://git@hostname/path.git
+ * - HTTPS format: git::https://hostname/path.git
  *
  * @param repoUrl - The repository URL (must be a valid HTTPS URL)
  * @param useSSH - Whether to use SSH format instead of HTTPS
- * @returns The formatted source URL for the module
+ * @returns The formatted source URL for the module with git:: prefix
  * @throws {TypeError} When repoUrl is not a valid URL that can be parsed
  *
  * @example
  * ```typescript
  * // HTTPS format
- * formatModuleSource('https://github.com/owner/repo', false)
- * // Returns: 'https://github.com/owner/repo.git'
+ * getModuleSource('https://github.com/owner/repo', false)
+ * // Returns: 'git::https://github.com/owner/repo.git'
  *
  * // SSH format
- * formatModuleSource('https://github.techpivot.com/owner/repo', true)
- * // Returns: 'ssh://git@github.techpivot.com/owner/repo.git'
+ * getModuleSource('https://github.techpivot.com/owner/repo', true)
+ * // Returns: 'git::ssh://git@github.techpivot.com/owner/repo.git'
  * ```
  */
-function formatModuleSource(repoUrl, useSSH) {
+function getModuleSource(repoUrl, useSSH) {
     if (useSSH) {
         const url = new URL(repoUrl);
         const hostname = url.hostname;
         const pathname = url.pathname;
-        // Convert HTTPS URL to SSH format
+        // Convert HTTPS URL to SSH format with git:: prefix
         // From: https://github.techpivot.com/owner/repo
-        // To: ssh://git@github.techpivot.com/owner/repo.git
-        return `ssh://git@${hostname}${pathname}.git`;
+        // To: git::ssh://git@github.techpivot.com/owner/repo.git
+        return `git::ssh://git@${hostname}${pathname}.git`;
     }
-    return `${repoUrl}.git`;
+    // Return HTTPS format with git:: prefix
+    return `git::${repoUrl}.git`;
+}
+/**
+ * Writes content to a wiki file in the workspace wiki subdirectory.
+ *
+ * This function creates or overwrites a file in the wiki subdirectory with the
+ * provided content and logs the generation of the file.
+ *
+ * @param {string} basename - The name of the file to create (including extension)
+ * @param {string} content - The content to write to the file
+ * @returns {Promise<string>} A promise that resolves to the full path of the created wiki file
+ * @throws {Error} Throws an error if the file cannot be written (e.g., permission issues, invalid path)
+ */
+async function writeWikiFile(basename, content) {
+    const wikiFile = (0,external_node_path_namespaceObject.join)(context.workspaceDir, WIKI_SUBDIRECTORY_NAME, basename);
+    await promises_namespaceObject.writeFile(wikiFile, content, 'utf8');
+    (0,core.info)(`Generated: ${basename}`);
+    return wikiFile;
 }
 /**
  * Generates the wiki file associated with the specified Terraform module.
  * Ensures that the directory structure is created if it doesn't exist and handles overwriting
  * the existing wiki file.
  *
- * @param {string} moduleName - The name of the Terraform module.
- * @param {string} content - The markdown content to write to the wiki file.
+ * @param {TerraformModule} terraformModule - The Terraform module to generate the wiki file for.
  * @returns {Promise<string>} The path to the wiki file that was written.
  * @throws Will throw an error if the file cannot be written.
  */
-async function generateWikiModule(terraformModule) {
-    const { moduleName, latestTag } = terraformModule;
-    const wikiSlugFile = `${getWikiSlug(moduleName)}.md`;
-    const wikiFile = (0,external_node_path_namespaceObject.join)(context.workspaceDir, WIKI_SUBDIRECTORY_NAME, wikiSlugFile);
-    // Generate a module changelog
-    const changelog = getModuleReleaseChangelog(terraformModule);
+async function generateWikiTerraformModule(terraformModule) {
+    const changelog = getTerraformModuleFullReleaseChangelog(terraformModule);
     const tfDocs = await generateTerraformDocs(terraformModule);
-    const moduleSource = formatModuleSource(context.repoUrl, config.useSSHSourceFormat);
-    const wikiContent = [
+    const moduleSource = getModuleSource(context.repoUrl, config.useSSHSourceFormat);
+    const usage = renderTemplate(config.wikiUsageTemplate, {
+        module_name: terraformModule.name,
+        latest_tag: terraformModule.getLatestTag(),
+        latest_tag_version_number: terraformModule.getLatestTagVersionNumber(),
+        module_source: moduleSource,
+        module_name_terraform: terraformModule.name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase(),
+    });
+    const content = [
         '# Usage\n',
-        'To use this module in your Terraform, refer to the below module example:\n',
-        '```hcl',
-        `module "${moduleName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()}" {`,
-        `  source = "git::${moduleSource}?ref=${latestTag}"`,
-        '\n  # See inputs below for additional required parameters',
-        '}',
-        '```',
+        usage,
         '\n# Attributes\n',
         '<!-- BEGIN_TF_DOCS -->',
         tfDocs,
@@ -34919,9 +36144,7 @@ async function generateWikiModule(terraformModule) {
         changelog,
     ].join('\n');
     // Write the markdown content to the wiki file, overwriting if it exists
-    await promises_namespaceObject.writeFile(wikiFile, wikiContent, 'utf8');
-    (0,core.info)(`Generated: ${wikiSlugFile}`);
-    return wikiFile;
+    return await writeWikiFile(`${getWikiSlug(terraformModule.name)}.md`, content);
 }
 /**
  * Generates the Wiki sidebar with a list of Terraform modules, including changelog entries for each.
@@ -34968,36 +36191,28 @@ async function generateWikiModule(terraformModule) {
  * ```
  */
 async function generateWikiSidebar(terraformModules) {
-    const sidebarFile = (0,external_node_path_namespaceObject.join)(context.workspaceDir, WIKI_SUBDIRECTORY_NAME, '_Sidebar.md');
     const { owner, repo } = context.repo;
     const repoBaseUrl = `/${owner}/${repo}`;
     let moduleSidebarContent = '';
-    for (const module of terraformModules) {
-        const { moduleName } = module;
+    for (const terraformModule of terraformModules) {
         // Get the baselink which is used throughout the sidebar
-        const baselink = getWikiLink(moduleName, true);
+        const baselink = getWikiLink(terraformModule.name, true);
         // Generate module changelog string by limiting to wikiSidebarChangelogMax
-        const changelogContent = getModuleReleaseChangelog(module);
+        const changelogContent = getTerraformModuleFullReleaseChangelog(terraformModule);
         // Regex to capture all headings starting with '## ' on a single line
         // Note: Use ([^\n]+) Instead of (.+):
         // The pattern [^\n]+ matches one or more characters that are not a newline. This restricts matches
         // to a single line and reduces backtracking possibilities since it won't consume any newlines.
+        // Note: The 'g' flag is required for matchAll
         const headingRegex = /^(?:#{2,3})\s+([^\n]+)/gm; // Matches '##' or '###' headings
-        // Initialize changelog entries
         const changelogEntries = [];
-        let headingMatch = null;
-        do {
-            // If a match is found, process it
-            if (headingMatch) {
-                const heading = headingMatch[1].trim();
-                // Convert heading into a valid ID string (keep only [a-zA-Z0-9-_]) But we need spaces to go to a '-'
-                const idString = heading.replace(/ +/g, '-').replace(/[^a-zA-Z0-9-_]/g, '');
-                // Append the entry to changelogEntries
-                changelogEntries.push(`            <li><a href="${baselink}#${idString}">${heading.replace(/`/g, '')}</a></li>`);
-            }
-            // Execute the regex again for the next match
-            headingMatch = headingRegex.exec(changelogContent);
-        } while (headingMatch);
+        for (const headingMatch of changelogContent.matchAll(headingRegex)) {
+            const heading = headingMatch[1].trim();
+            // Convert heading into a valid ID string (keep only [a-zA-Z0-9-_]) But we need spaces to go to a '-'
+            const idString = heading.replace(/ +/g, '-').replace(/[^a-zA-Z0-9-_]/g, '');
+            // Append the entry to changelogEntries
+            changelogEntries.push(`               <li><a href="${baselink}#${idString}">${heading.replace(/`/g, '')}</a></li>`);
+        }
         // Limit to the maximum number of changelog entries defined in config
         const limitedChangelogEntries = changelogEntries.slice(0, config.wikiSidebarChangelogMax).join('\n');
         // Wrap changelog in <ul> if it's not empty
@@ -35008,7 +36223,7 @@ async function generateWikiSidebar(terraformModules) {
         moduleSidebarContent += [
             '\n  <li>',
             '    <details>',
-            `      <summary><a href="${baselink}"><b>${moduleName}</b></a></summary>`,
+            `      <summary><a href="${baselink}"><b>${terraformModule.name}</b></a></summary>`,
             '      <ul>',
             `        <li><a href="${baselink}#usage">Usage</a></li>`,
             `        <li><a href="${baselink}#attributes">Attributes</a></li>`,
@@ -35019,9 +36234,7 @@ async function generateWikiSidebar(terraformModules) {
         ].join('\n');
     }
     const content = `[Home](${repoBaseUrl}/wiki/Home)\n\n## Terraform Modules\n\n<ul>${moduleSidebarContent}\n</ul>`;
-    await promises_namespaceObject.writeFile(sidebarFile, content, 'utf8');
-    (0,core.info)('Generated: _Sidebar.md');
-    return sidebarFile;
+    return await writeWikiFile(WIKI_SIDEBAR_FILENAME, content);
 }
 /**
  * Generates the `_Footer.md` file in the wiki directory to maintain consistent branding content.
@@ -35038,10 +36251,7 @@ async function generateWikiFooter() {
         (0,core.info)('Skipping footer generation as branding is disabled');
         return;
     }
-    const footerFile = (0,external_node_path_namespaceObject.join)(context.workspaceDir, WIKI_SUBDIRECTORY_NAME, '_Footer.md');
-    await promises_namespaceObject.writeFile(footerFile, BRANDING_WIKI, 'utf8');
-    (0,core.info)('Generated: _Footer.md');
-    return footerFile;
+    return await writeWikiFile(WIKI_FOOTER_FILENAME, BRANDING_WIKI);
 }
 /**
  * Generates the Home.md file for the Terraform Modules Wiki.
@@ -35050,13 +36260,12 @@ async function generateWikiFooter() {
  * providing an overview of their functionality and the latest versions. It includes sections for current
  * modules, usage instructions, and contribution guidelines.
  *
- * @param {TerraformModule[]} terraformModules - An array of TerraformModule objects containing the
+ * @param {TerraformModule[]} terraformModules - An array of TerraformModule classes containing the
  *                                                names and latest version tags of the modules.
  * @returns {Promise<string>} A promise that resolves to the path of the generated Home.md file.
  * @throws {Error} Throws an error if the file writing operation fails.
  */
 async function generateWikiHome(terraformModules) {
-    const homeFile = (0,external_node_path_namespaceObject.join)(context.workspaceDir, WIKI_SUBDIRECTORY_NAME, 'Home.md');
     const content = [
         '# Terraform Modules Home',
         '\nWelcome to the Terraform Modules Wiki! This page serves as an index for all the available Terraform modules,',
@@ -35065,7 +36274,7 @@ async function generateWikiHome(terraformModules) {
         '\n| Module Name | Latest Version |',
         '| -- | -- |',
         terraformModules
-            .map(({ moduleName, latestTagVersion }) => `| [${moduleName}](${getWikiLink(moduleName, true)}) | ${latestTagVersion} |`)
+            .map((terraformModule) => `| [${terraformModule.name}](${getWikiLink(terraformModule.name, true)}) | ${terraformModule.getLatestTagVersion()} |`)
             .join('\n'),
         '\n## How to Use',
         '\nEach module listed above can be imported into your Terraform configurations. For detailed instructions on',
@@ -35077,9 +36286,7 @@ async function generateWikiHome(terraformModules) {
         `\n*This wiki is automatically generated as part of the [Terraform Module Releaser](${PROJECT_URL}) project.`,
         'For the latest updates, please refer to the individual module documentation links above.*',
     ].join('\n');
-    await promises_namespaceObject.writeFile(homeFile, content, 'utf8');
-    (0,core.info)('Generated: Home.md');
-    return homeFile;
+    return await writeWikiFile(WIKI_HOME_FILENAME, content);
 }
 /**
  * Updates the wiki documentation for a list of Terraform modules.
@@ -35092,11 +36299,10 @@ async function generateWikiHome(terraformModules) {
  * Once all wiki files are updated, it commits and pushes the changes to the repository.
  *
  * @param {TerraformModule[]} terraformModules - A list of Terraform modules to update in the wiki.
- *
  * @returns {Promise<string[]>} A promise that resolves to a list of file paths of the updated wiki files.
  */
 async function generateWikiFiles(terraformModules) {
-    (0,core.startGroup)('Generating wiki ...');
+    (0,core.startGroup)('Generating wiki files...');
     // Clears the contents of the Wiki directory to ensure no stale content remains,
     // as the Wiki is fully regenerated during each run.
     //
@@ -35110,13 +36316,16 @@ async function generateWikiFiles(terraformModules) {
     // - Avoiding conflicts or unexpected results due to stale data.
     (0,core.info)('Removing existing wiki files...');
     removeDirectoryContents((0,external_node_path_namespaceObject.join)(context.workspaceDir, WIKI_SUBDIRECTORY_NAME), ['.git']);
+    // Set parallelism to slightly more than the number of CPU cores to ensure
+    // CPU-bound tasks (e.g., regex) and I/O-bound tasks (file writing)
+    // are handled efficiently, keeping the pipeline saturated.
     const parallelism = (0,external_node_os_namespaceObject.cpus)().length + 2;
     (0,core.info)(`Using parallelism: ${parallelism}`);
     const limit = pLimit(parallelism);
     const updatedFiles = [];
     const tasks = terraformModules.map((module) => {
         return limit(async () => {
-            updatedFiles.push(await generateWikiModule(module));
+            updatedFiles.push(await generateWikiTerraformModule(module));
         });
     });
     await Promise.all(tasks);
@@ -35127,19 +36336,21 @@ async function generateWikiFiles(terraformModules) {
         updatedFiles.push(footerFile);
     }
     (0,core.info)('Wiki files generated:');
-    console.log(updatedFiles);
+    (0,core.info)(JSON.stringify(updatedFiles, null, 2));
     (0,core.endGroup)();
     return updatedFiles;
 }
 /**
  * Commits and pushes changes to the wiki repository.
  *
- * This function checks for any changes in the wiki directory, and if there are changes,
- * it commits and pushes them using the provided commit message.
+ * This function checks for any changes in the wiki directory. If changes are found,
+ * it configures git, commits them with a message derived from the pull request, and
+ * pushes them to the remote wiki repository. If no changes are detected, it logs a
+ * message and exits gracefully without creating a commit.
  *
- * @returns {void}
+ * @returns {Promise<void>}
  */
-function commitAndPushWikiChanges() {
+async function commitAndPushWikiChanges() {
     (0,core.startGroup)('Committing and pushing changes to wiki');
     try {
         const { prNumber, prTitle } = context;
@@ -35158,9 +36369,10 @@ function commitAndPushWikiChanges() {
         (0,core.info)(`git status output: ${status.toString().trim()}`);
         if (status !== null && status.toString().trim() !== '') {
             // There are changes, commit and push
+            const githubActionsBotEmail = await getGitHubActionsBotEmail();
             for (const cmd of [
                 ['config', '--local', 'user.name', GITHUB_ACTIONS_BOT_NAME],
-                ['config', '--local', 'user.email', GITHUB_ACTIONS_BOT_EMAIL],
+                ['config', '--local', 'user.email', githubActionsBotEmail],
                 ['add', '.'],
                 ['commit', '-m', commitMessage.trim()],
                 ['push', 'origin'],
@@ -35186,6 +36398,7 @@ function commitAndPushWikiChanges() {
 
 
 
+
 /**
  * Checks whether the pull request already has a comment containing the release marker.
  *
@@ -35202,7 +36415,7 @@ async function hasReleaseComment() {
         });
         for await (const { data } of iterator) {
             for (const comment of data) {
-                if (comment.user?.id === GITHUB_ACTIONS_BOT_USER_ID && comment.body?.includes(PR_RELEASE_MARKER)) {
+                if (comment.body?.includes(PR_RELEASE_MARKER)) {
                     return true;
                 }
             }
@@ -35319,88 +36532,120 @@ async function getPullRequestCommits() {
 }
 /**
  * Comments on a pull request with a summary of the changes made to Terraform modules,
- * including details about the release plan and any modules that will be removed from the Wiki.
+ * including details about the release plan and any modules that will be removed.
  *
  * This function constructs a markdown table displaying the release plan for changed Terraform modules,
- * noting their release types and versions. It also handles modules that are no longer present in the source
- * and will be removed from the Wiki upon release.
+ * noting their release types and versions. It also handles tags belonging to modules that are
+ * no longer present in the source and will be removed upon release.
  *
- * @param {TerraformChangedModule[]} terraformChangedModules - An array of objects representing the
- * changed Terraform modules. Each object should contain the following properties:
- *   - {string} moduleName - The name of the Terraform module.
- *   - {string | null} currentTagVersion - The previous version of the module (or null if this is the initial release).
- *   - {string} nextTagVersion - The new version of the module to be released.
- *   - {string} releaseType - The type of release (e.g., major, minor, patch).
- *
- * @param {string[]} terraformModuleNamesToRemove - An array of module names that should be removed if
- * specified to remove via config.
- *
- * @param {WikiStatus} wikiStatus - The status of the Wiki check (success, failure, or disabled) and
- *                                  any relevant error messages if applicable.
- *
+ * @param {TerraformModule[]} terraformModules - An array of Terraform module objects containing
+ * module metadata, version information, and release status.
+ * @param {GitHubRelease[]} releasesToDelete - List of Terraform releases to delete.
+ * @param {string[]} tagsToDelete - List of Terraform tags to remove.
+ * @param {WikiStatusResult} wikiStatus - Object containing the status of the Wiki and any relevant
+ * error information if the Wiki check failed.
  * @returns {Promise<void>} A promise that resolves when the comment has been posted and previous
- * comments have been deleted.
- *
- * @throws {Error} Throws an error if the GitHub API call to create a comment or delete existing comments fails.
+ * summary comments have been deleted.
+ * @throws {Error} Throws an error if there are permission issues or other failures when posting
+ * to the GitHub API.
  */
-async function addReleasePlanComment(terraformChangedModules, terraformModuleNamesToRemove, wikiStatus) {
+async function addReleasePlanComment(terraformModules, releasesToDelete, tagsToDelete, wikiStatus) {
     console.time('Elapsed time commenting on pull request');
     (0,core.startGroup)('Adding pull request release plan comment');
     try {
         const { octokit, repo: { owner, repo }, issueNumber: issue_number, } = context;
-        // Initialize the comment body as an array of strings
-        const commentBody = [PR_SUMMARY_MARKER, '\n# Release Plan\n'];
+        const terraformModulesToRelese = TerraformModule.getModulesNeedingRelease(terraformModules);
+        // Initialize the comment body as an array of strings with appropriate header based on wiki status
+        const commentBody = [PR_SUMMARY_MARKER];
+        if (wikiStatus.status === WIKI_STATUS.FAILURE) {
+            commentBody.push('\n# ⚠️ Release Plan\n');
+            commentBody.push('> ⚠️ **IMPORTANT**: _See Wiki Status error below._\n');
+        }
+        else {
+            commentBody.push('\n# 📋 Release Plan\n');
+        }
         // Changed Modules
-        if (terraformChangedModules.length === 0) {
+        if (terraformModulesToRelese.length === 0) {
             commentBody.push('No terraform modules updated in this pull request.');
         }
         else {
-            commentBody.push('| Module | Release Type | Latest Version | New Version |', '|--|--|--|--|');
-            for (const { moduleName, latestTagVersion, nextTagVersion, releaseType } of terraformChangedModules) {
-                const initialRelease = latestTagVersion == null;
-                const existingVersion = initialRelease ? 'initial' : releaseType;
-                const latestTagDisplay = initialRelease ? '' : latestTagVersion;
-                commentBody.push(`| \`${moduleName}\` | ${existingVersion} | ${latestTagDisplay} | **${nextTagVersion}** |`);
+            commentBody.push('| Module | Type | Latest<br>Version | New<br>Version | Release<br>Details |', '|--|--|--|--|--|');
+            for (const module of terraformModulesToRelese) {
+                // Prevent module name from wrapping on hyphens in table cells (Doesn't work reliabily)
+                const name = `<nobr><code>${module.name}</code></nobr>`;
+                const type = module.getReleaseType();
+                const latestVersion = module.getLatestTagVersion() ?? '';
+                const releaseTagVersion = module.getReleaseTagVersion();
+                // Generate simple reason labels with emojis
+                const reasonLabels = [];
+                for (const reason of module.getReleaseReasons()) {
+                    switch (reason) {
+                        case 'initial': {
+                            reasonLabels.push('🆕 Initial Release');
+                            break;
+                        }
+                        case 'direct-changes': {
+                            reasonLabels.push('📝 Changed Files');
+                            break;
+                        }
+                        //case 'local-dependency-update': {
+                        //  reasonLabels.push('🔗 Local Dependency Updated');
+                        //  break;
+                        //}
+                    }
+                }
+                commentBody.push(`| ${name} | ${type} | ${latestVersion} | **${releaseTagVersion}** | ${reasonLabels.join('<br>')} |`);
             }
         }
         // Changelog
-        if (terraformChangedModules.length > 0) {
-            commentBody.push('\n# Changelog\n', getPullRequestChangelog(terraformChangedModules));
+        if (terraformModulesToRelese.length > 0) {
+            commentBody.push('\n# 📝 Changelog\n', getPullRequestChangelog(terraformModules));
         }
         // Wiki Status
         commentBody.push('\n<h2><sub>Wiki Status<sup title="Checks to ensure that the Wiki is enabled and properly initialized">ℹ️</sup></sub></h2>\n');
         switch (wikiStatus.status) {
-            case WikiStatus.DISABLED:
+            case WIKI_STATUS.DISABLED:
                 commentBody.push('🚫 Wiki generation **disabled** via `disable-wiki` flag.');
                 break;
-            case WikiStatus.SUCCESS:
+            case WIKI_STATUS.SUCCESS:
                 commentBody.push('✅ Enabled');
                 break;
-            case WikiStatus.FAILURE:
+            case WIKI_STATUS.FAILURE:
                 commentBody.push('**⚠️ Failed to checkout wiki:**');
                 commentBody.push('```');
-                commentBody.push(`${wikiStatus.errorMessage}`);
+                commentBody.push(`${wikiStatus.errorSummary}`);
                 commentBody.push('```');
                 commentBody.push(`Please consult the [README.md](${PROJECT_URL}/blob/main/README.md#getting-started) for additional information (**Ensure the Wiki is initialized**).`);
                 break;
         }
         // Automated Tag Cleanup
-        commentBody.push('\n<h2><sub>Automated Tag Cleanup<sup title="Controls whether obsolete tags and releases will be automatically deleted">ℹ️</sup></sub></h2>\n');
+        commentBody.push('\n<h2><sub>Automated Tag/Release Cleanup<sup title="Controls whether obsolete tags and releases will be automatically deleted">ℹ️</sup></sub></h2>\n');
         // Modules to Remove
         if (!config.deleteLegacyTags) {
             commentBody.push('⏸️ Existing tags and releases will be **preserved** as the `delete-legacy-tags` flag is disabled.');
         }
-        else if (terraformModuleNamesToRemove.length === 0) {
+        else if (tagsToDelete.length === 0 && releasesToDelete.length === 0) {
             commentBody.push('✅ All tags and releases are synchronized with the codebase. No cleanup required.');
         }
         else {
-            if (terraformModuleNamesToRemove.length === 1) {
-                commentBody.push('**⚠️ The following module no longer exists in source but has tags/releases. It will be automatically deleted.**');
+            if (releasesToDelete.length > 0) {
+                const releaseText = releasesToDelete.length === 1 ? 'release is' : 'releases are';
+                const pronounText = releasesToDelete.length === 1 ? 'It' : 'They';
+                const releaseList = releasesToDelete.map((release) => `\`${release.title}\``).join(', ');
+                commentBody.push(`**⚠️ The following ${releaseText} no longer referenced by any source Terraform modules. ${pronounText} will be automatically deleted.**`);
+                commentBody.push(` - ${releaseList}`);
             }
-            else {
-                commentBody.push('**⚠️ The following modules no longer exist in source but have tags/releases. They will be automatically deleted.**');
+            if (tagsToDelete.length > 0) {
+                // Add an extra newline if we already added releases content
+                if (releasesToDelete.length > 0) {
+                    commentBody.push('');
+                }
+                const tagText = tagsToDelete.length === 1 ? 'tag is' : 'tags are';
+                const pronounText = tagsToDelete.length === 1 ? 'It' : 'They';
+                const tagList = tagsToDelete.map((tag) => `\`${tag}\``).join(', ');
+                commentBody.push(`**⚠️ The following ${tagText} no longer referenced by any source Terraform modules. ${pronounText} will be automatically deleted.**`);
+                commentBody.push(` - ${tagList}`);
             }
-            commentBody.push(terraformModuleNamesToRemove.map((moduleName) => `- \`${moduleName}\``).join('\n'));
         }
         // Branding
         if (config.disableBranding === false) {
@@ -35441,14 +36686,15 @@ async function addReleasePlanComment(terraformChangedModules, terraformModuleNam
     }
 }
 /**
- * Posts a PR comment with details about the releases created for the Terraform modules.
+ * Adds a comment to the pull request with details about the releases created as specified via the
+ * releasedTerraformModules.
  *
- * @param {Array<{ moduleName: string; release: GitHubRelease }>} updatedModules - An array of updated Terraform modules with release information.
+ * @param {TerraformModule[]} releasedTerraformModules - Array of released/updated Terraform modules.
  * @returns {Promise<void>}
  */
-async function addPostReleaseComment(updatedModules) {
-    if (updatedModules.length === 0) {
-        (0,core.info)('No updated modules. Skipping post release PR comment.');
+async function addPostReleaseComment(releasedTerraformModules) {
+    if (releasedTerraformModules.length === 0) {
+        (0,core.info)('No released modules. Skipping post release PR comment.');
         return;
     }
     console.time('Elapsed time commenting on pull request');
@@ -35461,12 +36707,13 @@ async function addPostReleaseComment(updatedModules) {
             '\n## :rocket: Terraform Module Releases\n',
             'The following Terraform modules have been released:\n',
         ];
-        for (const { moduleName, release } of updatedModules) {
-            const extra = [`[Release Notes](${repoUrl}/releases/tag/${release.title})`];
+        for (const terraformModule of releasedTerraformModules) {
+            const latestRelease = terraformModule.releases[0];
+            const extra = [`[Release Notes](${repoUrl}/releases/tag/${latestRelease.tagName})`];
             if (config.disableWiki === false) {
-                extra.push(`[Wiki/Usage](${getWikiLink(moduleName, false)})`);
+                extra.push(`[Wiki/Usage](${getWikiLink(terraformModule.name, false)})`);
             }
-            commentBody.push(`- **\`${release.title}\`** • ${extra.join(' • ')}`);
+            commentBody.push(`- **\`${latestRelease.title}\`** • ${extra.join(' • ')}`);
         }
         // Branding
         if (config.disableBranding === false) {
@@ -35512,13 +36759,15 @@ async function addPostReleaseComment(updatedModules) {
 
 
 
+
+
 /**
  * Retrieves all releases from the specified GitHub repository.
  *
  * This function fetches the list of releases for the repository specified in the configuration.
  * It returns the releases as an array of objects containing the title, body, and tag name.
  *
- * @param {GetAllReleasesOptions} options - Optional configuration for the API request
+ * @param {ListReleasesParams} options - Optional configuration for the API request
  * @returns {Promise<GitHubRelease[]>} A promise that resolves to an array of release details.
  * @throws {RequestError} Throws an error if the request to fetch releases fails.
  */
@@ -35539,7 +36788,7 @@ async function getAllReleases(options = { per_page: 100, page: 1 }) {
             for (const release of data) {
                 releases.push({
                     id: release.id,
-                    title: release.name ?? '', // same as tag as defined in our pull request for now (no need for tag)
+                    title: release.name ?? '', // We'll keep release titles the same as tags for now
                     body: release.body ?? '',
                     tagName: release.tag_name,
                 });
@@ -35571,126 +36820,137 @@ async function getAllReleases(options = { per_page: 100, page: 1 }) {
     }
 }
 /**
- * Creates a GitHub release and corresponding git tag for the provided Terraform modules.
+ * Creates a GitHub release and corresponding git tag for each Terraform modules that needs a release.
  *
  * Note: Requires GitHub action permissions > contents: write
  *
- * @param {TerraformChangedModule[]} terraformChangedModules - An array of changed Terraform modules to process and create a release.
- * @returns {Promise<{ moduleName: string; release: GitHubRelease }[]>}
+ * @param {TerraformModule[]} terraformModules - An array of Terraform module objects containing
+ *  module metadata, version information, and release status.
+ * @returns {Promise<TerraformModule[]>} Updated TerraformModule instances with new releases and tags
  */
-async function createTaggedRelease(terraformChangedModules) {
+async function createTaggedReleases(terraformModules) {
+    const terraformModulesToRelease = TerraformModule.getModulesNeedingRelease(terraformModules);
     // Check if there are any modules to process
-    if (terraformChangedModules.length === 0) {
+    if (terraformModulesToRelease.length === 0) {
         (0,core.info)('No changed Terraform modules to process. Skipping tag/release creation.');
         return [];
     }
+    // We can be sure based on our type definitions that each module now is a module that
+    // needs to be released. It has GitHub commits.
     const { octokit, repo: { owner, repo }, prBody, prTitle, workspaceDir, } = context;
     console.time('Elapsed time pushing new tags & release');
     (0,core.startGroup)('Creating releases & tags for modules');
-    const updatedModules = [];
     try {
-        for (const module of terraformChangedModules) {
-            const { moduleName, directory, releaseType, nextTag, nextTagVersion } = module;
-            (0,core.info)(`Release type: ${releaseType}`);
-            (0,core.info)(`Next tag version: ${nextTag}`);
+        for (const module of terraformModulesToRelease) {
+            const moduleName = module.name;
+            const releaseTag = module.getReleaseTag();
+            const releaseTagVersion = module.getReleaseTagVersion();
+            (0,core.info)(`Processing module: ${moduleName}`);
+            (0,core.info)(`Release type: ${module.getReleaseType()}`);
+            (0,core.info)(`Next tag version: ${releaseTagVersion}`);
             // Create a temporary working directory
             // Replace '/' with '-' to create a valid directory name
-            const safeName = moduleName.replace(/\//g, '-');
-            const tmpDir = (0,external_node_fs_namespaceObject.mkdtempSync)((0,external_node_path_namespaceObject.join)((0,external_node_os_namespaceObject.tmpdir)(), `${safeName}-`));
+            const fileSystemSafeModuleName = module.name.replace(/\//g, '-');
+            const tmpDir = (0,external_node_fs_namespaceObject.mkdtempSync)((0,external_node_path_namespaceObject.join)((0,external_node_os_namespaceObject.tmpdir)(), `${fileSystemSafeModuleName}-`));
             (0,core.info)(`Created temp directory: ${tmpDir}`);
             // Copy the module's contents to the temporary directory, excluding specified patterns
-            copyModuleContents(directory, tmpDir, config.moduleAssetExcludePatterns);
+            copyModuleContents(module.directory, tmpDir, config.moduleAssetExcludePatterns);
             // Copy the module's .git directory
             (0,external_node_fs_namespaceObject.cpSync)((0,external_node_path_namespaceObject.join)(workspaceDir, '.git'), (0,external_node_path_namespaceObject.join)(tmpDir, '.git'), { recursive: true });
             // Git operations: commit the changes and tag the release
-            const commitMessage = `${nextTag}\n\n${prTitle}\n\n${prBody}`.trim();
+            const commitMessage = `${module.getReleaseTag()}\n\n${prTitle}\n\n${prBody}`.trim();
             const gitPath = await lib_default()('git');
-            const gitOpts = { cwd: tmpDir }; // Lots of adds and deletions here so don't inherit
+            const githubActionsBotEmail = await getGitHubActionsBotEmail();
+            // Execute git commands in temp directory without inheriting stdio to avoid output pollution
+            const gitOpts = { cwd: tmpDir };
             for (const cmd of [
                 ['config', '--local', 'user.name', GITHUB_ACTIONS_BOT_NAME],
-                ['config', '--local', 'user.email', GITHUB_ACTIONS_BOT_EMAIL],
+                ['config', '--local', 'user.email', githubActionsBotEmail],
                 ['add', '.'],
                 ['commit', '-m', commitMessage.trim()],
-                ['tag', nextTag],
-                ['push', 'origin', nextTag],
+                ['tag', releaseTag],
+                ['push', 'origin', releaseTag],
             ]) {
                 (0,external_node_child_process_namespaceObject.execFileSync)(gitPath, cmd, gitOpts);
             }
             // Create a GitHub release using the tag
-            (0,core.info)(`Creating GitHub release for ${moduleName}@${nextTag}`);
-            const body = getModuleChangelog(module);
+            (0,core.info)(`Creating GitHub release for ${moduleName}@${releaseTagVersion}`);
+            const body = createTerraformModuleChangelog(module);
             const response = await octokit.rest.repos.createRelease({
                 owner,
                 repo,
-                tag_name: nextTag,
-                name: nextTag,
+                tag_name: releaseTag, // For now we keep these the same with tagName
+                name: releaseTag,
                 body,
                 draft: false,
                 prerelease: false,
             });
-            // Now update the module with latest tag and release information
-            module.latestTag = nextTag;
-            module.latestTagVersion = nextTagVersion;
-            module.tags.unshift(nextTag); // Prepend the latest tag
             const release = {
                 id: response.data.id,
-                title: nextTag,
-                body,
-                tagName: nextTag,
+                title: response.data.name ?? releaseTag,
+                tagName: response.data.tag_name,
+                body: response.data.body ?? body,
             };
-            module.releases.unshift(release);
-            updatedModules.push({ moduleName, release });
+            // Update the module with the new release and tag
+            module.setReleases([release, ...module.releases]);
+            module.setTags([releaseTag, ...module.tags]);
+            // We also need to ensure that this module can't be released anymore. Thus, we need to clear existing commits
+            // as this is the primary driver for determining release status.
+            module.clearCommits();
         }
-        return updatedModules;
+        return terraformModulesToRelease;
     }
     catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         // Handle GitHub permissions or any error related to pushing tags
         if (errorMessage.includes('The requested URL returned error: 403')) {
             throw new Error([
-                `Failed to create tags in repository: ${errorMessage} - Ensure that the`,
-                'GitHub Actions workflow has the correct permissions to create tags. To grant the required permissions,',
-                'update your workflow YAML file with the following block under "permissions":\n\npermissions:\n',
-                ' contents: write',
+                `Failed to create tags in repository: ${errorMessage}.`,
+                'Ensure that the GitHub Actions workflow has the correct permissions to create tags.',
+                'Update your workflow YAML file with the following block under "permissions":',
+                '\n\npermissions:\n  contents: write',
             ].join(' '), { cause: error });
         }
         throw new Error(`Failed to create tags in repository: ${errorMessage}`, { cause: error });
+        //
+        // There appears to be an issue with V8 coverage reporting. It shows the finally block as
+        // not being covered in test coverage. However, we do explicitly have console and endGroup() as
+        // being asserted. Thus, ignore for now.
+        //
         /* c8 ignore next */
     }
     finally {
-        // Cleanup: remove the temp directory
         console.timeEnd('Elapsed time pushing new tags & release');
         (0,core.endGroup)();
     }
 }
 /**
- * Deletes legacy Terraform module releases.
+ * Deletes specified releases from the repository.
  *
- * This function takes an array of module names and all releases,
- * and deletes the releases that match the format {moduleName}/vX.Y.Z.
+ * This function takes an array of GitHub releases and deletes them from the repository.
+ * It's a declarative approach where you simply specify which releases to delete.
  *
- * @param {string[]} terraformModuleNames - Array of Terraform module names to delete.
- * @param {GitHubRelease[]} allReleases - Array of all releases in the repository.
- * @returns {Promise<void>}
+ * @param {GitHubRelease[]} releasesToDelete - Array of GitHub releases to delete from the repository
+ * @returns {Promise<void>} A promise that resolves when all releases are deleted
+ * @throws {Error} When release deletion fails due to permissions or API errors
+ *
+ * @example
+ * ```typescript
+ * await deleteReleases([
+ *   { id: 123, title: 'v1.0.0', body: 'Release notes', tagName: 'v1.0.0' },
+ *   { id: 456, title: 'legacy-release', body: 'Old release', tagName: 'legacy-release' }
+ * ]);
+ * ```
  */
-async function deleteLegacyReleases(terraformModuleNames, allReleases) {
-    if (!config.deleteLegacyTags) {
-        (0,core.info)('Deletion of legacy tags/releases is disabled. Skipping.');
-        return;
-    }
-    (0,core.startGroup)('Deleting legacy Terraform module releases');
-    // Filter releases that match the format {moduleName} or {moduleName}/vX.Y.Z
-    const releasesToDelete = allReleases.filter((release) => {
-        return terraformModuleNames.some((name) => new RegExp(`^${name}(?:/v\\d+\\.\\d+\\.\\d+)?$`).test(release.title));
-    });
+async function deleteReleases(releasesToDelete) {
     if (releasesToDelete.length === 0) {
-        (0,core.info)('No legacy releases found to delete. Skipping.');
-        (0,core.endGroup)();
+        (0,core.info)('No releases found to delete. Skipping.');
         return;
     }
-    (0,core.info)(`Found ${releasesToDelete.length} legacy release${releasesToDelete.length !== 1 ? 's' : ''} to delete.`);
+    (0,core.startGroup)('Deleting releases');
+    (0,core.info)(`Deleting ${releasesToDelete.length} release${releasesToDelete.length !== 1 ? 's' : ''}`);
     (0,core.info)(JSON.stringify(releasesToDelete.map((release) => release.title), null, 2));
-    console.time('Elapsed time deleting legacy releases');
+    console.time('Elapsed time deleting releases');
     const { octokit, repo: { owner, repo }, } = context;
     let releaseTitle = '';
     try {
@@ -35704,10 +36964,10 @@ async function deleteLegacyReleases(terraformModuleNames, allReleases) {
         const requestError = error;
         if (requestError.status === 403) {
             throw new Error([
-                `Failed to delete release: ${releaseTitle} ${requestError.message}.\nEnsure that the`,
-                'GitHub Actions workflow has the correct permissions to delete releases by ensuring that',
-                'your workflow YAML file has the following block under "permissions":\n\npermissions:\n',
-                ' contents: write',
+                `Failed to delete release: ${releaseTitle} - ${requestError.message}.`,
+                'Ensure that the GitHub Actions workflow has the correct permissions to delete releases.',
+                'Update your workflow YAML file with the following block under "permissions":',
+                '\n\npermissions:\n  contents: write',
             ].join(' '), { cause: error });
         }
         throw new Error(`Failed to delete release: [Status = ${requestError.status}] ${requestError.message}`, {
@@ -35715,13 +36975,12 @@ async function deleteLegacyReleases(terraformModuleNames, allReleases) {
         });
     }
     finally {
-        console.timeEnd('Elapsed time deleting legacy releases');
+        console.timeEnd('Elapsed time deleting releases');
         (0,core.endGroup)();
     }
 }
 
 ;// CONCATENATED MODULE: ./src/tags.ts
-
 
 
 
@@ -35777,33 +37036,29 @@ async function getAllTags(options = { per_page: 100, page: 1 }) {
     }
 }
 /**
- * Deletes legacy Terraform module tags.
+ * Deletes specified tags from the repository.
  *
- * This function takes an array of module names and all tags,
- * and deletes the tags that match the format {moduleName}/vX.Y.Z.
+ * This function takes an array of tag names and deletes them from the GitHub repository.
+ * It's a declarative approach where you simply specify which tags to delete.
  *
- * @param {string[]} terraformModuleNames - Array of Terraform module names to delete.
- * @param {string[]} allTags - Array of all tags in the repository.
- * @returns {Promise<void>}
+ * @param {string[]} tagsToDelete - Array of tag names to delete from the repository
+ * @returns {Promise<void>} A promise that resolves when all tags are deleted
+ * @throws {Error} When tag deletion fails due to permissions or API errors
+ *
+ * @example
+ * ```typescript
+ * await deleteTags(['v1.0.0', 'legacy-tag', 'module/v2.0.0']);
+ * ```
  */
-async function deleteLegacyTags(terraformModuleNames, allTags) {
-    if (!config.deleteLegacyTags) {
-        (0,core.info)('Deletion of legacy tags/releases is disabled. Skipping.');
-        return;
-    }
-    (0,core.startGroup)('Deleting legacy Terraform module tags');
-    // Filter tags that match the format {moduleName} or {moduleName}/vX.Y.Z
-    const tagsToDelete = allTags.filter((tag) => {
-        return terraformModuleNames.some((name) => new RegExp(`^${name}(?:/v\\d+\\.\\d+\\.\\d+)?$`).test(tag));
-    });
+async function deleteTags(tagsToDelete) {
     if (tagsToDelete.length === 0) {
-        (0,core.info)('No legacy tags found to delete. Skipping.');
-        (0,core.endGroup)();
+        (0,core.info)('No tags found to delete. Skipping.');
         return;
     }
-    (0,core.info)(`Found ${tagsToDelete.length} legacy tag${tagsToDelete.length !== 1 ? 's' : ''} to delete.`);
+    (0,core.startGroup)('Deleting tags');
+    (0,core.info)(`Deleting ${tagsToDelete.length} tag${tagsToDelete.length !== 1 ? 's' : ''}`);
     (0,core.info)(JSON.stringify(tagsToDelete, null, 2));
-    console.time('Elapsed time deleting legacy tags');
+    console.time('Elapsed time deleting tags');
     const { octokit, repo: { owner, repo }, } = context;
     let tag = ''; // used for better error handling below.
     try {
@@ -35831,443 +37086,13 @@ async function deleteLegacyTags(terraformModuleNames, allTags) {
         });
     }
     finally {
-        console.timeEnd('Elapsed time deleting legacy tags');
+        console.timeEnd('Elapsed time deleting tags');
         (0,core.endGroup)();
     }
 }
 
-;// CONCATENATED MODULE: ./src/utils/semver.ts
-
-/**
- * Determines the release type based on the provided commit message and previous release type.
- *
- * @param message - The commit message to analyze.
- * @param previousReleaseType - The previous release type ('major', 'minor', 'patch', or null).
- * @returns The computed release type: 'major', 'minor', or 'patch'.
- */
-function determineReleaseType(message, previousReleaseType = null) {
-    const messageCleaned = message.toLowerCase().trim();
-    // Destructure keywords from config
-    const { majorKeywords, minorKeywords } = config;
-    // Determine release type from message
-    let currentReleaseType = 'patch';
-    if (majorKeywords.some((keyword) => messageCleaned.includes(keyword.toLowerCase()))) {
-        currentReleaseType = 'major';
-    }
-    else if (minorKeywords.some((keyword) => messageCleaned.includes(keyword.toLowerCase()))) {
-        currentReleaseType = 'minor';
-    }
-    // Determine the next release type considering the previous release type
-    if (currentReleaseType === 'major' || previousReleaseType === 'major') {
-        return 'major';
-    }
-    if (currentReleaseType === 'minor' || previousReleaseType === 'minor') {
-        return 'minor';
-    }
-    // Note: For now, we don't have a separate default increment config and therefore we'll always
-    // return true which somewhat negates searching for patch keywords; however, in the future
-    // there may be a usecase where we make this configurable.
-    return 'patch';
-}
-/**
- * Computes the next tag version based on the current tag and the specified release type.
- *
- * This function increments the version based on semantic versioning rules:
- * - If the release type is 'major', it increments the major version and resets the minor and patch versions.
- * - If the release type is 'minor', it increments the minor version and resets the patch version.
- * - If the release type is 'patch', it increments the patch version.
- *
- * Note: The returned version only includes the 'vX.Y.Z' portion.
- * The caller is responsible for adding the module prefix to form the complete tag (e.g., 'module-name/vX.Y.Z').
- *
- * @param {string | null} latestTagVersion - The current version tag, or null if there is no current tag.
- * @param {ReleaseType} releaseType - The type of release to be performed ('major', 'minor', or 'patch').
- * @returns {string} The computed next tag version in the format 'vX.Y.Z'.
- */
-function getNextTagVersion(latestTagVersion, releaseType) {
-    if (latestTagVersion === null) {
-        return config.defaultFirstTag;
-    }
-    // Remove 'v' prefix if present, and split by '.'
-    const semver = latestTagVersion.replace(/^v/, '').split('.').map(Number);
-    if (releaseType === 'major') {
-        semver[0]++;
-        semver[1] = 0;
-        semver[2] = 0;
-    }
-    else if (releaseType === 'minor') {
-        semver[1]++;
-        semver[2] = 0;
-    }
-    else {
-        semver[2]++;
-    }
-    return `v${semver.join('.')}`;
-}
-
-;// CONCATENATED MODULE: ./src/utils/string.ts
-/**
- * Removes any leading and trailing slashes (/) from the given string.
- *
- * @param {string} str - The input string from which to trim slashes.
- * @returns {string} - The string without leading or trailing slashes.
- *
- * @example
- * // Returns "example/path"
- * trimSlashes("/example/path/");
- *
- * @example
- * // Returns "another/example"
- * trimSlashes("///another/example///");
- */
-function trimSlashes(str) {
-    let start = 0;
-    let end = str.length;
-    // Remove leading slashes by adjusting start index
-    while (start < end && str[start] === '/') {
-        start++;
-    }
-    // Remove trailing slashes by adjusting end index
-    while (end > start && str[end - 1] === '/') {
-        end--;
-    }
-    // Return the substring without leading and trailing slashes
-    return str.slice(start, end);
-}
-/**
- * Removes trailing characters from a string without using regex.
- *
- * This function iteratively checks each character from the end of the string
- * and removes any consecutive characters that match the specified characters to remove.
- * It uses a direct character-by-character approach instead of regex to avoid potential
- * backtracking issues and ensure consistent O(n) performance.
- *
- * @param {string} input - The string to process
- * @param {string[]} charactersToRemove - Array of characters to remove from the end
- * @returns {string} The input string with all trailing specified characters removed
- *
- * @example
- * // Returns "example"
- * removeTrailingCharacters("example...", ["."])
- *
- * @example
- * // Returns "module-name"
- * removeTrailingCharacters("module-name-_.", [".", "-", "_"])
- */
-function removeTrailingCharacters(input, charactersToRemove) {
-    let endIndex = input.length;
-    while (endIndex > 0 && charactersToRemove.includes(input[endIndex - 1])) {
-        endIndex--;
-    }
-    return input.slice(0, endIndex);
-}
-
-;// CONCATENATED MODULE: ./src/terraform-module.ts
-
-
-
-
-
-
-
-
-/**
- * Type guard function to determine if a given module is a `TerraformChangedModule`.
- *
- * This function checks if the `module` object has the property `isChanged` set to `true`.
- * It can be used to narrow down the type of the module within TypeScript's type system.
- *
- * @param {TerraformModule | TerraformChangedModule} module - The module to check.
- * @returns {module is TerraformChangedModule} - Returns `true` if the module is a `TerraformChangedModule`, otherwise `false`.
- */
-function isChangedModule(module) {
-    return 'isChanged' in module && module.isChanged === true;
-}
-/**
- * Filters an array of Terraform modules to return only those that are marked as changed.
- *
- * @param modules - An array of TerraformModule or TerraformChangedModule objects.
- * @returns An array of TerraformChangedModule objects that have been marked as changed.
- */
-function getTerraformChangedModules(modules) {
-    return modules.filter((module) => {
-        return module.isChanged === true;
-    });
-}
-/**
- * Generates a valid Terraform module name from the given directory path.
- *
- * The function transforms the directory path by:
- * - Trimming whitespace
- * - Replacing invalid characters with hyphens
- * - Normalizing slashes
- * - Removing leading/trailing slashes
- * - Handling consecutive dots and hyphens
- * - Removing any remaining whitespace
- * - Lowercase (for consistency)
- *
- * @param {string} terraformDirectory - The directory path from which to generate the module name.
- * @returns {string} A valid Terraform module name based on the provided directory path.
- */
-function getTerraformModuleNameFromRelativePath(terraformDirectory) {
-    const cleanedDirectory = terraformDirectory
-        .trim() // Remove leading/trailing whitespace
-        .replace(/[^a-zA-Z0-9/_-]+/g, '-') // Remove invalid characters, allowing a-z, A-Z, 0-9, /, _, -
-        .replace(/\/{2,}/g, '/') // Replace multiple consecutive slashes with a single slash
-        .replace(/\/\.+/g, '/') // Remove slashes followed by dots
-        .replace(/(^\/|\/$)/g, '') // Remove leading/trailing slashes
-        .replace(/\.\.+/g, '.') // Replace consecutive dots with a single dot
-        .replace(/--+/g, '-') // Replace consecutive hyphens with a single hyphen
-        .replace(/\s+/g, '') // Remove any remaining whitespace
-        .toLowerCase(); // All of our module names will be lowercase
-    return removeTrailingCharacters(cleanedDirectory, ['.', '-', '_']);
-}
-/**
- * Gets the relative path of the Terraform module directory associated with a specified file.
- *
- * Traverses upward from the file's directory to locate the nearest Terraform module directory.
- * Returns the module's path relative to the current working directory.
- *
- * @param {string} filePath - The absolute or relative path of the file to analyze.
- * @returns {string | null} Relative path to the associated Terraform module directory, or null
- *                          if no directory is found.
- */
-function getTerraformModuleDirectoryRelativePath(filePath) {
-    const rootDir = (0,external_node_path_namespaceObject.resolve)(context.workspaceDir);
-    const absoluteFilePath = (0,external_node_path_namespaceObject.isAbsolute)(filePath) ? filePath : (0,external_node_path_namespaceObject.resolve)(context.workspaceDir, filePath); // Handle relative/absolute
-    let directory = (0,external_node_path_namespaceObject.dirname)(absoluteFilePath);
-    // Traverse upward until the current working directory (rootDir) is reached
-    while (directory !== rootDir && directory !== (0,external_node_path_namespaceObject.resolve)(directory, '..')) {
-        if (isTerraformDirectory(directory)) {
-            return (0,external_node_path_namespaceObject.relative)(rootDir, directory);
-        }
-        directory = (0,external_node_path_namespaceObject.resolve)(directory, '..'); // Move up a directory
-    }
-    // Return null if no Terraform module directory is found
-    return null;
-}
-/**
- * Retrieves the tags for a specified module directory, filtering tags that match the module pattern
- * and sorting by versioning in descending order.
- *
- * @param {string} moduleName - The Terraform module name to find current tags.
- * @param {string[]} allTags - An array of all available tags.
- * @returns {Object} An object with the latest tag, latest tag version, and an array of all matching tags.
- */
-function getTagsForModule(moduleName, allTags) {
-    // Filter tags that match the module directory pattern
-    const tags = allTags
-        .filter((tag) => tag.startsWith(`${moduleName}/v`))
-        .sort((a, b) => {
-        const aParts = a.replace(`${moduleName}/v`, '').split('.').map(Number);
-        const bParts = b.replace(`${moduleName}/v`, '').split('.').map(Number);
-        return bParts[0] - aParts[0] || bParts[1] - aParts[1] || bParts[2] - aParts[2]; // Sort in descending order
-    });
-    // Return the latest tag, latest tag version, and all matching tags
-    return {
-        latestTag: tags.length > 0 ? tags[0] : null, // Keep the full tag
-        latestTagVersion: tags.length > 0 ? tags[0].replace(`${moduleName}/`, '') : null, // Extract version only
-        tags,
-    };
-}
-/**
- * Retrieves the relevant GitHub releases for a specified module directory.
- *
- * Filters releases for the module and sorts by version in descending order.
- *
- * @param {string} moduleName - The Terraform module name for which to find relevant release tags.
- * @param {GitHubRelease[]} allReleases - An array of GitHub releases.
- * @returns {GitHubRelease[]} An array of releases relevant to the module, sorted with the latest first.
- */
-function getReleasesForModule(moduleName, allReleases) {
-    // Filter releases that are relevant to the module directory
-    const relevantReleases = allReleases
-        .filter((release) => release.title.startsWith(`${moduleName}/`))
-        .sort((a, b) => {
-        // Sort releases by their title or release date (depending on what you use for sorting)
-        // Assuming latest release is at the top by default or using a versioning format like vX.Y.Z
-        const aVersion = a.title.replace(`${moduleName}/v`, '').split('.').map(Number);
-        const bVersion = b.title.replace(`${moduleName}/v`, '').split('.').map(Number);
-        return bVersion[0] - aVersion[0] || bVersion[1] - aVersion[1] || bVersion[2] - aVersion[2];
-    });
-    return relevantReleases;
-}
-/**
- * Retrieves all Terraform modules within the specified workspace directory and any changes based on commits.
- * Analyzes the directory structure to identify modules and checks commit history for changes.
- *
- * @param {CommitDetails[]} commits - Array of commit details to analyze for changes.
- * @param {string[]} allTags - List of all tags associated with the modules.
- * @param {GitHubRelease[]} allReleases - GitHub releases for the modules.
- * @returns {(TerraformModule | TerraformChangedModule)[]} Array of Terraform modules with their corresponding
- *   change details.
- * @throws {Error} - If a module associated with a file is missing from the terraformModulesMap.
- */
-function getAllTerraformModules(commits, allTags, allReleases) {
-    (0,core.startGroup)('Finding all Terraform modules with corresponding changes');
-    console.time('Elapsed time finding terraform modules'); // Start timing
-    const terraformModulesMap = {};
-    const workspaceDir = context.workspaceDir;
-    // Terraform only processes .tf and .tf.json files in the current working directory where you run the terraform commands. It does not automatically scan or include files from subdirectories.
-    // Helper function to recursively search for Terraform modules
-    const searchDirectory = (dir) => {
-        const files = (0,external_node_fs_namespaceObject.readdirSync)(dir);
-        for (const file of files) {
-            const filePath = (0,external_node_path_namespaceObject.join)(dir, file);
-            const stat = (0,external_node_fs_namespaceObject.statSync)(filePath);
-            // If it's a directory, recursively search inside it
-            if (stat.isDirectory()) {
-                if (isTerraformDirectory(filePath)) {
-                    const relativePath = (0,external_node_path_namespaceObject.relative)(workspaceDir, filePath);
-                    // Check if this module path should be ignored
-                    if (shouldIgnoreModulePath(relativePath, config.modulePathIgnore)) {
-                        (0,core.info)(`Skipping module in ${relativePath} due to module-path-ignore match`);
-                        continue;
-                    }
-                    const moduleName = getTerraformModuleNameFromRelativePath(relativePath);
-                    terraformModulesMap[moduleName] = {
-                        moduleName,
-                        directory: filePath,
-                        ...getTagsForModule(moduleName, allTags),
-                        releases: getReleasesForModule(moduleName, allReleases),
-                    };
-                }
-                // We'll always recurse into subdirectories to find terraform modules even after we've found a match.
-                // This is because we want to find all modules in the workspace and although not conventional, there are
-                // cases where a module could be completely nested within another module and be 100% separate.
-                searchDirectory(filePath); // Recurse into subdirectories
-            }
-        }
-    };
-    // Start the search from the workspace root directory
-    (0,core.info)(`Searching for Terraform modules in ${workspaceDir}`);
-    searchDirectory(workspaceDir);
-    const totalModulesFound = Object.keys(terraformModulesMap).length;
-    (0,core.info)(`Found ${totalModulesFound} Terraform module${totalModulesFound !== 1 ? 's' : ''}`);
-    (0,core.info)('Terraform Modules:');
-    (0,core.info)(JSON.stringify(terraformModulesMap, null, 2));
-    // Now process commits to find changed modules
-    for (const { message, sha, files } of commits) {
-        (0,core.info)(`Parsing commit ${sha}: ${message.trim().split('\n')[0].trim()} (Changed Files = ${files.length})`);
-        for (const relativeFilePath of files) {
-            (0,core.info)(`Analyzing file: ${relativeFilePath}`);
-            const moduleRelativePath = getTerraformModuleDirectoryRelativePath(relativeFilePath);
-            if (moduleRelativePath === null) {
-                // File isn't associated with a Terraform module
-                continue;
-            }
-            // Check if this module path should be ignored
-            if (shouldIgnoreModulePath(moduleRelativePath, config.modulePathIgnore)) {
-                (0,core.info)(`  (skipping) ➜ Matches module-path-ignore pattern for path \`${moduleRelativePath}\``);
-                continue;
-            }
-            const moduleName = getTerraformModuleNameFromRelativePath(moduleRelativePath);
-            // Skip excluded files based on provided pattern
-            if (shouldExcludeFile(moduleRelativePath, relativeFilePath, config.moduleChangeExcludePatterns)) {
-                (0,core.info)(`  (skipping) ➜ Matches module-change-exclude-pattern for path \`${moduleRelativePath}\``);
-                continue;
-            }
-            const module = terraformModulesMap[moduleName];
-            /* c8 ignore start */
-            if (!module) {
-                // Module not found in the map, this should not happen
-                throw new Error(`Found changed file "${relativeFilePath}" associated with a terraform module "${moduleName}"; however, associated module does not exist`);
-            }
-            /* c8 ignore stop */
-            // Update the module with the TerraformChangedModule properties
-            const releaseType = determineReleaseType(message, module?.releaseType);
-            const nextTagVersion = getNextTagVersion(module.latestTagVersion, releaseType);
-            const commitMessages = module.commitMessages || [];
-            if (!commitMessages.includes(message)) {
-                commitMessages.push(message);
-            }
-            // Update the existing module properties
-            Object.assign(module, {
-                isChanged: true, // Mark as changed
-                commitMessages,
-                releaseType,
-                nextTag: `${moduleName}/${nextTagVersion}`,
-                nextTagVersion,
-            });
-        }
-    }
-    // Handle initial release scenario: Mark modules for release if they have no existing tags/releases
-    // This ensures that on the first run of this action, all discovered modules get released even if
-    // they weren't modified in the current commit(s). This is necessary because:
-    //  - New repositories may have existing modules that need initial releases
-    //  - Modules without any version history should be tagged with an initial version
-    //  - This allows the action to work correctly on repositories being set up for the first time
-    for (const [moduleName, module] of Object.entries(terraformModulesMap)) {
-        // Only process modules that:
-        // - Haven't been marked as changed by commit analysis above
-        // - Have no existing tags (indicating they've never been released)
-        if (!isChangedModule(module) && module.tags.length === 0) {
-            (0,core.info)(`Marking module '${moduleName}' for initial release (no existing tags found)`);
-            // Convert the TerraformModule to TerraformChangedModule for initial release
-            const releaseType = 'patch'; // Use patch for initial releases (can be configured via config.defaultFirstTag)
-            const nextTagVersion = getNextTagVersion(null, releaseType);
-            Object.assign(module, {
-                isChanged: true,
-                // Empty commit messages array for initial releases. Originally set to ['Initial release'],
-                // but since the changelog generation function automatically includes PR information,
-                // we leave this empty to avoid redundant messaging in the release notes.
-                commitMessages: [],
-                releaseType,
-                nextTag: `${moduleName}/${nextTagVersion}`,
-                nextTagVersion,
-            });
-        }
-    }
-    // Sort terraform modules by module name
-    const sortedTerraformModules = Object.values(terraformModulesMap)
-        .slice()
-        .sort((a, b) => {
-        return a.moduleName.localeCompare(b.moduleName);
-    });
-    (0,core.info)('Finished analyzing directory tree, terraform modules, and commits');
-    (0,core.info)(`Found ${sortedTerraformModules.length} terraform module${sortedTerraformModules.length !== 1 ? 's' : ''}.`);
-    let terraformChangedModules = getTerraformChangedModules(sortedTerraformModules);
-    (0,core.info)(`Found ${terraformChangedModules.length} changed Terraform module${terraformChangedModules.length !== 1 ? 's' : ''}.`);
-    // Free up memory by unsetting terraformChangedModules
-    terraformChangedModules = null;
-    (0,core.debug)('Terraform Modules:');
-    (0,core.debug)(JSON.stringify(sortedTerraformModules, null, 2));
-    console.timeEnd('Elapsed time finding terraform modules');
-    (0,core.endGroup)();
-    return sortedTerraformModules;
-}
-/**
- * Determines an array of Terraform module names that need to be removed.
- *
- * @param {string[]} allTags - A list of all tags associated with the modules.
- * @param {TerraformModule[]} terraformModules - An array of Terraform modules.
- * @returns {string[]} An array of Terraform module names that need to be removed.
- */
-function getTerraformModulesToRemove(allTags, terraformModules) {
-    (0,core.startGroup)('Finding all Terraform modules that should be removed');
-    // Get an array of all module names from the tags
-    const moduleNamesFromTags = Array.from(new Set(allTags
-        // Currently, we will remove all tags. If we wanted to allow other tags that didnt
-        // take the form of moduleName/vX.Y.Z, we could filter them out here. However, the purpose
-        // of this monorepo terraform releaser is repo-encompassing and thus if someone has a
-        // dangling tag, we should ideally remove it.
-        //.filter((tag) => {
-        //  return /^.*\/v\d+\.\d+\.\d+$/.test(tag);
-        //})
-        .map((tag) => tag.replace(/\/v\d+\.\d+\.\d+$/, ''))));
-    // Get an array of all module names from the terraformModules
-    const moduleNamesFromModules = terraformModules.map((module) => module.moduleName);
-    // Perform a diff between the two arrays to find the module names that need to be removed and sort
-    const moduleNamesToRemove = moduleNamesFromTags
-        .filter((moduleName) => !moduleNamesFromModules.includes(moduleName))
-        .sort((a, b) => a.localeCompare(b));
-    (0,core.info)('Terraform modules to remove');
-    (0,core.info)(JSON.stringify(moduleNamesToRemove, null, 2));
-    (0,core.endGroup)();
-    return moduleNamesToRemove;
-}
-
 ;// CONCATENATED MODULE: ./src/main.ts
+
 
 
 
@@ -36292,36 +37117,16 @@ function initialize() {
  * Handles wiki-related operations, including checkout, generating release plan comments,
  * and error handling for failures.
  *
- * @param {Config} config - The configuration object containing wiki and Terraform Docs settings.
- * @param {TerraformChangedModule[]} terraformChangedModules - List of changed Terraform modules.
- * @param {string[]} terraformModuleNamesToRemove - List of Terraform module names to remove.
+ * @param {TerraformModule[]} terraformModules - List of Terraform modules associated with this workspace.
+ * @param {GitHubRelease[]} releasesToDelete - List of Terraform releases to delete.
+ * @param {string[]} tagsToDelete - List of Terraform tags to remove.
  * @returns {Promise<void>} Resolves when wiki-related operations are completed.
  */
-async function handleReleasePlanComment(config, terraformChangedModules, terraformModuleNamesToRemove) {
-    let wikiStatus = WikiStatus.DISABLED;
-    let failure;
-    let error;
-    try {
-        if (!config.disableWiki) {
-            checkoutWiki();
-            wikiStatus = WikiStatus.SUCCESS;
-        }
-    }
-    catch (err) {
-        const errorMessage = err instanceof Error ? err.message.split('\n')[0] : String(err).split('\n')[0];
-        wikiStatus = WikiStatus.FAILURE;
-        failure = errorMessage;
-        error = err;
-    }
-    finally {
-        const commentOptions = {
-            status: wikiStatus,
-            errorMessage: failure,
-        };
-        await addReleasePlanComment(terraformChangedModules, terraformModuleNamesToRemove, commentOptions);
-    }
-    if (error) {
-        throw error;
+async function handlePullRequestEvent(terraformModules, releasesToDelete, tagsToDelete) {
+    const wikiStatusResult = getWikiStatus();
+    await addReleasePlanComment(terraformModules, releasesToDelete, tagsToDelete, wikiStatusResult);
+    if (wikiStatusResult.error) {
+        throw wikiStatusResult.error;
     }
 }
 /**
@@ -36329,18 +37134,21 @@ async function handleReleasePlanComment(config, terraformChangedModules, terrafo
  * and optionally generating Terraform Docs-based wiki documentation.
  *
  * @param {Config} config - The configuration object.
- * @param {TerraformChangedModule[]} terraformChangedModules - List of changed Terraform modules.
- * @param {string[]} terraformModuleNamesToRemove - List of Terraform module names to remove.
- * @param {TerraformModule[]} terraformModules - List of all Terraform modules in the repository.
- * @param {GitHubRelease[]} allReleases - List of all GitHub releases in the repository.
- * @param {string[]} allTags - List of all tags in the repository.
+ * @param {TerraformModule[]} terraformModules - List of Terraform modules associated with this workspace.
+ * @param {GitHubRelease[]} releasesToDelete - List of Terraform releases to delete.
+ * @param {string[]} tagsToDelete - List of Terraform tags to delete.
  * @returns {Promise<void>} Resolves when merge-event operations are complete.
  */
-async function handleMergeEvent(config, terraformChangedModules, terraformModuleNamesToRemove, terraformModules, allReleases, allTags) {
-    const updatedModules = await createTaggedRelease(terraformChangedModules);
-    await addPostReleaseComment(updatedModules);
-    await deleteLegacyReleases(terraformModuleNamesToRemove, allReleases);
-    await deleteLegacyTags(terraformModuleNamesToRemove, allTags);
+async function handlePullRequestMergedEvent(config, terraformModules, releasesToDelete, tagsToDelete) {
+    const releasedTerraformModules = await createTaggedReleases(terraformModules);
+    await addPostReleaseComment(releasedTerraformModules);
+    if (!config.deleteLegacyTags) {
+        (0,core.info)('Deletion of legacy tags/releases is disabled. Skipping.');
+    }
+    else {
+        await deleteReleases(releasesToDelete);
+        await deleteTags(tagsToDelete); // Note: Ensure tag deletion takes place after release deletion
+    }
     if (config.disableWiki) {
         (0,core.info)('Wiki generation is disabled.');
     }
@@ -36349,8 +37157,76 @@ async function handleMergeEvent(config, terraformChangedModules, terraformModule
         ensureTerraformDocsConfigDoesNotExist();
         checkoutWiki();
         await generateWikiFiles(terraformModules);
-        commitAndPushWikiChanges();
+        await commitAndPushWikiChanges();
     }
+}
+/**
+ * Sets GitHub Action outputs with comprehensive information about Terraform modules.
+ *
+ * This function generates and sets the following outputs for consumption by subsequent
+ * workflow steps or jobs:
+ *
+ * **Changed Module Outputs:**
+ * - `changed-module-names`: Array of module names that need to be released
+ * - `changed-module-paths`: Array of directory paths for modules that need to be released
+ * - `changed-modules-map`: Object mapping module names to their release metadata
+ *
+ * **All Module Outputs:**
+ * - `all-module-names`: Array of all detected module names in the workspace
+ * - `all-module-paths`: Array of all detected module directory paths
+ * - `all-modules-map`: Object mapping all module names to their current metadata
+ *
+ * The module map objects contain the following structure:
+ * - `path`: The directory path of the module
+ * - `latestTag`: The most recent git tag for the module
+ * - `latestTagVersion`: The version with any prefixes (e.g., "v") preserved
+ * - `releaseTag`: The tag that will be created for the release (changed modules only)
+ * - `releaseType`: The type of release (major, minor, patch) (changed modules only)
+ *
+ * @param {TerraformModule[]} terraformModules - Array of all Terraform modules detected in the workspace
+ * @returns {void} This function has no return value but sets GitHub Action outputs as side effects
+ */
+function setActionOutputs(terraformModules) {
+    const modulesToRelease = TerraformModule.getModulesNeedingRelease(terraformModules);
+    // Prepare changed module outputs
+    const changedModuleNames = modulesToRelease.map((module) => module.name);
+    const changedModulePaths = modulesToRelease.map((module) => module.directory);
+    const changedModulesMap = Object.fromEntries(modulesToRelease.map((module) => [
+        module.name,
+        {
+            path: module.directory,
+            latestTag: module.getLatestTag(),
+            releaseTag: module.getReleaseTag(),
+            releaseType: module.getReleaseType(),
+        },
+    ]));
+    // Prepare all module outputs
+    const allModuleNames = terraformModules.map((module) => module.name);
+    const allModulePaths = terraformModules.map((module) => module.directory);
+    const allModulesMap = Object.fromEntries(terraformModules.map((module) => [
+        module.name,
+        {
+            path: module.directory,
+            latestTag: module.getLatestTag(),
+            latestTagVersion: module.getLatestTagVersion(), // Preserves any version prefixes (such as "v") that may be present or configured.
+        },
+    ]));
+    // Log the outputs for debugging purposes
+    (0,core.startGroup)('GitHub Action Outputs');
+    (0,core.info)(`Changed module names: ${JSON.stringify(changedModuleNames)}`);
+    (0,core.info)(`Changed module paths: ${JSON.stringify(changedModulePaths)}`);
+    (0,core.info)(`Changed modules map: ${JSON.stringify(changedModulesMap, null, 2)}`);
+    (0,core.info)(`All module names: ${JSON.stringify(allModuleNames)}`);
+    (0,core.info)(`All module paths: ${JSON.stringify(allModulePaths)}`);
+    (0,core.info)(`All modules map: ${JSON.stringify(allModulesMap, null, 2)}`);
+    (0,core.endGroup)();
+    // Set GitHub Action outputs
+    (0,core.setOutput)('changed-module-names', changedModuleNames);
+    (0,core.setOutput)('changed-module-paths', changedModulePaths);
+    (0,core.setOutput)('changed-modules-map', changedModulesMap);
+    (0,core.setOutput)('all-module-names', allModuleNames);
+    (0,core.setOutput)('all-module-paths', allModulePaths);
+    (0,core.setOutput)('all-modules-map', allModulesMap);
 }
 /**
  * Executes the main process of the terraform-module-releaser action.
@@ -36397,53 +37273,16 @@ async function run() {
         const commits = await getPullRequestCommits();
         const allTags = await getAllTags();
         const allReleases = await getAllReleases();
-        const terraformModules = getAllTerraformModules(commits, allTags, allReleases);
-        const terraformChangedModules = getTerraformChangedModules(terraformModules);
-        const terraformModuleNamesToRemove = getTerraformModulesToRemove(allTags, terraformModules);
-        if (!context.isPrMergeEvent) {
-            await handleReleasePlanComment(config, terraformChangedModules, terraformModuleNamesToRemove);
+        const terraformModules = parseTerraformModules(commits, allTags, allReleases);
+        const releasesToDelete = TerraformModule.getReleasesToDelete(allReleases, terraformModules);
+        const tagsToDelete = TerraformModule.getTagsToDelete(allTags, terraformModules);
+        if (context.isPrMergeEvent) {
+            await handlePullRequestMergedEvent(config, terraformModules, releasesToDelete, tagsToDelete);
         }
         else {
-            await handleMergeEvent(config, terraformChangedModules, terraformModuleNamesToRemove, terraformModules, allReleases, allTags);
+            await handlePullRequestEvent(terraformModules, releasesToDelete, tagsToDelete);
         }
-        // Set the outputs for the GitHub Action
-        const changedModuleNames = terraformChangedModules.map((module) => module.moduleName);
-        const changedModulePaths = terraformChangedModules.map((module) => module.directory);
-        const changedModulesMap = Object.fromEntries(terraformChangedModules.map((module) => [
-            module.moduleName,
-            {
-                path: module.directory,
-                currentTag: module.latestTag,
-                nextTag: module.nextTag,
-                releaseType: module.releaseType,
-            },
-        ]));
-        // Add new outputs for all modules
-        const allModuleNames = terraformModules.map((module) => module.moduleName);
-        const allModulePaths = terraformModules.map((module) => module.directory);
-        const allModulesMap = Object.fromEntries(terraformModules.map((module) => [
-            module.moduleName,
-            {
-                path: module.directory,
-                latestTag: module.latestTag,
-                latestTagVersion: module.latestTagVersion,
-            },
-        ]));
-        // Log the changes for debugging
-        (0,core.startGroup)('Outputs');
-        (0,core.info)(`Changed module names: ${JSON.stringify(changedModuleNames)}`);
-        (0,core.info)(`Changed module paths: ${JSON.stringify(changedModulePaths)}`);
-        (0,core.info)(`Changed modules map: ${JSON.stringify(changedModulesMap, null, 2)}`);
-        (0,core.info)(`All module names: ${JSON.stringify(allModuleNames)}`);
-        (0,core.info)(`All module paths: ${JSON.stringify(allModulePaths)}`);
-        (0,core.info)(`All modules map: ${JSON.stringify(allModulesMap, null, 2)}`);
-        (0,core.endGroup)();
-        (0,core.setOutput)('changed-module-names', changedModuleNames);
-        (0,core.setOutput)('changed-module-paths', changedModulePaths);
-        (0,core.setOutput)('changed-modules-map', changedModulesMap);
-        (0,core.setOutput)('all-module-names', allModuleNames);
-        (0,core.setOutput)('all-module-paths', allModulePaths);
-        (0,core.setOutput)('all-modules-map', allModulesMap);
+        setActionOutputs(terraformModules);
     }
     catch (error) {
         if (error instanceof Error) {
