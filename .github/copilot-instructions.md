@@ -10,7 +10,6 @@ A GitHub Action written in TypeScript that automates versioning, releases, and d
 - Install Node.js dependencies: `npm ci --no-fund` -- takes 3-15 seconds. NEVER CANCEL. Set timeout to 30+ seconds.
 - Run TypeScript type checking: `npm run typecheck` -- takes ~4 seconds. NEVER CANCEL. Set timeout to 15+ seconds.
 - Lint and format code: `npm run check:fix` -- takes <1 second. Set timeout to 15+ seconds.
-- Build the action bundle: `npm run package` -- takes 6-8 seconds. NEVER CANCEL. Set timeout to 30+ seconds.
 
 ### Testing
 - Run full test suite: `npm run test` -- takes ~5 seconds but REQUIRES GITHUB_TOKEN environment variable for some tests. NEVER CANCEL. Set timeout to 60+ seconds.
@@ -26,16 +25,8 @@ External dependencies like terraform-docs are automatically installed and handle
 
 ### Manual Validation Scenarios
 - **Always validate TypeScript compilation**: Run `npm run typecheck` to catch type errors.
-- **Always validate the action bundle**: Run `npm run package` to ensure the action can be built for GitHub Actions.
 - **Always test functionality**: Run `npm run test` to verify operation and functionality.
 - **Validate linting compliance**: Run `npm run check:fix` and then `npm run check` to ensure code meets style requirements.
-
-### Comprehensive Validation Command
-To validate the entire codebase quickly, run this sequence:
-```bash
-npm ci --no-fund && npm run typecheck && npm run check:fix && npm run package && npm run test
-```
-This validates dependencies, types, linting, build, and functionality in one command sequence.
 
 ## Common Tasks
 
@@ -43,20 +34,17 @@ This validates dependencies, types, linting, build, and functionality in one com
 1. `npm ci --no-fund` -- Install dependencies (3-15 seconds)
 2. `npm run typecheck` -- Type checking (4 seconds)  
 3. `npm run check:fix` -- Lint and format code (<1 second)
-4. `npm run package` -- Build action bundle (6-8 seconds)
-5. `npm run test` -- Run full test suite (5 seconds)
+4. `npm run test` -- Run full test suite (5 seconds)
 
 ### Full CI Validation (requires GITHUB_TOKEN)
 1. `npm ci --no-fund` -- Install dependencies
 2. `npm run typecheck` -- Type checking
 3. `npm run check:fix` -- Lint and format code
-4. `npm run package` -- Build action bundle
-5. `npm run test` -- Run full test suite including GitHub API integration tests
+4. `npm run test` -- Run full test suite including GitHub API integration tests
 
 ### Development
 - Use `npm run test:watch` for continuous testing during development
 - Use `npm run check` to check linting without fixing
-- The action is packaged into `dist/index.js` using ncc - always run `npm run package` after code changes
 - Always run `npm run check:fix` before committing or the CI (.github/workflows/lint.yml) will fail
 
 ### Working with the Action Locally
@@ -100,7 +88,6 @@ This validates dependencies, types, linting, build, and functionality in one com
 ### Timeout Requirements
 - **npm ci**: NEVER CANCEL - takes 3-15 seconds, set timeout to 30+ seconds
 - **npm run test**: NEVER CANCEL - takes 5 seconds, set timeout to 60+ seconds (includes external API calls)
-- **npm run package**: NEVER CANCEL - takes 6-8 seconds, set timeout to 30+ seconds
 
 ### Linting and Formatting
 - Uses **Biome** (not Prettier or ESLint) for TypeScript linting and formatting
