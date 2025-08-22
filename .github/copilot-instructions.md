@@ -7,12 +7,12 @@ A GitHub Action written in TypeScript that automates versioning, releases, and d
 ## Working Effectively
 
 ### Bootstrap and Build the Repository
-- Install Node.js dependencies: `npm ci --no-fund` -- takes 3-15 seconds. NEVER CANCEL. Set timeout to 30+ seconds.
-- Run TypeScript type checking: `npm run typecheck` -- takes ~4 seconds. NEVER CANCEL. Set timeout to 15+ seconds.
-- Lint and format code: `npm run check:fix` -- takes <1 second. Set timeout to 15+ seconds.
+- Install Node.js dependencies: `npm ci --no-fund`
+- Run TypeScript type checking: `npm run typecheck`
+- Lint and format code: `npm run check`
 
 ### Testing
-- Run full test suite: `npm run test` -- takes ~5 seconds but REQUIRES GITHUB_TOKEN environment variable for some tests. NEVER CANCEL. Set timeout to 60+ seconds.
+- Run full test suite: `npm run test` (requires GITHUB_TOKEN for some tests)
 - Run tests in watch mode during development: `npm run test:watch`
 
 ## Validation
@@ -26,21 +26,15 @@ External dependencies like terraform-docs are automatically installed and handle
 ### Manual Validation Scenarios
 - **Always validate TypeScript compilation**: Run `npm run typecheck` to catch type errors.
 - **Always test functionality**: Run `npm run test` to verify operation and functionality.
-- **Validate linting compliance**: Run `npm run check:fix` and then `npm run check` to ensure code meets style requirements.
+- **Validate linting compliance**: Run `npm run check` to ensure code meets style requirements.
 
 ## Common Tasks
 
 ### Build and Test Workflow
-1. `npm ci --no-fund` -- Install dependencies (3-15 seconds)
-2. `npm run typecheck` -- Type checking (4 seconds)  
-3. `npm run check:fix` -- Lint and format code (<1 second)
-4. `npm run test` -- Run full test suite (5 seconds)
-
-### Full CI Validation (requires GITHUB_TOKEN)
 1. `npm ci --no-fund` -- Install dependencies
 2. `npm run typecheck` -- Type checking
-3. `npm run check:fix` -- Lint and format code
-4. `npm run test` -- Run full test suite including GitHub API integration tests
+3. `npm run check` -- Lint code
+4. `npm run test` -- Run full test suite
 
 ### Development
 - Use `npm run test:watch` for continuous testing during development
@@ -86,13 +80,12 @@ External dependencies like terraform-docs are automatically installed and handle
 ## Critical Build Information
 
 ### Timeout Requirements
-- **npm ci**: NEVER CANCEL - takes 3-15 seconds, set timeout to 30+ seconds
-- **npm run test**: NEVER CANCEL - takes 5 seconds, set timeout to 60+ seconds (includes external API calls)
+- **npm ci**: Set timeout to 30+ seconds for dependency installation
+- **npm run test**: Set timeout to 60+ seconds (includes external API calls)
 
 ### Linting and Formatting
 - Uses **Biome** (not Prettier or ESLint) for TypeScript linting and formatting
 - Configuration in `biome.json`
-- Always run `npm run check:fix` before committing
 - Super Linter runs in CI but defers TypeScript formatting to Biome
 
 ### Testing Framework
