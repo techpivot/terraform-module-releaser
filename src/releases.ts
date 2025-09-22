@@ -168,6 +168,7 @@ export async function createTaggedReleases(terraformModules: TerraformModule[]):
         body,
         draft: false,
         prerelease: false,
+        make_latest: false,
       });
 
       const release = {
