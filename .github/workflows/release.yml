@@ -22,6 +22,7 @@ jobs:
         with:
           fetch-depth: 0 # Get all history
           fetch-tags: true
+          persist-credentials: true
 
       - name: Extract version from PR body
         id: extract-version

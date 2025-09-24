@@ -27,6 +27,7 @@ jobs:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0 # Get all history which is required for parsing commits
+          persist-credentials: false
 
       - name: Setup Node.js
         id: setup-node
@@ -39,8 +40,18 @@ jobs:
         id: npm-ci
         run: npm ci --no-fund
 
+      - name: Validate version input
+        run: |
+          # Ensure the provided version strictly matches X.Y.Z where X,Y,Z are numeric to avoid injection.
+          if ! [[ '${{ env.VERSION }}' =~ ^[0-9]+(\.[0-9]+){2}$ ]]; then
+            echo "Error: release_version must match X.Y.Z (numeric). Got: ${{ env.VERSION }}" >&2
+            exit 1
+          fi
+
       - name: Update package.json version
-        run: npm version ${{ env.VERSION }} --no-git-tag-version
+        # Quote the value so the shell treats it as a single literal argument (prevents command/word splitting).
+        # Flag order changed (options first) for clarity but either order works.
+        run: npm version --no-git-tag-version '${{ env.VERSION }}'
 
       - name: Build the package
         run: npm run package

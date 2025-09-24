@@ -39,8 +39,8 @@
     ]
   },
   "scripts": {
-    "check": "biome check . && npx prettier -c \"*.md\" \".github/**/*.md\"",
-    "check:fix": "biome check --write --unsafe . && npx prettier -w \"*.md\" \".github/**/*.md\"",
+    "check": "biome check . && npx prettier -c \"*.md\" \"**/*.yml\" \".github/**/*.md\"",
+    "check:fix": "biome check --write --unsafe . && npx prettier -w \"*.md\" \"**/*.yml\" \".github/**/*.md\"",
     "dev:parse-modules": "tsx scripts/dev-parse-modules.ts",
     "textlint": "textlint -c .github/linters/.textlintrc **/*.md",
     "textlint:fix": "textlint -c .github/linters/.textlintrc --fix **/*.md",
