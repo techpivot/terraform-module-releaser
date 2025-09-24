@@ -210,13 +210,17 @@ export async function run(): Promise<void> {
     const releasesToDelete = TerraformModule.getReleasesToDelete(allReleases, terraformModules);
     const tagsToDelete = TerraformModule.getTagsToDelete(allTags, terraformModules);
 
+    // Important: Let's set the action outputs prior to performing the closed/merge request release.
+    // This is because the changed modules filters on [module.needsRelease()] which will be false
+    // after the release is created. By setting the outputs here, we ensure they accurately reflect
+    // the modules that were changed and needed release at this point in time.
+    setActionOutputs(terraformModules);
+
     if (context.isPrMergeEvent) {
       await handlePullRequestMergedEvent(config, terraformModules, releasesToDelete, tagsToDelete);
     } else {
       await handlePullRequestEvent(terraformModules, releasesToDelete, tagsToDelete);
     }
-
-    setActionOutputs(terraformModules);
   } catch (error) {
     if (error instanceof Error) {
       setFailed(error.message);

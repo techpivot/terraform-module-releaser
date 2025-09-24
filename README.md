@@ -395,6 +395,10 @@ The following outputs are available from this action:
 }
 ```
 
+> **Note**: When using outputs during the `closed` event, the `changed-modules-map` output will show `latestTag` as the
+> previous release version, while `releaseTag` and `releaseType` reflect the new release that was just created. To
+> reference the newly published version, use the value of `releaseTag`.
+
 ## Inspiration
 
 This action was inspired by the blog post
