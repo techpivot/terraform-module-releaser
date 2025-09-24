@@ -27,6 +27,7 @@ jobs:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0 # Get all history which is required for parsing commits
+          persist-credentials: false
 
       - name: Setup Node.js
         id: setup-node

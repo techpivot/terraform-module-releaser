@@ -22,7 +22,9 @@ jobs:
       - name: Checkout
         id: checkout
         uses: actions/checkout@v5
-
+        with:
+          persist-credentials: false
+        
       - name: Setup Node.js
         id: setup-node
         uses: actions/setup-node@v4
