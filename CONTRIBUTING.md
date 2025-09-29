@@ -1,0 +1,315 @@
+# Contributing to Terraform Module Releaser
+
+Thank you for your interest in contributing to the **Terraform Module Releaser**! This document provides guidelines and
+information for contributors to help ensure a smooth and effective collaboration experience.
+
+## Table of Contents
+
+- [Getting Started](#getting-started)
+- [Development Environment Setup](#development-environment-setup)
+- [Development Workflow](#development-workflow)
+- [Commit Message Guidelines](#commit-message-guidelines)
+- [Testing](#testing)
+- [Code Style and Linting](#code-style-and-linting)
+- [Pull Request Process](#pull-request-process)
+- [Reporting Issues](#reporting-issues)
+- [Community Guidelines](#community-guidelines)
+- [Release Process](#release-process)
+
+## Getting Started
+
+### Development Containers (Recommended)
+
+This repository includes a pre-configured [development container](https://containers.dev/) that provides the easiest way
+to get started contributing. The devcontainer includes all necessary tools, extensions, and environment variables
+pre-configured.
+
+**Using Visual Studio Code with devcontainers:**
+
+1. Install [Visual Studio Code](https://code.visualstudio.com/) and the
+   [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
+1. Fork and clone the repository
+1. Open the repository in Visual Studio Code
+1. When prompted, click "Reopen in Container" or use `Ctrl+Shift+P` → "Dev Containers: Reopen in Container"
+1. The container will automatically build and install dependencies
+
+**Using GitHub Codespaces:**
+
+1. Fork the repository on GitHub
+1. Click the "Code" button and select "Codespaces"
+1. Create a new codespace - it will automatically use the devcontainer configuration
+
+For more information about development containers, see the
+[official documentation](https://code.visualstudio.com/docs/devcontainers/containers).
+
+### Manual Setup
+
+If you prefer not to use devcontainers, follow these steps:
+
+Before contributing, please:
+
+1. Read the [README.md](./README.md) to understand the project's purpose and functionality
+1. Review the [Security Policy](./SECURITY.md) for security-related guidelines
+1. Check existing [issues](https://github.com/techpivot/terraform-module-releaser/issues) and
+   [pull requests](https://github.com/techpivot/terraform-module-releaser/pulls) to avoid duplication
+1. Consider opening an issue first to discuss significant changes or new features
+
+## Development Environment Setup
+
+### Prerequisites
+
+- **Node.js**: Version 20 or higher (see [.node-version](./.node-version) for the exact version)
+- **npm**: Comes with Node.js
+- **Git**: For version control
+
+### Initial Setup
+
+1. **Fork the repository** on GitHub
+
+1. **Clone your fork** locally:
+
+   ```bash
+   git clone https://github.com/YOUR_USERNAME/terraform-module-releaser.git
+   cd terraform-module-releaser
+   ```
+
+1. **Install dependencies**:
+
+   ```bash
+   npm ci --no-fund
+   ```
+
+1. **Verify the setup** by running tests:
+
+   ```bash
+   npm run test
+   ```
+
+## Development Workflow
+
+### Making Changes
+
+1. **Create a feature branch** from `main`:
+
+   ```bash
+   git checkout -b feature/your-feature-name
+   ```
+
+1. **Make your changes** following the coding standards
+1. **Add or update tests** as needed
+1. **Run linting and tests** to ensure quality:
+
+   ```bash
+   npm run check:fix  # Fix linting issues
+   npm run test       # Run tests
+   ```
+
+1. **Commit your changes** following our commit message guidelines
+
+### Key npm Scripts
+
+- `npm run test` - Run the test suite with coverage
+- `npm run check` - Run code linting and style checks
+- `npm run check:fix` - Automatically fix linting issues where possible
+- `npm run test:watch` - Run tests in watch mode during development
+
+> [!WARNING] Do not check in any build/distribution assets (e.g., outputs from `npm run bundle`). These are handled
+> automatically during the release process. For development and testing, running `npm run test` is sufficient.
+
+## Commit Message Guidelines
+
+This project uses [Conventional Commits](https://www.conventionalcommits.org/) to automatically determine release types
+and generate changelogs. Please follow the conventional commits specification for all commit messages.
+
+For detailed information about the format, types, and examples, please refer to the
+[Conventional Commits site](https://www.conventionalcommits.org/).
+
+## Testing
+
+### Environment Setup
+
+Before running tests, you need to set up a GitHub Personal Access Token (PAT):
+
+1. **Create a GitHub PAT**: Go to
+   [GitHub Settings > Developer settings > Personal access tokens](https://github.com/settings/tokens)
+1. **Generate a new token** with appropriate permissions for repository access
+1. **Export the token** in your terminal:
+
+   ```bash
+   export GITHUB_TOKEN=your_personal_access_token_here
+   ```
+
+> [!NOTE] If using the devcontainer, the `GITHUB_TOKEN` environment variable is automatically configured from your local
+> environment.
+
+### Running Tests
+
+```bash
+# Run all tests with coverage
+npm run test
+
+# Run tests in watch mode during development
+npm run test:watch
+```
+
+### Test Guidelines
+
+- Write tests for all new functionality
+- Ensure existing tests pass
+- Aim for high test coverage
+- Use descriptive test names that explain the expected behavior
+- Follow the existing test patterns in the `__tests__` directory
+
+### Test Types
+
+- **Unit Tests**: Test individual functions and components
+- **Integration Tests**: Test interactions between components
+- **API Tests**: Some tests require `GITHUB_TOKEN` environment variable for real API calls
+
+## Code Style and Linting
+
+This project uses [Biome](https://biomejs.dev/) for linting and code formatting.
+
+### Running Linting
+
+```bash
+# Check for linting issues
+npm run check
+
+# Automatically fix linting issues
+npm run check:fix
+```
+
+### Style Guidelines
+
+- Follow TypeScript best practices
+- Use meaningful variable and function names
+- Add JSDoc comments for public APIs
+- Keep functions small and focused
+- Use async/await for asynchronous operations
+
+## Pull Request Process
+
+1. **Ensure your branch is up to date** with the main branch:
+
+   ```bash
+   git checkout main
+   git pull upstream main
+   git checkout your-branch
+   git rebase main
+   ```
+
+1. **Run the full test suite** and ensure everything passes:
+
+   ```bash
+   npm run test
+   ```
+
+1. **Create a pull request** with:
+   - A clear, descriptive title
+   - A detailed description of the changes
+   - Reference to any related issues
+   - Screenshots or examples if applicable
+
+1. **Address review feedback** promptly and respectfully
+
+1. **Ensure CI checks pass** before requesting final review
+
+### Pull Request Guidelines
+
+- Keep pull requests focused and atomic
+- Include tests for new functionality
+- Update documentation as needed
+- Ensure backwards compatibility unless it's a breaking change
+- Follow the conventional commit format for the PR title
+
+## Reporting Issues
+
+### Bug Reports
+
+When reporting bugs, please include:
+
+- **Clear description** of the issue
+- **Steps to reproduce** the problem
+- **Expected vs actual behavior**
+- **Environment details** (Node.js version, OS, etc.)
+- **Relevant logs or error messages**
+- **Minimal reproduction case** if possible
+
+### Feature Requests
+
+For feature requests, please provide:
+
+- **Clear description** of the proposed feature
+- **Use case** and justification
+- **Possible implementation approach** (if you have ideas)
+- **Willingness to contribute** the implementation
+
+### Security Issues
+
+For security-related issues, please follow our [Security Policy](./SECURITY.md) and report them to
+<security@techpivot.com>.
+
+## Community Guidelines
+
+### Code of Conduct
+
+- Be respectful and inclusive
+- Welcome newcomers and help them learn
+- Focus on constructive feedback
+- Assume good intentions
+- Follow the
+  [GitHub Community Guidelines](https://docs.github.com/en/site-policy/github-terms/github-community-guidelines)
+
+### Communication
+
+- Use clear, concise language
+- Provide context for your suggestions
+- Be patient with review processes
+- Ask questions if anything is unclear
+
+## Release Process
+
+This project uses automated releases managed by maintainers through GitHub Actions. The release process is handled via
+the
+[Release-Start workflow](https://github.com/techpivot/terraform-module-releaser/actions/workflows/release-start.yml).
+
+### How Releases Work
+
+- **Semantic versioning** based on conventional commits
+- **Automatic changelog generation** from commit messages
+- **GitHub releases** with proper tagging
+- **Automated asset building** via `npm run bundle` during the release process
+
+### Release Workflow
+
+When maintainers are ready to create a release:
+
+1. The Release-Start workflow is triggered
+1. A new pull request is automatically generated that:
+   - Builds distribution assets via `npm run bundle`
+   - Tags the appropriate version based on conventional commits
+   - Generates a changelog automatically
+   - Creates the GitHub release
+
+Contributors don't need to manually manage versions, releases, or build assets. The automation handles this based on
+your commit messages and pull request merges.
+
+## Getting Help
+
+If you need help or have questions:
+
+1. Check the [existing documentation](./README.md)
+1. Search [existing issues](https://github.com/techpivot/terraform-module-releaser/issues)
+1. Open a new issue with the `question` label
+1. Review the [demo repository](https://github.com/techpivot/terraform-modules-demo) for examples
+
+## Thank You
+
+Your contributions make this project better for everyone. Whether you're fixing bugs, adding features, improving
+documentation, or helping others, we appreciate your efforts!
+
+---
+
+_For more information about the project, see the [README.md](./README.md) and explore the
+[demo repository](https://github.com/techpivot/terraform-modules-demo)._
