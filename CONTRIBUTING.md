@@ -70,7 +70,7 @@ Before contributing, please:
    ```
 4. **Verify the setup** by running tests:
    ```bash
-   npm test
+   npm run test
    ```
 
 ## Development Workflow
@@ -86,19 +86,19 @@ Before contributing, please:
 4. **Run linting and tests** to ensure quality:
    ```bash
    npm run check:fix  # Fix linting issues
-   npm test           # Run tests
+   npm run test       # Run tests
    ```
 5. **Commit your changes** following our commit message guidelines
 
 ### Key npm Scripts
 
-- `npm test` - Run the test suite with coverage
+- `npm run test` - Run the test suite with coverage
 - `npm run check` - Run code linting and style checks
 - `npm run check:fix` - Automatically fix linting issues where possible
 - `npm run test:watch` - Run tests in watch mode during development
 
 > [!WARNING]
-> Do not check in any build/distribution assets (e.g., outputs from `npm run bundle`). These are handled automatically during the release process. For development and testing, running `npm test` is sufficient.
+> Do not check in any build/distribution assets (e.g., outputs from `npm run bundle`). These are handled automatically during the release process. For development and testing, running `npm run test` is sufficient.
 
 ## Commit Message Guidelines
 
@@ -128,7 +128,7 @@ Before running tests, you need to set up a GitHub Personal Access Token (PAT):
 
 ```bash
 # Run all tests with coverage
-npm test
+npm run test
 
 # Run tests in watch mode during development
 npm run test:watch
@@ -184,7 +184,7 @@ npm run check:fix
 2. **Run the full test suite** and ensure everything passes:
 
    ```bash
-   npm test
+   npm run test
    ```
 
 3. **Create a pull request** with:
