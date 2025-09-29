@@ -38,6 +38,6 @@ jobs:
 
       # Note: SonarQube requires the results from tests to get the coverage report
       - name: SonarQube Scan
-        uses: SonarSource/sonarqube-scan-action@2500896589ef8f7247069a56136f8dc177c27ccf # v5
+        uses: SonarSource/sonarqube-scan-action@fd88b7d7ccbaefd23d8f36f73b59db7a3d246602 # v5
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
