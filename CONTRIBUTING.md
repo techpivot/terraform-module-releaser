@@ -18,6 +18,28 @@ information for contributors to help ensure a smooth and effective collaboration
 
 ## Getting Started
 
+### Development Containers (Recommended)
+
+This repository includes a pre-configured [development container](https://containers.dev/) that provides the easiest way to get started contributing. The devcontainer includes all necessary tools, extensions, and environment variables pre-configured.
+
+**Using VS Code with devcontainers:**
+1. Install [Visual Studio Code](https://code.visualstudio.com/) and the [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
+2. Fork and clone the repository
+3. Open the repository in VS Code
+4. When prompted, click "Reopen in Container" or use `Ctrl+Shift+P` → "Dev Containers: Reopen in Container"
+5. The container will automatically build and install dependencies
+
+**Using GitHub Codespaces:**
+1. Fork the repository on GitHub
+2. Click the "Code" button and select "Codespaces"
+3. Create a new codespace - it will automatically use the devcontainer configuration
+
+For more information about development containers, see the [official documentation](https://code.visualstudio.com/docs/devcontainers/containers).
+
+### Manual Setup
+
+If you prefer not to use devcontainers, follow these steps:
+
 Before contributing, please:
 
 1. Read the [README.md](./README.md) to understand the project's purpose and functionality
@@ -87,6 +109,20 @@ For detailed information about the format, types, and examples, please refer to 
 [Conventional Commits site](https://www.conventionalcommits.org/).
 
 ## Testing
+
+### Environment Setup
+
+Before running tests, you need to set up a GitHub Personal Access Token (PAT):
+
+1. **Create a GitHub PAT**: Go to [GitHub Settings > Developer settings > Personal access tokens](https://github.com/settings/tokens)
+2. **Generate a new token** with appropriate permissions for repository access
+3. **Export the token** in your terminal:
+   ```bash
+   export GITHUB_TOKEN=your_personal_access_token_here
+   ```
+
+> [!NOTE]
+> If using the devcontainer, the `GITHUB_TOKEN` environment variable is automatically configured from your local environment.
 
 ### Running Tests
 
@@ -216,15 +252,27 @@ For security-related issues, please follow our [Security Policy](./SECURITY.md) 
 
 ## Release Process
 
-This project uses automated releases through GitHub Actions:
+This project uses automated releases managed by maintainers through GitHub Actions. The release process is handled via the [Release-Start workflow](https://github.com/techpivot/terraform-module-releaser/actions/workflows/release-start.yml).
+
+### How Releases Work
 
 - **Semantic versioning** based on conventional commits
 - **Automatic changelog generation** from commit messages
 - **GitHub releases** with proper tagging
-- **npm package publication** to GitHub Packages
+- **Automated asset building** via `npm run bundle` during the release process
 
-Contributors don't need to manually manage versions or releases. The automation handles this based on your commit
-messages and pull request merges.
+### Release Workflow
+
+When maintainers are ready to create a release:
+
+1. The Release-Start workflow is triggered
+2. A new pull request is automatically generated that:
+   - Builds distribution assets via `npm run bundle`
+   - Tags the appropriate version based on conventional commits
+   - Generates a changelog automatically
+   - Creates the GitHub release
+
+Contributors don't need to manually manage versions, releases, or build assets. The automation handles this based on your commit messages and pull request merges.
 
 ## Getting Help
 
