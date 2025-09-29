@@ -65,7 +65,6 @@ Before contributing, please:
    ```bash
    npm run check:fix  # Fix linting issues
    npm test           # Run tests
-   npm run bundle     # Build the distribution
    ```
 5. **Commit your changes** following our commit message guidelines
 
@@ -74,44 +73,18 @@ Before contributing, please:
 - `npm test` - Run the test suite with coverage
 - `npm run check` - Run code linting and style checks
 - `npm run check:fix` - Automatically fix linting issues where possible
-- `npm run bundle` - Build the distribution package
-- `npm run typecheck` - Run TypeScript type checking
-- `npm run prettier` - Format Markdown files
+- `npm run test:watch` - Run tests in watch mode during development
+
+> [!WARNING]
+> Do not check in any build/distribution assets (e.g., outputs from `npm run bundle`). These are handled automatically during the release process. For development and testing, running `npm test` is sufficient.
 
 ## Commit Message Guidelines
 
 This project uses [Conventional Commits](https://www.conventionalcommits.org/) to automatically determine release types
-and generate changelogs. Please format your commit messages as follows:
+and generate changelogs. Please follow the conventional commits specification for all commit messages.
 
-### Format
-
-```
-<type>[optional scope]: <description>
-
-[optional body]
-
-[optional footer(s)]
-```
-
-### Types
-
-- **feat**: A new feature (triggers minor version bump)
-- **fix**: A bugfix (triggers patch version bump)
-- **docs**: Documentation only changes
-- **style**: Changes that do not affect the meaning of the code (whitespace, formatting, etc.)
-- **refactor**: A code change that neither fixes a bug nor adds a feature
-- **perf**: A code change that improves performance
-- **test**: Adding missing tests or correcting existing tests
-- **chore**: Changes to the build process or auxiliary tools
-
-### Examples
-
-```bash
-feat: add support for custom wiki templates
-fix: handle empty commit messages in changelog generation
-docs: update README with new configuration options
-chore: upgrade dependencies to latest versions
-```
+For detailed information about the format, types, and examples, please refer to the
+[Conventional Commits site](https://www.conventionalcommits.org/).
 
 ## Testing
 
@@ -175,7 +148,7 @@ npm run check:fix
 2. **Run the full test suite** and ensure everything passes:
 
    ```bash
-   npm run bundle && npm test
+   npm test
    ```
 
 3. **Create a pull request** with:
