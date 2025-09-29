@@ -26,7 +26,7 @@ jobs:
 
       - name: Extract version from PR body
         id: extract-version
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           result-encoding: string
           script: |
@@ -39,7 +39,7 @@ jobs:
 
       - name: Extract release notes from PR body
         id: extract-release-notes
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           result-encoding: string
           script: |
@@ -63,7 +63,7 @@ jobs:
           git push origin v${{ steps.extract-version.outputs.result }}
 
       - name: Create GitHub Release via API
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const owner = context.repo.owner;
