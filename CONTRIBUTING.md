@@ -24,20 +24,20 @@ This repository includes a pre-configured [development container](https://contai
 to get started contributing. The devcontainer includes all necessary tools, extensions, and environment variables
 pre-configured.
 
-**Using VS Code with devcontainers:**
+**Using Visual Studio Code with devcontainers:**
 
 1. Install [Visual Studio Code](https://code.visualstudio.com/) and the
    [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
-2. Fork and clone the repository
-3. Open the repository in VS Code
-4. When prompted, click "Reopen in Container" or use `Ctrl+Shift+P` → "Dev Containers: Reopen in Container"
-5. The container will automatically build and install dependencies
+1. Fork and clone the repository
+1. Open the repository in Visual Studio Code
+1. When prompted, click "Reopen in Container" or use `Ctrl+Shift+P` → "Dev Containers: Reopen in Container"
+1. The container will automatically build and install dependencies
 
 **Using GitHub Codespaces:**
 
 1. Fork the repository on GitHub
-2. Click the "Code" button and select "Codespaces"
-3. Create a new codespace - it will automatically use the devcontainer configuration
+1. Click the "Code" button and select "Codespaces"
+1. Create a new codespace - it will automatically use the devcontainer configuration
 
 For more information about development containers, see the
 [official documentation](https://code.visualstudio.com/docs/devcontainers/containers).
@@ -49,10 +49,10 @@ If you prefer not to use devcontainers, follow these steps:
 Before contributing, please:
 
 1. Read the [README.md](./README.md) to understand the project's purpose and functionality
-2. Review the [Security Policy](./SECURITY.md) for security-related guidelines
-3. Check existing [issues](https://github.com/techpivot/terraform-module-releaser/issues) and
+1. Review the [Security Policy](./SECURITY.md) for security-related guidelines
+1. Check existing [issues](https://github.com/techpivot/terraform-module-releaser/issues) and
    [pull requests](https://github.com/techpivot/terraform-module-releaser/pulls) to avoid duplication
-4. Consider opening an issue first to discuss significant changes or new features
+1. Consider opening an issue first to discuss significant changes or new features
 
 ## Development Environment Setup
 
@@ -65,16 +65,22 @@ Before contributing, please:
 ### Initial Setup
 
 1. **Fork the repository** on GitHub
-2. **Clone your fork** locally:
+
+1. **Clone your fork** locally:
+
    ```bash
    git clone https://github.com/YOUR_USERNAME/terraform-module-releaser.git
    cd terraform-module-releaser
    ```
-3. **Install dependencies**:
+
+1. **Install dependencies**:
+
    ```bash
    npm ci --no-fund
    ```
-4. **Verify the setup** by running tests:
+
+1. **Verify the setup** by running tests:
+
    ```bash
    npm run test
    ```
@@ -84,17 +90,21 @@ Before contributing, please:
 ### Making Changes
 
 1. **Create a feature branch** from `main`:
+
    ```bash
    git checkout -b feature/your-feature-name
    ```
-2. **Make your changes** following the coding standards
-3. **Add or update tests** as needed
-4. **Run linting and tests** to ensure quality:
+
+1. **Make your changes** following the coding standards
+1. **Add or update tests** as needed
+1. **Run linting and tests** to ensure quality:
+
    ```bash
    npm run check:fix  # Fix linting issues
    npm run test       # Run tests
    ```
-5. **Commit your changes** following our commit message guidelines
+
+1. **Commit your changes** following our commit message guidelines
 
 ### Key npm Scripts
 
@@ -122,8 +132,9 @@ Before running tests, you need to set up a GitHub Personal Access Token (PAT):
 
 1. **Create a GitHub PAT**: Go to
    [GitHub Settings > Developer settings > Personal access tokens](https://github.com/settings/tokens)
-2. **Generate a new token** with appropriate permissions for repository access
-3. **Export the token** in your terminal:
+1. **Generate a new token** with appropriate permissions for repository access
+1. **Export the token** in your terminal:
+
    ```bash
    export GITHUB_TOKEN=your_personal_access_token_here
    ```
@@ -188,21 +199,21 @@ npm run check:fix
    git rebase main
    ```
 
-2. **Run the full test suite** and ensure everything passes:
+1. **Run the full test suite** and ensure everything passes:
 
    ```bash
    npm run test
    ```
 
-3. **Create a pull request** with:
+1. **Create a pull request** with:
    - A clear, descriptive title
    - A detailed description of the changes
    - Reference to any related issues
    - Screenshots or examples if applicable
 
-4. **Address review feedback** promptly and respectfully
+1. **Address review feedback** promptly and respectfully
 
-5. **Ensure CI checks pass** before requesting final review
+1. **Ensure CI checks pass** before requesting final review
 
 ### Pull Request Guidelines
 
@@ -275,7 +286,7 @@ the
 When maintainers are ready to create a release:
 
 1. The Release-Start workflow is triggered
-2. A new pull request is automatically generated that:
+1. A new pull request is automatically generated that:
    - Builds distribution assets via `npm run bundle`
    - Tags the appropriate version based on conventional commits
    - Generates a changelog automatically
@@ -289,9 +300,9 @@ your commit messages and pull request merges.
 If you need help or have questions:
 
 1. Check the [existing documentation](./README.md)
-2. Search [existing issues](https://github.com/techpivot/terraform-module-releaser/issues)
-3. Open a new issue with the `question` label
-4. Review the [demo repository](https://github.com/techpivot/terraform-modules-demo) for examples
+1. Search [existing issues](https://github.com/techpivot/terraform-module-releaser/issues)
+1. Open a new issue with the `question` label
+1. Review the [demo repository](https://github.com/techpivot/terraform-modules-demo) for examples
 
 ## Thank You
 
