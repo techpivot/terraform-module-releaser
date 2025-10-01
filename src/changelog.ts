@@ -108,3 +108,86 @@ export function getTerraformModuleFullReleaseChangelog(terraformModule: Terrafor
     .filter((body): body is string => Boolean(body))
     .join('\n\n');
 }
+
+/**
+ * Generates and writes CHANGELOG.md files for Terraform modules that need a release.
+ *
+ * This function creates a CHANGELOG.md file in each module's directory containing the complete
+ * release history. The changelog includes:
+ * - A header with the module name
+ * - All release entries in reverse chronological order (newest first)
+ * - Properly formatted markdown sections for each release
+ *
+ * The function only processes modules that need a release and have commit messages.
+ * It creates the changelog content by combining the new release entry with historical
+ * release notes from the module's previous releases.
+ *
+ * @param {TerraformModule[]} terraformModules - Array of Terraform modules to process
+ * @returns {Promise<string[]>} Array of file paths to the generated CHANGELOG.md files
+ *
+ * @example
+ * ```typescript
+ * const changelogFiles = await generateChangelogFiles(terraformModules);
+ * console.log(changelogFiles);
+ * // Output: ['/path/to/module1/CHANGELOG.md', '/path/to/module2/CHANGELOG.md']
+ * ```
+ */
+export async function generateChangelogFiles(terraformModules: TerraformModule[]): Promise<string[]> {
+  const { writeFile } = await import('node:fs/promises');
+  const { join } = await import('node:path');
+  const { endGroup, info, startGroup } = await import('@actions/core');
+
+  console.time('Elapsed time generating changelog files');
+  startGroup('Generating CHANGELOG.md files');
+
+  const changelogFiles: string[] = [];
+  const modulesToRelease = terraformModules.filter((module) => module.needsRelease());
+
+  if (modulesToRelease.length === 0) {
+    info('No modules need release. Skipping changelog file generation.');
+    endGroup();
+    console.timeEnd('Elapsed time generating changelog files');
+    return changelogFiles;
+  }
+
+  for (const terraformModule of modulesToRelease) {
+    const changelogPath = join(terraformModule.directory, 'CHANGELOG.md');
+
+    // Get the new release entry
+    const newReleaseEntry = createTerraformModuleChangelog(terraformModule);
+
+    if (!newReleaseEntry) {
+      continue;
+    }
+
+    // Get historical changelog (existing releases)
+    const historicalChangelog = getTerraformModuleFullReleaseChangelog(terraformModule);
+
+    // Combine new entry with historical data
+    const changelogContent = [
+      `# Changelog - ${terraformModule.name}`,
+      '',
+      'All notable changes to this module will be documented in this file.',
+      '',
+      newReleaseEntry,
+    ];
+
+    // Add historical changelog if it exists
+    if (historicalChangelog) {
+      changelogContent.push('');
+      changelogContent.push(historicalChangelog);
+    }
+
+    const fullChangelog = changelogContent.join('\n');
+
+    await writeFile(changelogPath, fullChangelog, 'utf8');
+    info(`Generated CHANGELOG.md for module: ${terraformModule.name}`);
+    changelogFiles.push(changelogPath);
+  }
+
+  info(`Generated ${changelogFiles.length} CHANGELOG.md file${changelogFiles.length !== 1 ? 's' : ''}`);
+  endGroup();
+  console.timeEnd('Elapsed time generating changelog files');
+
+  return changelogFiles;
+}

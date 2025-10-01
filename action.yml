@@ -45,6 +45,14 @@ inputs:
       By default, this is set to false. Set to true to prevent wiki documentation from being generated.
     required: true
     default: "false"
+  export-changelog-files:
+    description: >
+      Whether to export CHANGELOG.md files for each Terraform module in the repository.
+      When enabled, a CHANGELOG.md file will be generated and committed to each module's directory
+      containing the full release history. This complements the wiki functionality and provides
+      an alternative changelog format that lives within the repository itself.
+    required: true
+    default: "false"
   wiki-sidebar-changelog-max:
     description: >
       An integer that specifies how many changelog entries are displayed in the sidebar per module.

@@ -86,6 +86,7 @@ function initializeConfig(): Config {
     info(`Terraform Docs Version: ${configInstance.terraformDocsVersion}`);
     info(`Delete Legacy Tags: ${configInstance.deleteLegacyTags}`);
     info(`Disable Wiki: ${configInstance.disableWiki}`);
+    info(`Export Changelog Files: ${configInstance.exportChangelogFiles}`);
     info(`Wiki Sidebar Changelog Max: ${configInstance.wikiSidebarChangelogMax}`);
     info(`Module Paths to Ignore: ${configInstance.modulePathIgnore.join(', ')}`);
     info(`Module Change Exclude Patterns: ${configInstance.moduleChangeExcludePatterns.join(', ')}`);

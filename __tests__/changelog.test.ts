@@ -1,11 +1,14 @@
 import {
   createTerraformModuleChangelog,
+  generateChangelogFiles,
   getPullRequestChangelog,
   getTerraformModuleFullReleaseChangelog,
 } from '@/changelog';
 import { context } from '@/mocks/context';
 import type { TerraformModule } from '@/terraform-module';
 import { createMockTerraformModule } from '@/tests/helpers/terraform-module';
+import { existsSync, promises as fsp } from 'node:fs';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 describe('changelog', () => {
@@ -213,6 +216,130 @@ describe('changelog', () => {
       });
 
       expect(getTerraformModuleFullReleaseChangelog(terraformModule)).toBe('Single release content');
+    });
+  });
+
+  describe('generateChangelogFiles()', () => {
+    const tmpDir = '/tmp/changelog-test';
+
+    beforeEach(async () => {
+      // Create temp directory for test files
+      await fsp.mkdir(tmpDir, { recursive: true });
+    });
+
+    afterEach(async () => {
+      // Cleanup test files
+      if (existsSync(tmpDir)) {
+        await fsp.rm(tmpDir, { recursive: true, force: true });
+      }
+    });
+
+    it('should generate CHANGELOG.md files for modules needing release', async () => {
+      const terraformModules: TerraformModule[] = [
+        createMockTerraformModule({
+          directory: 'test/module1',
+          commitMessages: ['feat: Add new feature', 'fix: Fix bug'],
+        }),
+        createMockTerraformModule({
+          directory: 'test/module2',
+          commitMessages: ['feat: Another feature'],
+        }),
+      ];
+
+      // Create module directories using actual absolute paths
+      for (const module of terraformModules) {
+        const fullPath = join(tmpDir, module.name);
+        await fsp.mkdir(fullPath, { recursive: true });
+        // Override the directory with absolute path for file operations
+        Object.defineProperty(module, 'directory', { value: fullPath, writable: true });
+      }
+
+      const changelogFiles = await generateChangelogFiles(terraformModules);
+
+      expect(changelogFiles).toHaveLength(2);
+      expect(changelogFiles[0]).toContain('CHANGELOG.md');
+      expect(changelogFiles[1]).toContain('CHANGELOG.md');
+
+      // Verify file contents
+      const changelog1 = await fsp.readFile(changelogFiles[0], 'utf8');
+      expect(changelog1).toContain('# Changelog - test/module1');
+      expect(changelog1).toContain('All notable changes to this module will be documented in this file.');
+      expect(changelog1).toContain('## `v1.0.0` (2024-11-05)');
+      expect(changelog1).toContain('feat: Add new feature');
+      expect(changelog1).toContain('fix: Fix bug');
+
+      const changelog2 = await fsp.readFile(changelogFiles[1], 'utf8');
+      expect(changelog2).toContain('# Changelog - test/module2');
+      expect(changelog2).toContain('feat: Another feature');
+    });
+
+    it('should include historical releases in changelog', async () => {
+      const terraformModule = createMockTerraformModule({
+        directory: 'test/module-with-history',
+        commitMessages: ['feat: New feature'],
+        tags: ['test/module-with-history/v1.0.0'], // Existing tag
+        releases: [
+          {
+            id: 1,
+            title: 'test/module-with-history/v1.0.0',
+            body: '## `v1.0.0` (2024-01-01)\n\n- Initial release',
+            tagName: 'test/module-with-history/v1.0.0',
+          },
+        ],
+      });
+
+      const fullPath = join(tmpDir, terraformModule.name);
+      await fsp.mkdir(fullPath, { recursive: true });
+      Object.defineProperty(terraformModule, 'directory', { value: fullPath, writable: true });
+
+      const changelogFiles = await generateChangelogFiles([terraformModule]);
+
+      expect(changelogFiles).toHaveLength(1);
+
+      const changelog = await fsp.readFile(changelogFiles[0], 'utf8');
+      expect(changelog).toContain('# Changelog - test/module-with-history');
+      expect(changelog).toContain('## `v1.1.0` (2024-11-05)'); // New release
+      expect(changelog).toContain('feat: New feature');
+      expect(changelog).toContain('## `v1.0.0` (2024-01-01)'); // Historical release
+      expect(changelog).toContain('Initial release');
+    });
+
+    it('should return empty array when no modules need release', async () => {
+      const terraformModules: TerraformModule[] = [
+        createMockTerraformModule({
+          directory: 'test/no-release-module',
+          commitMessages: [], // No commits - no release needed
+          tags: ['test/no-release-module/v1.0.0'], // Already has a tag
+        }),
+      ];
+
+      const changelogFiles = await generateChangelogFiles(terraformModules);
+
+      expect(changelogFiles).toHaveLength(0);
+    });
+
+    it('should handle empty module array', async () => {
+      const changelogFiles = await generateChangelogFiles([]);
+
+      expect(changelogFiles).toHaveLength(0);
+    });
+
+    it('should skip modules where changelog generation returns empty', async () => {
+      const terraformModule = createMockTerraformModule({
+        directory: 'test/edge-case-module',
+        commitMessages: ['feat: some change'],
+      });
+
+      // Mock getReleaseTagVersion to return null (edge case)
+      vi.spyOn(terraformModule, 'getReleaseTagVersion').mockReturnValue(null);
+
+      const fullPath = join(tmpDir, terraformModule.name);
+      await fsp.mkdir(fullPath, { recursive: true });
+      Object.defineProperty(terraformModule, 'directory', { value: fullPath, writable: true });
+
+      const changelogFiles = await generateChangelogFiles([terraformModule]);
+
+      expect(changelogFiles).toHaveLength(0);
     });
   });
 });

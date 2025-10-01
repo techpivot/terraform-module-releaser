@@ -193,6 +193,7 @@ configuring the following optional input parameters as needed.
 | `terraform-docs-version`         | Specifies the terraform-docs version used to generate documentation for the wiki                                                                                                                                                                                                   | `v0.19.0`                                                                                             |
 | `delete-legacy-tags`             | Specifies a boolean that determines whether tags and releases from Terraform modules that have been deleted should be automatically removed                                                                                                                                        | `true`                                                                                                |
 | `disable-wiki`                   | Whether to disable wiki generation for Terraform modules                                                                                                                                                                                                                           | `false`                                                                                               |
+| `export-changelog-files`         | Whether to export CHANGELOG.md files for each Terraform module. When enabled, generates and commits a CHANGELOG.md file in each module's directory with the full release history.<br><sub>[Read more here](#exporting-changelog-files)</sub>                                       | `false`                                                                                               |
 | `wiki-sidebar-changelog-max`     | An integer that specifies how many changelog entries are displayed in the sidebar per module                                                                                                                                                                                       | `5`                                                                                                   |
 | `wiki-usage-template`            | A raw, multi-line string to override the default 'Usage' section in the generated wiki. Allows using variables like {{module_name}}, {{latest_tag}}, {{latest_tag_version_number}} and more.<br><sub>[Read more here](#configuring-the-wiki-usage-template)</sub>                  | [See action.yml](https://github.com/techpivot/terraform-module-releaser/blob/main/action.yml#L54-L65) |
 | `disable-branding`               | Controls whether a small branding link to the action's repository is added to PR comments. Recommended to leave enabled to support OSS.                                                                                                                                            | `false`                                                                                               |
@@ -291,6 +292,40 @@ You can use the following dynamic variables in your template:
 | `{{module_source}}`             | The Git source URL for the module with `git::` prefix, respecting the `use-ssh-source-format` input. | `git::ssh://github.com/techpivot/terraform-module-releaser.git` |
 | `{{module_name_terraform}}`     | A Terraform-safe version of the module name (e.g., special characters replaced with underscores).    | `aws_s3_bucket`                                                 |
 
+### Exporting CHANGELOG Files
+
+The `export-changelog-files` option allows you to generate and maintain `CHANGELOG.md` files for each Terraform module
+directly in the repository. When enabled, the action will:
+
+- Generate a `CHANGELOG.md` file in each module's directory containing the full release history
+- Include both the new release entry and all historical releases
+- Automatically commit and push the changes to the repository after creating releases
+
+This feature complements the existing wiki functionality and provides an alternative format for tracking module changes
+that lives within the repository itself. This is particularly useful for:
+
+- Organizations that prefer in-repository documentation over wikis
+- Scenarios where offline access to changelogs is required
+- CI/CD pipelines that need to programmatically access changelog information
+- Projects that want to maintain changelogs as part of their version control history
+
+**Example usage:**
+
+```yaml
+- name: Terraform Module Releaser
+  uses: techpivot/terraform-module-releaser@v1
+  with:
+    export-changelog-files: true
+    disable-wiki: false # Both can be enabled simultaneously
+```
+
+**Important notes:**
+
+- The changelog files are generated during the merge event (when PR is merged)
+- Changes are automatically committed and pushed using the GitHub Actions bot credentials
+- Each `CHANGELOG.md` file contains the module name, description, and all release entries in reverse chronological order
+- The feature works independently of the wiki generation - you can enable one, both, or neither
+
 ### Example Usage with Inputs
 
 ````yml
@@ -322,6 +357,7 @@ jobs:
           terraform-docs-version: v0.20.0
           delete-legacy-tags: true
           disable-wiki: false
+          export-changelog-files: false
           wiki-sidebar-changelog-max: 10
           module-path-ignore: path/to/ignore1,path/to/ignore2
           module-change-exclude-patterns: .gitignore,*.md,docs/**,examples/**,*.tftest.hcl,tests/**
