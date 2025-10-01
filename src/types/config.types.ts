@@ -49,6 +49,14 @@ export interface Config {
   disableWiki: boolean;
 
   /**
+   * Whether to export CHANGELOG.md files for each Terraform module in the repository.
+   * When enabled, a CHANGELOG.md file will be generated and committed to each module's directory
+   * containing the full release history. This complements the wiki functionality and provides
+   * an alternative changelog format that lives within the repository itself.
+   */
+  exportChangelogFiles: boolean;
+
+  /**
    * An integer that specifies how many changelog entries are displayed in the sidebar per module.
    */
   wikiSidebarChangelogMax: number;

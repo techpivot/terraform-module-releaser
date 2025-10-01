@@ -1,3 +1,4 @@
+import { generateChangelogFiles } from '@/changelog';
 import { getConfig } from '@/config';
 import { getContext } from '@/context';
 import { parseTerraformModules } from '@/parser';
@@ -46,8 +47,70 @@ async function handlePullRequestEvent(
 }
 
 /**
+ * Commits and pushes CHANGELOG.md files to the repository.
+ *
+ * This function stages and commits all CHANGELOG.md files that were generated,
+ * then pushes them back to the repository.
+ *
+ * @param {string[]} changelogFiles - Array of file paths to the generated CHANGELOG.md files
+ * @returns {Promise<void>} Resolves when changes are committed and pushed
+ */
+async function commitAndPushChangelogFiles(changelogFiles: string[]): Promise<void> {
+  if (changelogFiles.length === 0) {
+    info('No changelog files to commit.');
+    return;
+  }
+
+  const { execFileSync } = await import('node:child_process');
+  const which = (await import('which')).default;
+  const { getGitHubActionsBotEmail } = await import('@/utils/github');
+  const { GITHUB_ACTIONS_BOT_NAME } = await import('@/utils/constants');
+  const { context } = await import('@/context');
+
+  startGroup('Committing and pushing CHANGELOG.md files');
+  console.time('Elapsed time committing changelog files');
+
+  try {
+    const gitPath = which.sync('git');
+    const botEmail = await getGitHubActionsBotEmail();
+    const execGitOpts = {
+      cwd: context.workspaceDir,
+      stdio: 'inherit' as const,
+    };
+
+    // Configure git user
+    info('Configuring git user');
+    execFileSync(gitPath, ['config', 'user.name', GITHUB_ACTIONS_BOT_NAME], execGitOpts);
+    execFileSync(gitPath, ['config', 'user.email', botEmail], execGitOpts);
+
+    // Stage all CHANGELOG.md files
+    info('Staging CHANGELOG.md files');
+    for (const file of changelogFiles) {
+      execFileSync(gitPath, ['add', file], execGitOpts);
+    }
+
+    // Commit the changes
+    const commitMessage = `chore: update CHANGELOG.md files for ${changelogFiles.length} module${changelogFiles.length !== 1 ? 's' : ''}`;
+    info(`Committing changes: ${commitMessage}`);
+    execFileSync(gitPath, ['commit', '-m', commitMessage], execGitOpts);
+
+    // Push the changes
+    info('Pushing changes to repository');
+    execFileSync(gitPath, ['push'], execGitOpts);
+
+    info('Successfully pushed CHANGELOG.md files');
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to commit and push CHANGELOG.md files: ${errorMessage}`);
+  } finally {
+    console.timeEnd('Elapsed time committing changelog files');
+    endGroup();
+  }
+}
+
+/**
  * Handles merge-event-specific operations, including tagging new releases, deleting legacy resources,
- * and optionally generating Terraform Docs-based wiki documentation.
+ * and optionally generating Terraform Docs-based wiki documentation and CHANGELOG.md files.
  *
  * @param {Config} config - The configuration object.
  * @param {TerraformModule[]} terraformModules - List of Terraform modules associated with this workspace.
@@ -79,6 +142,13 @@ async function handlePullRequestMergedEvent(
     checkoutWiki();
     await generateWikiFiles(terraformModules);
     await commitAndPushWikiChanges();
+  }
+
+  if (config.exportChangelogFiles) {
+    const changelogFiles = await generateChangelogFiles(terraformModules);
+    await commitAndPushChangelogFiles(changelogFiles);
+  } else {
+    info('CHANGELOG.md file export is disabled.');
   }
 }
 

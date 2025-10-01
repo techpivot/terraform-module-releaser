@@ -14,6 +14,7 @@ describe('utils/metadata', () => {
         'terraform-docs-version',
         'delete-legacy-tags',
         'disable-wiki',
+        'export-changelog-files',
         'wiki-sidebar-changelog-max',
         'wiki-usage-template',
         'disable-branding',
@@ -47,6 +48,7 @@ describe('utils/metadata', () => {
       const booleanInputs = [
         'delete-legacy-tags',
         'disable-wiki',
+        'export-changelog-files',
         'disable-branding',
         'use-ssh-source-format',
         'use-version-prefix',

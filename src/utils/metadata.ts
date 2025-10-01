@@ -48,6 +48,7 @@ export const ACTION_INPUTS: Record<string, ActionInputMetadata> = {
   'terraform-docs-version': requiredString('terraformDocsVersion'),
   'delete-legacy-tags': requiredBoolean('deleteLegacyTags'),
   'disable-wiki': requiredBoolean('disableWiki'),
+  'export-changelog-files': requiredBoolean('exportChangelogFiles'),
   'wiki-sidebar-changelog-max': requiredNumber('wikiSidebarChangelogMax'),
   'wiki-usage-template': requiredString('wikiUsageTemplate'),
   'disable-branding': requiredBoolean('disableBranding'),
