@@ -179,6 +179,7 @@ export async function createTaggedReleases(terraformModules: TerraformModule[]):
 
       // Update the module with the new release and tag (with commit SHA from API response)
       module.setReleases([release, ...module.releases]);
+      // target_commitish contains the SHA of the commit that the tag points to
       const newTag = {
         name: releaseTag,
         commitSHA: response.data.target_commitish ?? '',

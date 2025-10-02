@@ -15,6 +15,7 @@ import {
   BRANDING_WIKI,
   GITHUB_ACTIONS_BOT_NAME,
   MODULE_REF_MODE_SHA,
+  MODULE_REF_MODE_TAG,
   PROJECT_URL,
   WIKI_FOOTER_FILENAME,
   WIKI_HOME_FILENAME,
@@ -309,24 +310,45 @@ async function generateWikiTerraformModule(terraformModule: TerraformModule): Pr
   const moduleSource = getModuleSource(context.repoUrl, config.useSSHSourceFormat);
   const latestTag = terraformModule.getLatestTag();
 
-  // Determine the ref value based on config.moduleRefMode
-  let ref = latestTag;
-  if (config.moduleRefMode === MODULE_REF_MODE_SHA) {
-    const commitSHA = terraformModule.getLatestTagCommitSHA();
-    if (commitSHA) {
-      // Use the SHA as the ref value
-      ref = commitSHA;
-    } else {
-      // If we don't have a SHA, fall back to using the tag
-      info(`Warning: No commit SHA found for tag '${latestTag}', using tag as ref`);
+  // Determine the ref value and ref_comment based on config.moduleRefMode
+  let ref = '';
+  let refComment = '';
+
+  switch (config.moduleRefMode) {
+    case MODULE_REF_MODE_TAG:
+      // Use the tag as the ref
+      ref = latestTag ?? '';
+      refComment = '';
+      break;
+    case MODULE_REF_MODE_SHA: {
+      // Use the commit SHA as the ref
+      const commitSHA = terraformModule.getLatestTagCommitSHA();
+      if (commitSHA) {
+        ref = commitSHA;
+        // Add tag as a comment for human readability
+        const tagVersion = terraformModule.getLatestTagVersion();
+        refComment = tagVersion ? ` # ${tagVersion}` : '';
+      } else {
+        // If we don't have a SHA, set ref to empty and warn
+        ref = '';
+        refComment = '';
+        info(`Warning: No commit SHA found for tag '${latestTag}', ref will be empty`);
+      }
+      break;
     }
+    default:
+      // This should never happen due to validation, but handle it gracefully
+      ref = latestTag ?? '';
+      refComment = '';
+      break;
   }
 
   const usage = renderTemplate(config.wikiUsageTemplate, {
     module_name: terraformModule.name,
     latest_tag: latestTag,
     latest_tag_version_number: terraformModule.getLatestTagVersionNumber(),
-    ref: ref ?? '',
+    ref: ref,
+    ref_comment: refComment,
     module_source: moduleSource,
     module_name_terraform: terraformModule.name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase(),
   });
