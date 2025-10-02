@@ -229,9 +229,7 @@ describe('config', () => {
 
     it('should throw error for invalid module-ref-mode', () => {
       setupTestInputs({ 'module-ref-mode': 'invalid' });
-      expect(() => getConfig()).toThrow(
-        new TypeError("Invalid module_ref_mode 'invalid'. Must be one of: tag, sha"),
-      );
+      expect(() => getConfig()).toThrow(new TypeError("Invalid module_ref_mode 'invalid'. Must be one of: tag, sha"));
 
       clearConfigForTesting();
       vi.unstubAllEnvs();

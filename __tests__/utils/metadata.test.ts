@@ -24,6 +24,7 @@ describe('utils/metadata', () => {
         'github_token',
         'tag-directory-separator',
         'use-version-prefix',
+        'module-ref-mode',
       ];
 
       expect(Object.keys(ACTION_INPUTS)).toEqual(expect.arrayContaining(expectedInputs));
@@ -31,7 +32,13 @@ describe('utils/metadata', () => {
     });
 
     it('should have correct metadata structure for required string inputs', () => {
-      const stringInputs = ['default-first-tag', 'terraform-docs-version', 'github_token', 'tag-directory-separator'];
+      const stringInputs = [
+        'default-first-tag',
+        'terraform-docs-version',
+        'github_token',
+        'tag-directory-separator',
+        'module-ref-mode',
+      ];
 
       for (const inputName of stringInputs) {
         const metadata = ACTION_INPUTS[inputName];
@@ -123,6 +130,7 @@ describe('utils/metadata', () => {
         github_token: 'githubToken',
         'tag-directory-separator': 'tagDirectorySeparator',
         'use-version-prefix': 'useVersionPrefix',
+        'module-ref-mode': 'moduleRefMode',
       };
 
       for (const [inputName, expectedConfigKey] of Object.entries(expectedMappings)) {
