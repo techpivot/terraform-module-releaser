@@ -14,6 +14,7 @@ import type { ExecSyncError, WikiStatusResult } from '@/types';
 import {
   BRANDING_WIKI,
   GITHUB_ACTIONS_BOT_NAME,
+  MODULE_REF_MODE_SHA,
   PROJECT_URL,
   WIKI_FOOTER_FILENAME,
   WIKI_HOME_FILENAME,
@@ -21,6 +22,7 @@ import {
   WIKI_STATUS,
   WIKI_TITLE_REPLACEMENTS,
 } from '@/utils/constants';
+import { resolveTagToCommitSHA } from '@/utils/git';
 import { removeDirectoryContents } from '@/utils/file';
 import { getGitHubActionsBotEmail } from '@/utils/github';
 import { endGroup, info, startGroup } from '@actions/core';
@@ -306,10 +308,31 @@ async function generateWikiTerraformModule(terraformModule: TerraformModule): Pr
   const changelog = getTerraformModuleFullReleaseChangelog(terraformModule);
   const tfDocs = await generateTerraformDocs(terraformModule);
   const moduleSource = getModuleSource(context.repoUrl, config.useSSHSourceFormat);
+  const latestTag = terraformModule.getLatestTag();
+
+  // Determine the ref value based on config.moduleRefMode
+  let refValue = latestTag;
+  let refComment = '';
+
+  if (config.moduleRefMode === MODULE_REF_MODE_SHA && latestTag) {
+    try {
+      // Resolve the tag to its commit SHA
+      const commitSHA = resolveTagToCommitSHA(latestTag);
+      // Use the SHA as the ref value and add tag as a comment
+      refValue = commitSHA;
+      refComment = ` # ${latestTag}`;
+    } catch (error) {
+      // If we can't resolve the SHA, fall back to using the tag
+      info(
+        `Warning: Could not resolve tag '${latestTag}' to SHA, using tag instead: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
 
   const usage = renderTemplate(config.wikiUsageTemplate, {
     module_name: terraformModule.name,
-    latest_tag: terraformModule.getLatestTag(),
+    latest_tag: refValue ?? '',
+    latest_tag_comment: refComment,
     latest_tag_version_number: terraformModule.getLatestTagVersionNumber(),
     module_source: moduleSource,
     module_name_terraform: terraformModule.name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase(),
