@@ -4,7 +4,7 @@ import { context } from '@/mocks/context';
 import { parseTerraformModules } from '@/parser';
 import { addPostReleaseComment, addReleasePlanComment, getPullRequestCommits, hasReleaseComment } from '@/pull-request';
 import { createTaggedReleases, deleteReleases, getAllReleases } from '@/releases';
-import { deleteTags, getAllTagsWithCommitSHA } from '@/tags';
+import { deleteTags, getAllTags } from '@/tags';
 import { ensureTerraformDocsConfigDoesNotExist, installTerraformDocs } from '@/terraform-docs';
 import { TerraformModule } from '@/terraform-module';
 import { createMockTerraformModule } from '@/tests/helpers/terraform-module';
@@ -67,7 +67,7 @@ describe('main', () => {
     // Reset mocks with default values
     vi.mocked(hasReleaseComment).mockResolvedValue(false);
     vi.mocked(getPullRequestCommits).mockResolvedValue([]);
-    vi.mocked(getAllTagsWithCommitSHA).mockResolvedValue([]);
+    vi.mocked(getAllTags).mockResolvedValue([]);
     vi.mocked(getAllReleases).mockResolvedValue([]);
     vi.mocked(parseTerraformModules).mockReturnValue([mockTerraformModule]);
     vi.spyOn(TerraformModule, 'getReleasesToDelete').mockReturnValue([]);

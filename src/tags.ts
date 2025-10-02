@@ -1,43 +1,23 @@
 import { context } from '@/context';
+import type { GitHubTag } from '@/types';
 import { debug, endGroup, info, startGroup } from '@actions/core';
 import type { RestEndpointMethodTypes } from '@octokit/plugin-rest-endpoint-methods';
 import { RequestError } from '@octokit/request-error';
 
 type ListTagsParams = Omit<RestEndpointMethodTypes['repos']['listTags']['parameters'], 'owner' | 'repo'>;
 
-export interface TagInfo {
-  name: string;
-  commitSHA: string;
-}
-
 /**
  * Fetches all tags from the specified GitHub repository.
  *
- * This function utilizes pagination to retrieve all tags, returning them as an array of strings.
+ * This function utilizes pagination to retrieve all tags with their commit SHAs,
+ * returning them as an array of GitHubTag objects.
  *
- * @param {GetAllTagsOptions} options - Optional configuration for the API request
+ * @param {ListTagsParams} options - Optional configuration for the API request
  * @param {number} options.perPage - Number of items per page (default: 100)
- * @returns {Promise<string[]>} A promise that resolves to an array of tag names.
+ * @returns {Promise<GitHubTag[]>} A promise that resolves to an array of tag objects with name and commitSHA.
  * @throws {RequestError} Throws an error if the request to fetch tags fails.
  */
-export async function getAllTags(options: ListTagsParams = { per_page: 100, page: 1 }): Promise<string[]> {
-  const tagInfos = await getAllTagsWithCommitSHA(options);
-  return tagInfos.map((tag) => tag.name);
-}
-
-/**
- * Fetches all tags with their commit SHAs from the specified GitHub repository.
- *
- * This function utilizes pagination to retrieve all tags with commit information.
- *
- * @param {GetAllTagsOptions} options - Optional configuration for the API request
- * @param {number} options.perPage - Number of items per page (default: 100)
- * @returns {Promise<TagInfo[]>} A promise that resolves to an array of tag information objects.
- * @throws {RequestError} Throws an error if the request to fetch tags fails.
- */
-export async function getAllTagsWithCommitSHA(
-  options: ListTagsParams = { per_page: 100, page: 1 },
-): Promise<TagInfo[]> {
+export async function getAllTags(options: ListTagsParams = { per_page: 100, page: 1 }): Promise<GitHubTag[]> {
   console.time('Elapsed time fetching tags');
   startGroup('Fetching repository tags');
 
@@ -47,7 +27,7 @@ export async function getAllTagsWithCommitSHA(
       repo: { owner, repo },
     } = context;
 
-    const tags: TagInfo[] = [];
+    const tags: GitHubTag[] = [];
     let totalRequests = 0;
 
     for await (const response of octokit.paginate.iterator(octokit.rest.repos.listTags, {

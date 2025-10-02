@@ -177,15 +177,13 @@ export async function createTaggedReleases(terraformModules: TerraformModule[]):
         body: response.data.body ?? body,
       };
 
-      // Update the module with the new release and tag
+      // Update the module with the new release and tag (with commit SHA from API response)
       module.setReleases([release, ...module.releases]);
-      module.setTags([releaseTag, ...module.tags]);
-
-      // Store the commit SHA for the newly created tag
-      // The target_commitish field contains the commit SHA or branch name
-      if (response.data.target_commitish) {
-        module.setTagCommitSHA(releaseTag, response.data.target_commitish);
-      }
+      const newTag = {
+        name: releaseTag,
+        commitSHA: response.data.target_commitish ?? '',
+      };
+      module.setTags([newTag, ...module.tags]);
 
       // We also need to ensure that this module can't be released anymore. Thus, we need to clear existing commits
       // as this is the primary driver for determining release status.
