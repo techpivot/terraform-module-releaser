@@ -327,6 +327,7 @@ describe('releases', () => {
           name: 'path/to/test-module/v1.1.0',
           body: 'Mock changelog content',
           tag_name: 'path/to/test-module/v1.1.0',
+          target_commitish: 'abc123def456',
           draft: false,
           prerelease: false,
         },
@@ -352,7 +353,13 @@ describe('releases', () => {
         },
         ...originalReleases,
       ]);
-      expect(mockTerraformModule.setTags).toHaveBeenCalledWith(['path/to/test-module/v1.1.0', ...originalTags]);
+      expect(mockTerraformModule.setTags).toHaveBeenCalledWith([
+        {
+          name: 'path/to/test-module/v1.1.0',
+          commitSHA: 'abc123def456',
+        },
+        ...originalTags,
+      ]);
       expect(mockTerraformModule.needsRelease()).toBe(false);
       expect(startGroup).toHaveBeenCalledWith('Creating releases & tags for modules');
       expect(endGroup).toHaveBeenCalled();
@@ -365,6 +372,7 @@ describe('releases', () => {
           name: null, // Simulate GitHub API returning null for name
           body: undefined, // Simulate GitHub API returning undefined for body
           tag_name: 'path/to/test-module/v1.1.0',
+          target_commitish: 'def456abc789',
           draft: false,
           prerelease: false,
         },
@@ -390,7 +398,13 @@ describe('releases', () => {
       expect(newRelease.body).toContain('v1.1.0'); // Should fall back to generated changelog since body is undefined
       expect(newRelease.body).toContain('feat: Add new feature'); // Should contain the commit message
 
-      expect(mockTerraformModule.setTags).toHaveBeenCalledWith(['path/to/test-module/v1.1.0', ...originalTags]);
+      expect(mockTerraformModule.setTags).toHaveBeenCalledWith([
+        {
+          name: 'path/to/test-module/v1.1.0',
+          commitSHA: 'def456abc789',
+        },
+        ...originalTags,
+      ]);
       expect(endGroup).toHaveBeenCalled();
     });
 

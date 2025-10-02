@@ -84,24 +84,24 @@ describe('tags', () => {
       const expectedTags = mockTagData.data.map((tag) => tag.name);
 
       stubOctokitReturnData('repos.listTags', mockTagData);
-      const tags = await getAllTags({ per_page: 1 });
+      const tags = await getAllTags();
 
       expect(Array.isArray(tags)).toBe(true);
       expect(tags.length).toBe(3);
 
       // Exact match of known tags to ensure no unexpected tags are included
-      expect(tags).toEqual(expectedTags);
+      expect(tags.map((t) => t.name)).toEqual(expectedTags);
 
       // Additional assertions to verify pagination calls and debug info
       expect(info).toHaveBeenCalledWith('Found 3 tags.');
-      // Debug logs TagInfo[] from getAllTagsWithCommitSHA, which has {name, commitSHA} structure
+      // Debug logs TagInfo[] from getAllTags, which has {name, commitSHA} structure
       const expectedDebugTags = [
         { name: 'v2.0.0', commitSHA: 'abc123' },
         { name: 'v2.0.1', commitSHA: 'def456' },
         { name: 'v2.0.2', commitSHA: 'ghi789' },
       ];
       expect(vi.mocked(debug).mock.calls).toEqual([
-        ['Total page requests: 3'],
+        ['Total page requests: 1'],
         [JSON.stringify(expectedDebugTags, null, 2)],
       ]);
     });
@@ -111,13 +111,13 @@ describe('tags', () => {
       const expectedTags = mockTagData.data.map((tag) => tag.name);
 
       stubOctokitReturnData('repos.listTags', mockTagData);
-      const tags = await getAllTags({ per_page: 1 });
+      const tags = await getAllTags();
 
       expect(Array.isArray(tags)).toBe(true);
       expect(tags.length).toBe(1);
 
       // Exact match of known tags to ensure no unexpected tags are included
-      expect(tags).toEqual(expectedTags);
+      expect(tags.map((t) => t.name)).toEqual(expectedTags);
 
       // Additional assertions to verify pagination calls and debug info
       expect(info).toHaveBeenCalledWith('Found 1 tag.');
@@ -138,14 +138,14 @@ describe('tags', () => {
         ],
       });
 
-      const tags = await getAllTags({ per_page: 20 });
+      const tags = await getAllTags();
 
       expect(Array.isArray(tags)).toBe(true);
       expect(tags.length).toBe(3);
 
       // Exact match of known tags to ensure no unexpected tags are included
       const expectedTags = ['v2.0.0', 'v2.0.1', 'v2.0.2'];
-      expect(tags).toEqual(expectedTags);
+      expect(tags.map((t) => t.name)).toEqual(expectedTags);
 
       // Additional assertions to verify pagination calls and debug info
       expect(debug).toHaveBeenCalledWith(expect.stringMatching(/Total page requests: 1/));

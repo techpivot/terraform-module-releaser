@@ -7,6 +7,7 @@ import { config } from '@/mocks/config';
 import { context } from '@/mocks/context';
 import { parseTerraformModules } from '@/parser';
 import { installTerraformDocs } from '@/terraform-docs';
+import { createMockTags } from '@/tests/helpers/terraform-module';
 import type { ExecSyncError } from '@/types';
 import { WIKI_STATUS } from '@/utils/constants';
 import { checkoutWiki, commitAndPushWikiChanges, generateWikiFiles, getWikiLink, getWikiStatus } from '@/wiki';
@@ -44,7 +45,7 @@ describe('wiki', async () => {
         files: ['vpc-endpoint/main.tf'],
       },
     ],
-    ['vpc-endpoint/v1.0.0'],
+    createMockTags(['vpc-endpoint/v1.0.0']),
     [
       {
         id: 123434,

@@ -617,7 +617,7 @@ export class TerraformModule {
     if (this.tags.length > 0) {
       lines.push('   Tags:');
       for (const tag of this.tags) {
-        lines.push(`     - ${tag}`);
+        lines.push(`     - ${tag.name}`);
       }
     }
 
