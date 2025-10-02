@@ -305,7 +305,7 @@ export class TerraformModule {
       releaseVersionMap.set(release, this.extractVersionFromTag(release.tagName));
     }
 
-    // Sort using pre-extracted versions (create copy to avoid mutating input)
+    // Second pass: Sort using pre-extracted versions (create copy to avoid mutating input)
     this._releases = [...releases].sort((a, b) => {
       const aVersion = releaseVersionMap.get(a);
       const bVersion = releaseVersionMap.get(b);

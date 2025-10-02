@@ -116,7 +116,6 @@ describe('tags', () => {
 
       // Additional assertions to verify pagination calls and debug info
       expect(info).toHaveBeenCalledWith('Found 1 tag.');
-      // Debug logs the tags array with {name, commitSHA} structure
       expect(vi.mocked(debug).mock.calls).toEqual([
         ['Total page requests: 1'],
         [JSON.stringify(expectedTags, null, 2)],
