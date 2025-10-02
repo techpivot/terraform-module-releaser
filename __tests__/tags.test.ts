@@ -74,7 +74,13 @@ describe('tags', () => {
     });
 
     it('should fetch all available tags when pagination is required', async () => {
-      const mockTagData = { data: [{ name: 'v2.0.0' }, { name: 'v2.0.1' }, { name: 'v2.0.2' }] };
+      const mockTagData = {
+        data: [
+          { name: 'v2.0.0', commit: { sha: 'abc123' } },
+          { name: 'v2.0.1', commit: { sha: 'def456' } },
+          { name: 'v2.0.2', commit: { sha: 'ghi789' } },
+        ],
+      };
       const expectedTags = mockTagData.data.map((tag) => tag.name);
 
       stubOctokitReturnData('repos.listTags', mockTagData);
@@ -88,14 +94,16 @@ describe('tags', () => {
 
       // Additional assertions to verify pagination calls and debug info
       expect(info).toHaveBeenCalledWith('Found 3 tags.');
+      // Debug logs TagInfo[] from getAllTagsWithCommitSHA, not just tag names
+      const expectedDebugTags = mockTagData.data;
       expect(vi.mocked(debug).mock.calls).toEqual([
         ['Total page requests: 3'],
-        [JSON.stringify(expectedTags, null, 2)],
+        [JSON.stringify(expectedDebugTags, null, 2)],
       ]);
     });
 
     it('should output singular "tag" when only one', async () => {
-      const mockTagData = { data: [{ name: 'v4.0.0' }] };
+      const mockTagData = { data: [{ name: 'v4.0.0', commit: { sha: 'abc123' } }] };
       const expectedTags = mockTagData.data.map((tag) => tag.name);
 
       stubOctokitReturnData('repos.listTags', mockTagData);
@@ -109,14 +117,22 @@ describe('tags', () => {
 
       // Additional assertions to verify pagination calls and debug info
       expect(info).toHaveBeenCalledWith('Found 1 tag.');
+      // Debug logs TagInfo[] from getAllTagsWithCommitSHA, not just tag names
+      const expectedDebugTags = mockTagData.data;
       expect(vi.mocked(debug).mock.calls).toEqual([
         ['Total page requests: 1'],
-        [JSON.stringify(expectedTags, null, 2)],
+        [JSON.stringify(expectedDebugTags, null, 2)],
       ]);
     });
 
     it('should fetch all available tags when pagination is not required', async () => {
-      stubOctokitReturnData('repos.listTags', { data: [{ name: 'v2.0.0' }, { name: 'v2.0.1' }, { name: 'v2.0.2' }] });
+      stubOctokitReturnData('repos.listTags', {
+        data: [
+          { name: 'v2.0.0', commit: { sha: 'abc123' } },
+          { name: 'v2.0.1', commit: { sha: 'def456' } },
+          { name: 'v2.0.2', commit: { sha: 'ghi789' } },
+        ],
+      });
 
       const tags = await getAllTags({ per_page: 20 });
 

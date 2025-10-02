@@ -22,7 +22,6 @@ import {
   WIKI_STATUS,
   WIKI_TITLE_REPLACEMENTS,
 } from '@/utils/constants';
-import { resolveTagToCommitSHA } from '@/utils/git';
 import { removeDirectoryContents } from '@/utils/file';
 import { getGitHubActionsBotEmail } from '@/utils/github';
 import { endGroup, info, startGroup } from '@actions/core';
@@ -311,29 +310,23 @@ async function generateWikiTerraformModule(terraformModule: TerraformModule): Pr
   const latestTag = terraformModule.getLatestTag();
 
   // Determine the ref value based on config.moduleRefMode
-  let refValue = latestTag;
-  let refComment = '';
-
-  if (config.moduleRefMode === MODULE_REF_MODE_SHA && latestTag) {
-    try {
-      // Resolve the tag to its commit SHA
-      const commitSHA = resolveTagToCommitSHA(latestTag);
-      // Use the SHA as the ref value and add tag as a comment
-      refValue = commitSHA;
-      refComment = ` # ${latestTag}`;
-    } catch (error) {
-      // If we can't resolve the SHA, fall back to using the tag
-      info(
-        `Warning: Could not resolve tag '${latestTag}' to SHA, using tag instead: ${error instanceof Error ? error.message : String(error)}`,
-      );
+  let ref = latestTag;
+  if (config.moduleRefMode === MODULE_REF_MODE_SHA) {
+    const commitSHA = terraformModule.getLatestTagCommitSHA();
+    if (commitSHA) {
+      // Use the SHA as the ref value
+      ref = commitSHA;
+    } else {
+      // If we don't have a SHA, fall back to using the tag
+      info(`Warning: No commit SHA found for tag '${latestTag}', using tag as ref`);
     }
   }
 
   const usage = renderTemplate(config.wikiUsageTemplate, {
     module_name: terraformModule.name,
-    latest_tag: refValue ?? '',
-    latest_tag_comment: refComment,
+    latest_tag: latestTag,
     latest_tag_version_number: terraformModule.getLatestTagVersionNumber(),
+    ref: ref ?? '',
     module_source: moduleSource,
     module_name_terraform: terraformModule.name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase(),
   });

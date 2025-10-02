@@ -59,7 +59,7 @@ inputs:
 
       ```hcl
       module "{{module_name_terraform}}" {
-        source = "{{module_source}}?ref={{latest_tag}}{{latest_tag_comment}}"
+        source = "{{module_source}}?ref={{ref}}"
 
         # See inputs below for additional required parameters
       }

@@ -41,6 +41,11 @@ export class TerraformModule {
   private _tags: string[] = [];
 
   /**
+   * Private map of tag names to their commit SHAs.
+   */
+  private readonly _tagCommitSHAs: Map<string, string> = new Map();
+
+  /**
    * Private list of releases relevant to this module.
    */
   private _releases: GitHubRelease[] = [];
@@ -240,6 +245,40 @@ export class TerraformModule {
       return null;
     }
     return version.replace(/^v/, '');
+  }
+
+  /**
+   * Sets the commit SHA for a specific tag.
+   *
+   * @param {string} tag - The tag name
+   * @param {string} commitSHA - The commit SHA that the tag points to
+   * @returns {void}
+   */
+  public setTagCommitSHA(tag: string, commitSHA: string): void {
+    this._tagCommitSHAs.set(tag, commitSHA);
+  }
+
+  /**
+   * Gets the commit SHA for a specific tag.
+   *
+   * @param {string} tag - The tag name
+   * @returns {string | null} The commit SHA, or null if not found
+   */
+  public getTagCommitSHA(tag: string): string | null {
+    return this._tagCommitSHAs.get(tag) ?? null;
+  }
+
+  /**
+   * Gets the commit SHA for the latest tag.
+   *
+   * @returns {string | null} The commit SHA of the latest tag, or null if no tags exist or SHA not available
+   */
+  public getLatestTagCommitSHA(): string | null {
+    const latestTag = this.getLatestTag();
+    if (!latestTag) {
+      return null;
+    }
+    return this.getTagCommitSHA(latestTag);
   }
 
   //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

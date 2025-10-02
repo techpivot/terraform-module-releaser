@@ -3,7 +3,7 @@ import { getContext } from '@/context';
 import { parseTerraformModules } from '@/parser';
 import { addPostReleaseComment, addReleasePlanComment, getPullRequestCommits, hasReleaseComment } from '@/pull-request';
 import { createTaggedReleases, deleteReleases, getAllReleases } from '@/releases';
-import { deleteTags, getAllTags } from '@/tags';
+import { deleteTags, getAllTagsWithCommitSHA } from '@/tags';
 import { ensureTerraformDocsConfigDoesNotExist, installTerraformDocs } from '@/terraform-docs';
 import { TerraformModule } from '@/terraform-module';
 import type { Config, Context, GitHubRelease } from '@/types';
@@ -204,9 +204,10 @@ export async function run(): Promise<void> {
     }
 
     const commits = await getPullRequestCommits();
-    const allTags = await getAllTags();
+    const allTagsWithCommitSHA = await getAllTagsWithCommitSHA();
     const allReleases = await getAllReleases();
-    const terraformModules = parseTerraformModules(commits, allTags, allReleases);
+    const terraformModules = parseTerraformModules(commits, allTagsWithCommitSHA, allReleases);
+    const allTags = allTagsWithCommitSHA.map((t) => t.name);
     const releasesToDelete = TerraformModule.getReleasesToDelete(allReleases, terraformModules);
     const tagsToDelete = TerraformModule.getTagsToDelete(allTags, terraformModules);
 

@@ -1,10 +1,5 @@
 import type { Config } from '@/types';
-import {
-  ALLOWED_MODULE_REF_MODES,
-  VALID_TAG_DIRECTORY_SEPARATORS,
-  VERSION_TAG_REGEX,
-  isModuleRefMode,
-} from '@/utils/constants';
+import { ALLOWED_MODULE_REF_MODES, VALID_TAG_DIRECTORY_SEPARATORS, VERSION_TAG_REGEX } from '@/utils/constants';
 import { createConfigFromInputs } from '@/utils/metadata';
 import { endGroup, info, startGroup } from '@actions/core';
 
@@ -85,7 +80,7 @@ function initializeConfig(): Config {
     }
 
     // Validate module ref mode
-    if (!isModuleRefMode(configInstance.moduleRefMode)) {
+    if (!ALLOWED_MODULE_REF_MODES.includes(configInstance.moduleRefMode as (typeof ALLOWED_MODULE_REF_MODES)[number])) {
       throw new TypeError(
         `Invalid module_ref_mode '${configInstance.moduleRefMode}'. Must be one of: ${ALLOWED_MODULE_REF_MODES.join(', ')}`,
       );

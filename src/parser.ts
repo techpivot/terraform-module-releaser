@@ -1,6 +1,7 @@
 import { config } from '@/config';
 import { context } from '@/context';
 import { TerraformModule } from '@/terraform-module';
+import type { TagInfo } from '@/tags';
 import type { CommitDetails, GitHubRelease } from '@/types';
 import {
   findTerraformModuleDirectories,
@@ -23,13 +24,14 @@ import { endGroup, info, startGroup } from '@actions/core';
  * The TerraformModule class provides mutator methods to allow this externally-driven change association.
  *
  * @param commits - Array of commit details including message, SHA, and changed files
- * @param allTags - Optional array of all Git tags in the repository
+ * @param allTags - Optional array of all Git tags in the repository (for backward compatibility)
  * @param allReleases - Optional array of all GitHub releases in the repository
+ * @param allTagsWithSHA - Optional array of all Git tags with commit SHAs in the repository
  * @returns Array of TerraformModule instances sorted alphabetically by module name
  */
 export function parseTerraformModules(
   commits: CommitDetails[],
-  allTags: string[] = [],
+  allTags: string[] | TagInfo[] = [],
   allReleases: GitHubRelease[] = [],
 ): TerraformModule[] {
   startGroup('Parsing Terraform modules');
@@ -120,8 +122,28 @@ export function parseTerraformModules(
   const terraformModules = Object.values(terraformModulesMap);
 
   info('Adding tags and releases...');
+  // Detect if allTags contains TagInfo objects or just strings
+  const isTagInfo = allTags.length > 0 && typeof allTags[0] === 'object' && 'name' in allTags[0];
+
   for (const terraformModule of terraformModules) {
-    terraformModule.setTags(TerraformModule.getTagsForModule(terraformModule.name, allTags));
+    if (isTagInfo) {
+      const tagInfos = allTags as TagInfo[];
+      const moduleTags = TerraformModule.getTagsForModule(
+        terraformModule.name,
+        tagInfos.map((t) => t.name),
+      );
+      terraformModule.setTags(moduleTags);
+
+      // Set commit SHAs for each tag
+      for (const tagInfo of tagInfos) {
+        if (moduleTags.includes(tagInfo.name)) {
+          terraformModule.setTagCommitSHA(tagInfo.name, tagInfo.commitSHA);
+        }
+      }
+    } else {
+      const tagNames = allTags as string[];
+      terraformModule.setTags(TerraformModule.getTagsForModule(terraformModule.name, tagNames));
+    }
     terraformModule.setReleases(TerraformModule.getReleasesForModule(terraformModule.name, allReleases));
   }
 

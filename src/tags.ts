@@ -5,6 +5,11 @@ import { RequestError } from '@octokit/request-error';
 
 type ListTagsParams = Omit<RestEndpointMethodTypes['repos']['listTags']['parameters'], 'owner' | 'repo'>;
 
+export interface TagInfo {
+  name: string;
+  commitSHA: string;
+}
+
 /**
  * Fetches all tags from the specified GitHub repository.
  *
@@ -16,6 +21,23 @@ type ListTagsParams = Omit<RestEndpointMethodTypes['repos']['listTags']['paramet
  * @throws {RequestError} Throws an error if the request to fetch tags fails.
  */
 export async function getAllTags(options: ListTagsParams = { per_page: 100, page: 1 }): Promise<string[]> {
+  const tagInfos = await getAllTagsWithCommitSHA(options);
+  return tagInfos.map((tag) => tag.name);
+}
+
+/**
+ * Fetches all tags with their commit SHAs from the specified GitHub repository.
+ *
+ * This function utilizes pagination to retrieve all tags with commit information.
+ *
+ * @param {GetAllTagsOptions} options - Optional configuration for the API request
+ * @param {number} options.perPage - Number of items per page (default: 100)
+ * @returns {Promise<TagInfo[]>} A promise that resolves to an array of tag information objects.
+ * @throws {RequestError} Throws an error if the request to fetch tags fails.
+ */
+export async function getAllTagsWithCommitSHA(
+  options: ListTagsParams = { per_page: 100, page: 1 },
+): Promise<TagInfo[]> {
   console.time('Elapsed time fetching tags');
   startGroup('Fetching repository tags');
 
@@ -25,7 +47,7 @@ export async function getAllTags(options: ListTagsParams = { per_page: 100, page
       repo: { owner, repo },
     } = context;
 
-    const tags: string[] = [];
+    const tags: TagInfo[] = [];
     let totalRequests = 0;
 
     for await (const response of octokit.paginate.iterator(octokit.rest.repos.listTags, {
@@ -35,7 +57,10 @@ export async function getAllTags(options: ListTagsParams = { per_page: 100, page
     })) {
       totalRequests++;
       for (const tag of response.data) {
-        tags.push(tag.name);
+        tags.push({
+          name: tag.name,
+          commitSHA: tag.commit.sha,
+        });
       }
     }
 
