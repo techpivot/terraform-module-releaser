@@ -74,8 +74,14 @@ describe('tags', () => {
     });
 
     it('should fetch all available tags when pagination is required', async () => {
-      const mockTagData = { data: [{ name: 'v2.0.0' }, { name: 'v2.0.1' }, { name: 'v2.0.2' }] };
-      const expectedTags = mockTagData.data.map((tag) => tag.name);
+      const mockTagData = {
+        data: [
+          { name: 'v2.0.0', commit: { sha: 'abc123' } },
+          { name: 'v2.0.1', commit: { sha: 'def456' } },
+          { name: 'v2.0.2', commit: { sha: 'ghi789' } },
+        ],
+      };
+      const expectedTags = mockTagData.data.map((tag) => ({ name: tag.name, commitSHA: tag.commit.sha }));
 
       stubOctokitReturnData('repos.listTags', mockTagData);
       const tags = await getAllTags({ per_page: 1 });
@@ -88,6 +94,7 @@ describe('tags', () => {
 
       // Additional assertions to verify pagination calls and debug info
       expect(info).toHaveBeenCalledWith('Found 3 tags.');
+      // Debug logs the tags array with {name, commitSHA} structure
       expect(vi.mocked(debug).mock.calls).toEqual([
         ['Total page requests: 3'],
         [JSON.stringify(expectedTags, null, 2)],
@@ -95,8 +102,8 @@ describe('tags', () => {
     });
 
     it('should output singular "tag" when only one', async () => {
-      const mockTagData = { data: [{ name: 'v4.0.0' }] };
-      const expectedTags = mockTagData.data.map((tag) => tag.name);
+      const mockTagData = { data: [{ name: 'v4.0.0', commit: { sha: 'abc123' } }] };
+      const expectedTags = mockTagData.data.map((tag) => ({ name: tag.name, commitSHA: tag.commit.sha }));
 
       stubOctokitReturnData('repos.listTags', mockTagData);
       const tags = await getAllTags({ per_page: 1 });
@@ -116,7 +123,13 @@ describe('tags', () => {
     });
 
     it('should fetch all available tags when pagination is not required', async () => {
-      stubOctokitReturnData('repos.listTags', { data: [{ name: 'v2.0.0' }, { name: 'v2.0.1' }, { name: 'v2.0.2' }] });
+      stubOctokitReturnData('repos.listTags', {
+        data: [
+          { name: 'v2.0.0', commit: { sha: 'abc123' } },
+          { name: 'v2.0.1', commit: { sha: 'def456' } },
+          { name: 'v2.0.2', commit: { sha: 'ghi789' } },
+        ],
+      });
 
       const tags = await getAllTags({ per_page: 20 });
 
@@ -125,7 +138,7 @@ describe('tags', () => {
 
       // Exact match of known tags to ensure no unexpected tags are included
       const expectedTags = ['v2.0.0', 'v2.0.1', 'v2.0.2'];
-      expect(tags).toEqual(expectedTags);
+      expect(tags.map((t) => t.name)).toEqual(expectedTags);
 
       // Additional assertions to verify pagination calls and debug info
       expect(debug).toHaveBeenCalledWith(expect.stringMatching(/Total page requests: 1/));

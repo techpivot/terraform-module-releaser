@@ -14,6 +14,8 @@ import type { ExecSyncError, WikiStatusResult } from '@/types';
 import {
   BRANDING_WIKI,
   GITHUB_ACTIONS_BOT_NAME,
+  MODULE_REF_MODE_SHA,
+  MODULE_REF_MODE_TAG,
   PROJECT_URL,
   WIKI_FOOTER_FILENAME,
   WIKI_HOME_FILENAME,
@@ -306,11 +308,37 @@ async function generateWikiTerraformModule(terraformModule: TerraformModule): Pr
   const changelog = getTerraformModuleFullReleaseChangelog(terraformModule);
   const tfDocs = await generateTerraformDocs(terraformModule);
   const moduleSource = getModuleSource(context.repoUrl, config.useSSHSourceFormat);
+  const latestTag = terraformModule.getLatestTag();
+
+  // Determine the ref value and ref_comment based on config.moduleRefMode
+  let ref = '';
+  let refComment = '';
+
+  switch (config.moduleRefMode) {
+    case MODULE_REF_MODE_TAG:
+      // Use the tag as the ref
+      ref = latestTag ?? '';
+      break;
+    case MODULE_REF_MODE_SHA:
+      ref = terraformModule.getLatestTagCommitSHA() ?? '';
+      refComment = terraformModule.getLatestTagVersion() ? ` # ${terraformModule.getLatestTagVersion()}` : '';
+      break;
+    default:
+      // This should never happen due to validation at config load time
+      throw new Error(`Invalid module_ref_mode: ${config.moduleRefMode}`);
+  }
+
+  // Warn if ref is empty (could happen if latestTag is null/empty or SHA not found in SHA mode)
+  if (!ref) {
+    info(`Warning: No ref available for module '${terraformModule.name}' (tag: '${latestTag}')`);
+  }
 
   const usage = renderTemplate(config.wikiUsageTemplate, {
     module_name: terraformModule.name,
-    latest_tag: terraformModule.getLatestTag(),
+    latest_tag: latestTag,
     latest_tag_version_number: terraformModule.getLatestTagVersionNumber(),
+    ref: ref,
+    ref_comment: refComment,
     module_source: moduleSource,
     module_name_terraform: terraformModule.name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase(),
   });

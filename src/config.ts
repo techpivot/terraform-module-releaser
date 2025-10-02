@@ -1,5 +1,5 @@
 import type { Config } from '@/types';
-import { VALID_TAG_DIRECTORY_SEPARATORS, VERSION_TAG_REGEX } from '@/utils/constants';
+import { ALLOWED_MODULE_REF_MODES, VALID_TAG_DIRECTORY_SEPARATORS, VERSION_TAG_REGEX } from '@/utils/constants';
 import { createConfigFromInputs } from '@/utils/metadata';
 import { endGroup, info, startGroup } from '@actions/core';
 
@@ -79,6 +79,13 @@ function initializeConfig(): Config {
       configInstance.defaultFirstTag = configInstance.defaultFirstTag.substring(1);
     }
 
+    // Validate module ref mode
+    if (!ALLOWED_MODULE_REF_MODES.includes(configInstance.moduleRefMode)) {
+      throw new TypeError(
+        `Invalid module_ref_mode '${configInstance.moduleRefMode}'. Must be one of: ${ALLOWED_MODULE_REF_MODES.join(', ')}`,
+      );
+    }
+
     info(`Major Keywords: ${configInstance.majorKeywords.join(', ')}`);
     info(`Minor Keywords: ${configInstance.minorKeywords.join(', ')}`);
     info(`Patch Keywords: ${configInstance.patchKeywords.join(', ')}`);
@@ -93,6 +100,7 @@ function initializeConfig(): Config {
     info(`Use SSH Source Format: ${configInstance.useSSHSourceFormat}`);
     info(`Tag Directory Separator: ${configInstance.tagDirectorySeparator}`);
     info(`Use Version Prefix: ${configInstance.useVersionPrefix}`);
+    info(`Module Ref Mode: ${configInstance.moduleRefMode}`);
 
     return configInstance;
   } finally {
