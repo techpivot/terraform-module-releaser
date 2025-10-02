@@ -318,7 +318,6 @@ async function generateWikiTerraformModule(terraformModule: TerraformModule): Pr
     case MODULE_REF_MODE_TAG:
       // Use the tag as the ref
       ref = latestTag ?? '';
-      refComment = '';
       break;
     case MODULE_REF_MODE_SHA: {
       // Use the commit SHA as the ref
@@ -328,19 +327,17 @@ async function generateWikiTerraformModule(terraformModule: TerraformModule): Pr
         // Add tag as a comment for human readability
         const tagVersion = terraformModule.getLatestTagVersion();
         refComment = tagVersion ? ` # ${tagVersion}` : '';
-      } else {
-        // If we don't have a SHA, set ref to empty and warn
-        ref = '';
-        refComment = '';
-        info(`Warning: No commit SHA found for tag '${latestTag}', ref will be empty`);
       }
       break;
     }
     default:
-      // This should never happen due to validation, but handle it gracefully
-      ref = latestTag ?? '';
-      refComment = '';
-      break;
+      // This should never happen due to validation at config load time
+      throw new Error(`Invalid module_ref_mode: ${config.moduleRefMode}`);
+  }
+
+  // Warn if ref is empty (could happen if latestTag is null/empty or SHA not found in SHA mode)
+  if (!ref) {
+    info(`Warning: No ref available for module '${terraformModule.name}' (tag: '${latestTag}')`);
   }
 
   const usage = renderTemplate(config.wikiUsageTemplate, {

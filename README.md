@@ -288,8 +288,9 @@ You can use the following dynamic variables in your template:
 | ------------------------------- | ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
 | `{{module_name}}`               | The name of the module.                                                                              | `aws/s3-bucket`                                                 |
 | `{{latest_tag}}`                | The latest Git tag for the module.                                                                   | `aws/s3-bucket/v1.2.3`                                          |
-| `{{ref}}`                       | The reference to use in the source URL (tag or commit SHA depending on `module-ref-mode`).           | `aws/s3-bucket/v1.2.3` or `abc123def456` (when mode is `sha`)   |
 | `{{latest_tag_version_number}}` | The version number of the latest tag (Always excludes any `v` prefix)                                | `1.2.3`                                                         |
+| `{{ref}}`                       | The reference to use in the source URL (tag or commit SHA depending on `module-ref-mode`).           | `aws/s3-bucket/v1.2.3` or `abc123def456` (when mode is `sha`)   |
+| `{{ref_comment}}`               | Human-readable tag comment when using SHA mode (empty when using tag mode).                          | ` # v1.2.3` (when mode is `sha`) or empty string                |
 | `{{module_source}}`             | The Git source URL for the module with `git::` prefix, respecting the `use-ssh-source-format` input. | `git::ssh://github.com/techpivot/terraform-module-releaser.git` |
 | `{{module_name_terraform}}`     | A Terraform-safe version of the module name (e.g., special characters replaced with underscores).    | `aws_s3_bucket`                                                 |
 
@@ -338,14 +339,15 @@ jobs:
             The following variables are supported:
             - {{module_name}}
             - {{latest_tag}}
-            - {{ref}}
             - {{latest_tag_version_number}}
+            - {{ref}}
+            - {{ref_comment}}
             - {{module_source}}
             - {{module_name_terraform}}
 
             ```hcl
             module "{{module_name_terraform}}" {
-              source = "{{module_source}}?ref={{ref}}"
+              source = "{{module_source}}?ref={{ref}}"{{ref_comment}}
 
               # See inputs below for additional required parameters
             }
