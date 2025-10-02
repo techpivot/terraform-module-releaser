@@ -80,7 +80,7 @@ function initializeConfig(): Config {
     }
 
     // Validate module ref mode
-    if (!ALLOWED_MODULE_REF_MODES.includes(configInstance.moduleRefMode as (typeof ALLOWED_MODULE_REF_MODES)[number])) {
+    if (!ALLOWED_MODULE_REF_MODES.includes(configInstance.moduleRefMode)) {
       throw new TypeError(
         `Invalid module_ref_mode '${configInstance.moduleRefMode}'. Must be one of: ${ALLOWED_MODULE_REF_MODES.join(', ')}`,
       );

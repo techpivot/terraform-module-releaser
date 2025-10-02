@@ -1298,7 +1298,7 @@ describe('TerraformModule', () => {
 
         // module1: initial release (no tags)
         // module2: has changes
-        module3.setTags(createMockTags(['module3/v1.0.0']));
+        module2.setTags(createMockTags(['module2/v1.0.0']));
         module2.addCommit({
           sha: 'abc123',
           message: 'feat: new feature',
