@@ -319,17 +319,10 @@ async function generateWikiTerraformModule(terraformModule: TerraformModule): Pr
       // Use the tag as the ref
       ref = latestTag ?? '';
       break;
-    case MODULE_REF_MODE_SHA: {
-      // Use the commit SHA as the ref
-      const commitSHA = terraformModule.getLatestTagCommitSHA();
-      if (commitSHA) {
-        ref = commitSHA;
-        // Add tag as a comment for human readability
-        const tagVersion = terraformModule.getLatestTagVersion();
-        refComment = tagVersion ? ` # ${tagVersion}` : '';
-      }
+    case MODULE_REF_MODE_SHA:
+      ref = terraformModule.getLatestTagCommitSHA() ?? '';
+      refComment = terraformModule.getLatestTagVersion() ? ` # ${terraformModule.getLatestTagVersion()}` : '';
       break;
-    }
     default:
       // This should never happen due to validation at config load time
       throw new Error(`Invalid module_ref_mode: ${config.moduleRefMode}`);
