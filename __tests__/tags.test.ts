@@ -94,8 +94,12 @@ describe('tags', () => {
 
       // Additional assertions to verify pagination calls and debug info
       expect(info).toHaveBeenCalledWith('Found 3 tags.');
-      // Debug logs TagInfo[] from getAllTagsWithCommitSHA, not just tag names
-      const expectedDebugTags = mockTagData.data;
+      // Debug logs TagInfo[] from getAllTagsWithCommitSHA, which has {name, commitSHA} structure
+      const expectedDebugTags = [
+        { name: 'v2.0.0', commitSHA: 'abc123' },
+        { name: 'v2.0.1', commitSHA: 'def456' },
+        { name: 'v2.0.2', commitSHA: 'ghi789' },
+      ];
       expect(vi.mocked(debug).mock.calls).toEqual([
         ['Total page requests: 3'],
         [JSON.stringify(expectedDebugTags, null, 2)],
@@ -117,8 +121,8 @@ describe('tags', () => {
 
       // Additional assertions to verify pagination calls and debug info
       expect(info).toHaveBeenCalledWith('Found 1 tag.');
-      // Debug logs TagInfo[] from getAllTagsWithCommitSHA, not just tag names
-      const expectedDebugTags = mockTagData.data;
+      // Debug logs TagInfo[] from getAllTagsWithCommitSHA, which has {name, commitSHA} structure
+      const expectedDebugTags = [{ name: 'v4.0.0', commitSHA: 'abc123' }];
       expect(vi.mocked(debug).mock.calls).toEqual([
         ['Total page requests: 1'],
         [JSON.stringify(expectedDebugTags, null, 2)],
