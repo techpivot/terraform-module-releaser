@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { config } from '@/mocks/config';
 import { context } from '@/mocks/context';
 import { parseTerraformModules } from '@/parser';
+import { createMockTags } from '@/tests/helpers/terraform-module';
 import type { CommitDetails, GitHubRelease } from '@/types';
 import { endGroup, info, startGroup } from '@actions/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -271,11 +272,11 @@ describe('parseTerraformModules', () => {
       writeFileSync(join(moduleDir, 'main.tf'), 'resource "aws_vpc" "main" {}');
 
       const tags = ['modules/vpc/v1.0.0', 'modules/vpc/v1.1.0', 'modules/sg/v1.0.0'];
-      const result = parseTerraformModules([], tags, []);
+      const result = parseTerraformModules([], createMockTags(tags), []);
 
       expect(result).toHaveLength(1);
       // Tags are sorted in descending order (newest first) by setTags method
-      expect(result[0].tags).toEqual(['modules/vpc/v1.1.0', 'modules/vpc/v1.0.0']);
+      expect(result[0].tags.map((t) => t.name)).toEqual(['modules/vpc/v1.1.0', 'modules/vpc/v1.0.0']);
     });
 
     it('should set releases on all modules using static method', () => {
@@ -325,15 +326,15 @@ describe('parseTerraformModules', () => {
         { id: 1, title: 'modules/vpc/v1.0.0', tagName: 'modules/vpc/v1.0.0', body: 'VPC release' },
         { id: 2, title: 'other/v1.0.0', tagName: 'other/v1.0.0', body: 'Other release' },
       ];
-      const result = parseTerraformModules([], tags, releases);
+      const result = parseTerraformModules([], createMockTags(tags), releases);
 
       expect(result).toHaveLength(2);
       const rdsModule = result.find((m) => m.name === 'modules/rds');
       const vpcModule = result.find((m) => m.name === 'modules/vpc');
 
-      expect(rdsModule?.tags).toEqual(['modules/rds/v2.0.0']);
+      expect(rdsModule?.tags.map((t) => t.name)).toEqual(['modules/rds/v2.0.0']);
       expect(rdsModule?.releases).toEqual([]);
-      expect(vpcModule?.tags).toEqual(['modules/vpc/v1.1.0', 'modules/vpc/v1.0.0']); // Descending order
+      expect(vpcModule?.tags.map((t) => t.name)).toEqual(['modules/vpc/v1.1.0', 'modules/vpc/v1.0.0']); // Descending order
       expect(vpcModule?.releases).toEqual([releases[0]]);
     });
 
@@ -346,7 +347,7 @@ describe('parseTerraformModules', () => {
       const releases: GitHubRelease[] = [
         { id: 1, title: 'modules/vpc/v1.0.0', tagName: 'modules/vpc/v1.0.0', body: 'VPC release' },
       ];
-      const result = parseTerraformModules([], tags, releases);
+      const result = parseTerraformModules([], createMockTags(tags), releases);
 
       expect(result).toHaveLength(1);
       expect(result[0].name).toBe('modules/networking');

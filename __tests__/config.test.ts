@@ -226,6 +226,28 @@ describe('config', () => {
         new TypeError("Default first tag must be in format v#.#.# or #.#.# (e.g., v1.0.0 or 1.0.0). Got: 'v1.0'"),
       );
     });
+
+    it('should throw error for invalid module-ref-mode', () => {
+      setupTestInputs({ 'module-ref-mode': 'invalid' });
+      expect(() => getConfig()).toThrow(new TypeError("Invalid module_ref_mode 'invalid'. Must be one of: tag, sha"));
+
+      clearConfigForTesting();
+      vi.unstubAllEnvs();
+      setupTestInputs({ 'module-ref-mode': 'TAG' });
+      expect(() => getConfig()).toThrow(new TypeError("Invalid module_ref_mode 'TAG'. Must be one of: tag, sha"));
+    });
+
+    it('should allow valid module-ref-mode values', () => {
+      setupTestInputs({ 'module-ref-mode': 'tag' });
+      let config = getConfig();
+      expect(config.moduleRefMode).toBe('tag');
+
+      clearConfigForTesting();
+      vi.unstubAllEnvs();
+      setupTestInputs({ 'module-ref-mode': 'sha' });
+      config = getConfig();
+      expect(config.moduleRefMode).toBe('sha');
+    });
   });
 
   describe('initialization', () => {
@@ -256,6 +278,7 @@ describe('config', () => {
       expect(config.useSSHSourceFormat).toBe(false);
       expect(config.tagDirectorySeparator).toBe('/');
       expect(config.useVersionPrefix).toBe(true);
+      expect(config.moduleRefMode).toBe('tag');
 
       expect(startGroup).toHaveBeenCalledWith('Initializing Config');
       expect(startGroup).toHaveBeenCalledTimes(1);
@@ -275,6 +298,7 @@ describe('config', () => {
         ['Use SSH Source Format: false'],
         ['Tag Directory Separator: /'],
         ['Use Version Prefix: true'],
+        ['Module Ref Mode: tag'],
       ]);
     });
   });

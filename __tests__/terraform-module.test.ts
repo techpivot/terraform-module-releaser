@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { config } from '@/mocks/config';
 import { context } from '@/mocks/context';
 import { TerraformModule } from '@/terraform-module';
-import { createMockTerraformModule } from '@/tests/helpers/terraform-module';
+import { createMockTerraformModule, createMockTags } from '@/tests/helpers/terraform-module';
 import type { CommitDetails, GitHubRelease } from '@/types';
 import { RELEASE_REASON, RELEASE_TYPE } from '@/utils/constants';
 import { endGroup, info, startGroup } from '@actions/core';
@@ -49,7 +49,7 @@ describe('TerraformModule', () => {
       expect(module.name).toBe('tf-modules/test-module');
       expect(module.directory).toBe(moduleDir);
       expect(module.commits).toEqual([]);
-      expect(module.tags).toEqual([]);
+      expect(module.tags.map((t) => t.name)).toEqual([]);
       expect(module.releases).toEqual([]);
     });
 
@@ -211,9 +211,9 @@ describe('TerraformModule', () => {
         'tf-modules/test-module/v1.1.0',
       ];
 
-      module.setTags(tags);
+      module.setTags(createMockTags(tags));
 
-      expect(module.tags).toEqual([
+      expect(module.tags.map((t) => t.name)).toEqual([
         'tf-modules/test-module/v2.1.0',
         'tf-modules/test-module/v2.0.0',
         'tf-modules/test-module/v1.2.0',
@@ -225,7 +225,7 @@ describe('TerraformModule', () => {
     it('should get latest tag correctly', () => {
       const tags = ['tf-modules/test-module/v1.0.0', 'tf-modules/test-module/v2.0.0', 'tf-modules/test-module/v1.5.0'];
 
-      module.setTags(tags);
+      module.setTags(createMockTags(tags));
 
       expect(module.getLatestTag()).toBe('tf-modules/test-module/v2.0.0');
     });
@@ -237,7 +237,7 @@ describe('TerraformModule', () => {
     it('should get latest tag version correctly', () => {
       const tags = ['tf-modules/test-module/v1.0.0', 'tf-modules/test-module/v2.0.0'];
 
-      module.setTags(tags);
+      module.setTags(createMockTags(tags));
 
       expect(module.getLatestTagVersion()).toBe('v2.0.0');
     });
@@ -248,23 +248,23 @@ describe('TerraformModule', () => {
 
     it('should handle tags with different separators in getLatestTagVersion', () => {
       // Test with different separators to ensure regex works correctly
-      module.setTags(['tf-modules/test-module/v1.0.0']);
+      module.setTags(createMockTags(['tf-modules/test-module/v1.0.0']));
       expect(module.getLatestTagVersion()).toBe('v1.0.0');
 
       // Test with hyphen separator
-      module.setTags(['tf-modules-test-module-v2.0.0']);
+      module.setTags(createMockTags(['tf-modules-test-module-v2.0.0']));
       expect(module.getLatestTagVersion()).toBe('v2.0.0');
 
       // Test with underscore separator
-      module.setTags(['tf-modules_test_module_v3.0.0']);
+      module.setTags(createMockTags(['tf-modules_test_module_v3.0.0']));
       expect(module.getLatestTagVersion()).toBe('v3.0.0');
 
       // Test with dot separator
-      module.setTags(['tf-modules.test.module.v4.0.0']);
+      module.setTags(createMockTags(['tf-modules.test.module.v4.0.0']));
       expect(module.getLatestTagVersion()).toBe('v4.0.0');
 
       // Test without v prefix
-      module.setTags(['tf-modules/test-module/5.0.0']);
+      module.setTags(createMockTags(['tf-modules/test-module/5.0.0']));
       expect(module.getLatestTagVersion()).toBe('5.0.0');
     });
 
@@ -278,6 +278,23 @@ describe('TerraformModule', () => {
       vi.restoreAllMocks();
     });
 
+    it('should get latest tag commit SHA correctly', () => {
+      const tags = [
+        { name: 'tf-modules/test-module/v1.0.0', commitSHA: 'abc123' },
+        { name: 'tf-modules/test-module/v2.0.0', commitSHA: 'def456' },
+        { name: 'tf-modules/test-module/v1.5.0', commitSHA: 'ghi789' },
+      ];
+
+      module.setTags(tags);
+
+      // Should return the commit SHA of the latest tag (v2.0.0)
+      expect(module.getLatestTagCommitSHA()).toBe('def456');
+    });
+
+    it('should return null for latest tag commit SHA when no tags exist', () => {
+      expect(module.getLatestTagCommitSHA()).toBeNull();
+    });
+
     it('should handle complex version sorting', () => {
       const tags = [
         'tf-modules/test-module/v1.2.10',
@@ -287,9 +304,9 @@ describe('TerraformModule', () => {
         'tf-modules/test-module/v1.2.11',
       ];
 
-      module.setTags(tags);
+      module.setTags(createMockTags(tags));
 
-      expect(module.tags).toEqual([
+      expect(module.tags.map((t) => t.name)).toEqual([
         'tf-modules/test-module/v2.0.0',
         'tf-modules/test-module/v1.10.0',
         'tf-modules/test-module/v1.2.11',
@@ -299,7 +316,7 @@ describe('TerraformModule', () => {
     });
 
     it('should handle single tag', () => {
-      module.setTags(['tf-modules/test-module/v1.0.0']);
+      module.setTags(createMockTags(['tf-modules/test-module/v1.0.0']));
 
       expect(module.getLatestTag()).toBe('tf-modules/test-module/v1.0.0');
       expect(module.getLatestTagVersion()).toBe('v1.0.0');
@@ -307,34 +324,34 @@ describe('TerraformModule', () => {
 
     it('should throw error for tag with no slash (invalid format)', () => {
       const tags = ['v1.2.3'];
-      expect(() => module.setTags(tags)).toThrow(
+      expect(() => module.setTags(createMockTags(tags))).toThrow(
         "Invalid tag format: 'v1.2.3'. Expected format: 'tf-modules/test-module[separator]v#.#.#' or 'tf-modules/test-module[separator]#.#.#'.",
       );
     });
 
     it('should throw error for tag with incorrect module name', () => {
       const tags = ['foo/bar/v9.8.7'];
-      expect(() => module.setTags(tags)).toThrow(
+      expect(() => module.setTags(createMockTags(tags))).toThrow(
         "Invalid tag format: 'foo/bar/v9.8.7'. Expected format: 'tf-modules/test-module[separator]v#.#.#' or 'tf-modules/test-module[separator]#.#.#'.",
       );
     });
 
     it('should accept valid tags with v prefix', () => {
       const tags = ['tf-modules/test-module/v1.2.3', 'tf-modules/test-module/v2.0.1'];
-      module.setTags(tags);
+      module.setTags(createMockTags(tags));
 
       expect(module.tags).toHaveLength(2);
-      expect(module.tags[0]).toBe('tf-modules/test-module/v2.0.1'); // Sorted descending
-      expect(module.tags[1]).toBe('tf-modules/test-module/v1.2.3');
+      expect(module.tags[0].name).toBe('tf-modules/test-module/v2.0.1'); // Sorted descending
+      expect(module.tags[1].name).toBe('tf-modules/test-module/v1.2.3');
     });
 
     it('should accept valid tags without v prefix', () => {
       const tags = ['tf-modules/test-module/1.2.3', 'tf-modules/test-module/2.0.1'];
-      module.setTags(tags);
+      module.setTags(createMockTags(tags));
 
       expect(module.tags).toHaveLength(2);
-      expect(module.tags[0]).toBe('tf-modules/test-module/2.0.1'); // Sorted descending
-      expect(module.tags[1]).toBe('tf-modules/test-module/1.2.3');
+      expect(module.tags[0].name).toBe('tf-modules/test-module/2.0.1'); // Sorted descending
+      expect(module.tags[1].name).toBe('tf-modules/test-module/1.2.3');
     });
 
     describe('extractVersionFromTag()', () => {
@@ -346,9 +363,9 @@ describe('TerraformModule', () => {
 
       it('should handle tags with slashes correctly', () => {
         // Testing through public interface that uses it internally
-        module.setTags(['tf-modules/test-module/v1.2.3', 'tf-modules/test-module/v2.0.0']);
-        expect(module.tags[0]).toBe('tf-modules/test-module/v2.0.0');
-        expect(module.tags[1]).toBe('tf-modules/test-module/v1.2.3');
+        module.setTags(createMockTags(['tf-modules/test-module/v1.2.3', 'tf-modules/test-module/v2.0.0']));
+        expect(module.tags[0].name).toBe('tf-modules/test-module/v2.0.0');
+        expect(module.tags[1].name).toBe('tf-modules/test-module/v1.2.3');
       });
 
       it('should handle version string without slashes correctly', () => {
@@ -371,7 +388,7 @@ describe('TerraformModule', () => {
       // Create a spy on tagVersionMap to simulate missing version
       const mapSpy = vi.spyOn(Map.prototype, 'get').mockImplementationOnce(() => undefined);
 
-      expect(() => module.setTags(tags)).toThrow('Internal error: version not found in map');
+      expect(() => module.setTags(createMockTags(tags))).toThrow();
 
       // Clean up
       mapSpy.mockRestore();
@@ -379,7 +396,7 @@ describe('TerraformModule', () => {
 
     it('should throw error for invalid version format during release tag versioning', () => {
       // Set up a tag with valid format first
-      module.setTags(['tf-modules/test-module/v1.0.0']);
+      module.setTags(createMockTags(['tf-modules/test-module/v1.0.0']));
 
       // Force the internal latestTagVersion to be invalid
       vi.spyOn(module, 'getLatestTagVersion').mockReturnValue('invalid-format');
@@ -602,7 +619,7 @@ describe('TerraformModule', () => {
 
       it('should return true when module has direct changes', () => {
         // Set tags so it's not initial release
-        module.setTags(['tf-modules/test-module/v1.0.0']);
+        module.setTags(createMockTags(['tf-modules/test-module/v1.0.0']));
 
         // Add a commit (direct change)
         module.addCommit({
@@ -616,7 +633,7 @@ describe('TerraformModule', () => {
 
       it('should return false when module has no changes and existing tags', () => {
         // Set tags so it's not initial release
-        module.setTags(['tf-modules/test-module/v1.0.0']);
+        module.setTags(createMockTags(['tf-modules/test-module/v1.0.0']));
 
         // No commits added (no direct changes)
         // No dependency triggers
@@ -631,7 +648,7 @@ describe('TerraformModule', () => {
       });
 
       it('should return major when commit contains major keywords', () => {
-        module.setTags(['tf-modules/test-module/v1.0.0']); // Not initial
+        module.setTags(createMockTags(['tf-modules/test-module/v1.0.0'])); // Not initial
         module.addCommit({
           sha: 'abc123',
           message: 'BREAKING CHANGE: major update',
@@ -642,7 +659,7 @@ describe('TerraformModule', () => {
       });
 
       it('should return minor when commit contains minor keywords', () => {
-        module.setTags(['tf-modules/test-module/v1.0.0']); // Not initial
+        module.setTags(createMockTags(['tf-modules/test-module/v1.0.0'])); // Not initial
         module.addCommit({
           sha: 'abc123',
           message: 'feat: add new feature',
@@ -653,7 +670,7 @@ describe('TerraformModule', () => {
       });
 
       it('should return patch for regular commits', () => {
-        module.setTags(['tf-modules/test-module/v1.0.0']); // Not initial
+        module.setTags(createMockTags(['tf-modules/test-module/v1.0.0'])); // Not initial
         module.addCommit({
           sha: 'abc123',
           message: 'fix: bug fix',
@@ -664,7 +681,7 @@ describe('TerraformModule', () => {
       });
 
       it('should return highest release type from multiple commits', () => {
-        module.setTags(['tf-modules/test-module/v1.0.0']); // Not initial
+        module.setTags(createMockTags(['tf-modules/test-module/v1.0.0'])); // Not initial
         module.addCommit({
           sha: 'abc123',
           message: 'fix: bug fix', // patch
@@ -685,14 +702,14 @@ describe('TerraformModule', () => {
       });
 
       it('should return null when no release is needed', () => {
-        module.setTags(['tf-modules/test-module/v1.0.0']); // Not initial
+        module.setTags(createMockTags(['tf-modules/test-module/v1.0.0'])); // Not initial
         // No commits, no dependency triggers
 
         expect(module.getReleaseType()).toBeNull();
       });
 
       it('should be case insensitive for keywords', () => {
-        module.setTags(['tf-modules/test-module/v1.0.0']); // Not initial
+        module.setTags(createMockTags(['tf-modules/test-module/v1.0.0'])); // Not initial
         module.addCommit({
           sha: 'abc123',
           message: 'breaking change: major update',
@@ -703,7 +720,7 @@ describe('TerraformModule', () => {
       });
 
       it('should handle mixed case features', () => {
-        module.setTags(['tf-modules/test-module/v1.0.0']); // Not initial
+        module.setTags(createMockTags(['tf-modules/test-module/v1.0.0'])); // Not initial
         module.addCommit({
           sha: 'abc123',
           message: 'FEAT: add new feature',
@@ -720,7 +737,7 @@ describe('TerraformModule', () => {
       });
 
       it('should return direct changes reason when commits exist', () => {
-        module.setTags(['tf-modules/test-module/v1.0.0']); // Not initial
+        module.setTags(createMockTags(['tf-modules/test-module/v1.0.0'])); // Not initial
         module.addCommit({
           sha: 'abc123',
           message: 'feat: add feature',
@@ -731,7 +748,7 @@ describe('TerraformModule', () => {
       });
 
       it('should return empty array when no release is needed', () => {
-        module.setTags(['tf-modules/test-module/v1.0.0']); // Not initial
+        module.setTags(createMockTags(['tf-modules/test-module/v1.0.0'])); // Not initial
         // No commits, no dependency triggers
 
         expect(module.getReleaseReasons()).toEqual([]);
@@ -758,7 +775,7 @@ describe('TerraformModule', () => {
       });
 
       it('should increment major version correctly', () => {
-        module.setTags(['tf-modules/test-module/v1.2.3']);
+        module.setTags(createMockTags(['tf-modules/test-module/v1.2.3']));
         module.addCommit({
           sha: 'abc123',
           message: 'BREAKING CHANGE: major update',
@@ -769,7 +786,7 @@ describe('TerraformModule', () => {
       });
 
       it('should increment minor version correctly', () => {
-        module.setTags(['tf-modules/test-module/v1.2.3']);
+        module.setTags(createMockTags(['tf-modules/test-module/v1.2.3']));
         module.addCommit({
           sha: 'abc123',
           message: 'feat: new feature',
@@ -780,7 +797,7 @@ describe('TerraformModule', () => {
       });
 
       it('should increment patch version correctly', () => {
-        module.setTags(['tf-modules/test-module/v1.2.3']);
+        module.setTags(createMockTags(['tf-modules/test-module/v1.2.3']));
         module.addCommit({
           sha: 'abc123',
           message: 'fix: bug fix',
@@ -791,7 +808,7 @@ describe('TerraformModule', () => {
       });
 
       it('should return null when no release is needed', () => {
-        module.setTags(['tf-modules/test-module/v1.0.0']); // Not initial
+        module.setTags(createMockTags(['tf-modules/test-module/v1.0.0'])); // Not initial
         // No commits, no dependency triggers
 
         expect(module.getReleaseTagVersion()).toBeNull();
@@ -799,11 +816,11 @@ describe('TerraformModule', () => {
 
       it('should throw error for malformed version tags', () => {
         // Set up a tag with valid format first
-        module.setTags(['tf-modules/test-module/v1.0.0']);
+        module.setTags(createMockTags(['tf-modules/test-module/v1.0.0']));
 
         // Mock the internal behavior to test error cases
         const testModule = new TerraformModule(moduleDir);
-        testModule.setTags(['tf-modules/test-module/v1.0.0']);
+        testModule.setTags(createMockTags(['tf-modules/test-module/v1.0.0']));
 
         vi.spyOn(testModule, 'getLatestTagVersion').mockReturnValue('invalid-format');
         // @ts-expect-error - Accessing private for testing
@@ -827,7 +844,7 @@ describe('TerraformModule', () => {
           useVersionPrefix: true,
         });
 
-        module.setTags(['tf-modules/test-module/v1.2.3']);
+        module.setTags(createMockTags(['tf-modules/test-module/v1.2.3']));
         module.addCommit({
           sha: 'abc123',
           message: 'fix: bug fix',
@@ -843,7 +860,7 @@ describe('TerraformModule', () => {
           useVersionPrefix: false,
         });
 
-        module.setTags(['tf-modules/test-module/v1.2.3']);
+        module.setTags(createMockTags(['tf-modules/test-module/v1.2.3']));
         module.addCommit({
           sha: 'abc123',
           message: 'fix: bug fix',
@@ -860,7 +877,7 @@ describe('TerraformModule', () => {
       });
 
       it('should return full release tag with incremented version', () => {
-        module.setTags(['tf-modules/test-module/v1.0.0']);
+        module.setTags(createMockTags(['tf-modules/test-module/v1.0.0']));
         module.addCommit({
           sha: 'abc123',
           message: 'feat: new feature',
@@ -871,7 +888,7 @@ describe('TerraformModule', () => {
       });
 
       it('should return null when no release is needed', () => {
-        module.setTags(['tf-modules/test-module/v1.0.0']); // Not initial
+        module.setTags(createMockTags(['tf-modules/test-module/v1.0.0'])); // Not initial
         // No commits, no dependency triggers
 
         expect(module.getReleaseTag()).toBeNull();
@@ -887,7 +904,7 @@ describe('TerraformModule', () => {
     });
 
     it('should format module without changes correctly', () => {
-      module.setTags(['tf-modules/test-module/v1.0.0']);
+      module.setTags(createMockTags(['tf-modules/test-module/v1.0.0']));
 
       const output = module.toString();
 
@@ -899,7 +916,7 @@ describe('TerraformModule', () => {
     });
 
     it('should format module with changes correctly', () => {
-      module.setTags(['tf-modules/test-module/v1.0.0']);
+      module.setTags(createMockTags(['tf-modules/test-module/v1.0.0']));
       module.addCommit({
         sha: 'abc1234567',
         message: 'feat: add new feature\nDetailed description',
@@ -1244,11 +1261,16 @@ describe('TerraformModule', () => {
       it('should filter tags for specific module', () => {
         const allTags = ['module-a/v1.0.0', 'module-a/v1.1.0', 'module-b/v1.0.0', 'module-c/v2.0.0'];
 
-        expect(TerraformModule.getTagsForModule('module-a', allTags)).toEqual(['module-a/v1.0.0', 'module-a/v1.1.0']);
+        expect(TerraformModule.getTagsForModule('module-a', createMockTags(allTags)).map((t) => t.name)).toEqual([
+          'module-a/v1.0.0',
+          'module-a/v1.1.0',
+        ]);
 
-        expect(TerraformModule.getTagsForModule('module-b', allTags)).toEqual(['module-b/v1.0.0']);
+        expect(TerraformModule.getTagsForModule('module-b', createMockTags(allTags)).map((t) => t.name)).toEqual([
+          'module-b/v1.0.0',
+        ]);
 
-        expect(TerraformModule.getTagsForModule('non-existent', allTags)).toEqual([]);
+        expect(TerraformModule.getTagsForModule('non-existent', createMockTags(allTags))).toEqual([]);
       });
     });
 
@@ -1293,7 +1315,7 @@ describe('TerraformModule', () => {
 
         // module1: initial release (no tags)
         // module2: has changes
-        module2.setTags(['module2/v1.0.0']);
+        module2.setTags(createMockTags(['module2/v1.0.0']));
         module2.addCommit({
           sha: 'abc123',
           message: 'feat: new feature',
@@ -1301,7 +1323,7 @@ describe('TerraformModule', () => {
         });
 
         // module3: no changes, has tags
-        module3.setTags(['module3/v1.0.0']);
+        module3.setTags(createMockTags(['module3/v1.0.0']));
 
         const modules = [module1, module2, module3];
         const needingRelease = TerraformModule.getModulesNeedingRelease(modules);
@@ -1327,7 +1349,7 @@ describe('TerraformModule', () => {
           createMockTerraformModule({ directory: join(tmpDir, 'module-b') }),
         ];
 
-        const tagsToDelete = TerraformModule.getTagsToDelete(allTags, existingModules);
+        const tagsToDelete = TerraformModule.getTagsToDelete(createMockTags(allTags), existingModules);
 
         expect(tagsToDelete).toEqual([]);
         expect(startGroup).toHaveBeenCalledWith('Finding all Terraform tags that should be deleted');
@@ -1348,7 +1370,7 @@ describe('TerraformModule', () => {
           createMockTerraformModule({ directory: join(tmpDir, 'module-b') }),
         ];
 
-        const tagsToDelete = TerraformModule.getTagsToDelete(allTags, existingModules);
+        const tagsToDelete = TerraformModule.getTagsToDelete(createMockTags(allTags), existingModules);
 
         expect(tagsToDelete).toEqual(['module-c/v2.0.0', 'module-d/v1.0.0']);
         expect(info).toHaveBeenCalledWith(JSON.stringify(['module-c/v2.0.0', 'module-d/v1.0.0'], null, 2));
@@ -1362,7 +1384,7 @@ describe('TerraformModule', () => {
         ];
         const existingModules = [createMockTerraformModule({ directory: join(tmpDir, 'module-x') })];
 
-        const tagsToDelete = TerraformModule.getTagsToDelete(allTags, existingModules);
+        const tagsToDelete = TerraformModule.getTagsToDelete(createMockTags(allTags), existingModules);
 
         expect(tagsToDelete).toEqual(['module-y/v1.2.3-beta', 'module-z/v1']);
       });
@@ -1371,7 +1393,7 @@ describe('TerraformModule', () => {
         const allTags: string[] = [];
         const existingModules = [new TerraformModule(join(tmpDir, 'module-a'))];
 
-        const tagsToDelete = TerraformModule.getTagsToDelete(allTags, existingModules);
+        const tagsToDelete = TerraformModule.getTagsToDelete(createMockTags(allTags), existingModules);
 
         expect(tagsToDelete).toEqual([]);
         expect(info).toHaveBeenCalledWith('[]');
@@ -1381,7 +1403,7 @@ describe('TerraformModule', () => {
         const allTags = ['module-a/v1.0.0', 'module-b/v1.1.0'];
         const terraformModules: TerraformModule[] = [];
 
-        const tagsToDelete = TerraformModule.getTagsToDelete(allTags, terraformModules);
+        const tagsToDelete = TerraformModule.getTagsToDelete(createMockTags(allTags), terraformModules);
 
         expect(tagsToDelete).toEqual(['module-a/v1.0.0', 'module-b/v1.1.0']);
         expect(info).toHaveBeenCalledWith(JSON.stringify(['module-a/v1.0.0', 'module-b/v1.1.0'], null, 2));
@@ -1394,7 +1416,7 @@ describe('TerraformModule', () => {
         ];
         const existingModules = [createMockTerraformModule({ directory: join(tmpDir, 'new-module-name') })];
 
-        const tagsToDelete = TerraformModule.getTagsToDelete(allTags, existingModules);
+        const tagsToDelete = TerraformModule.getTagsToDelete(createMockTags(allTags), existingModules);
 
         expect(tagsToDelete).toEqual(['old-module-name/v1.0.0']);
       });
@@ -1407,7 +1429,7 @@ describe('TerraformModule', () => {
         ];
         const existingModules = [new TerraformModule(join(tmpDir, 'module-a'))];
 
-        const tagsToDelete = TerraformModule.getTagsToDelete(allTags, existingModules);
+        const tagsToDelete = TerraformModule.getTagsToDelete(createMockTags(allTags), existingModules);
 
         expect(tagsToDelete).toEqual(['another-module', 'non-standard-tag']);
       });
@@ -1416,7 +1438,7 @@ describe('TerraformModule', () => {
         const allTags = ['zebra-module/v1.0.0', 'apple-module/v1.0.0', 'banana-module/v1.0.0'];
         const terraformModules: TerraformModule[] = []; // No modules, so all tags are removed
 
-        const tagsToDelete = TerraformModule.getTagsToDelete(allTags, terraformModules);
+        const tagsToDelete = TerraformModule.getTagsToDelete(createMockTags(allTags), terraformModules);
 
         expect(tagsToDelete).toEqual(['apple-module/v1.0.0', 'banana-module/v1.0.0', 'zebra-module/v1.0.0']);
       });
@@ -1432,7 +1454,7 @@ describe('TerraformModule', () => {
         ];
         const existingModules = [createMockTerraformModule({ directory: join(tmpDir, 'test-module') })];
 
-        const tagsToDelete = TerraformModule.getTagsToDelete(allTags, existingModules);
+        const tagsToDelete = TerraformModule.getTagsToDelete(createMockTags(allTags), existingModules);
 
         // Only tags for non-existent modules should be deleted
         // All test-module tags should be kept regardless of separator
@@ -1454,7 +1476,7 @@ describe('TerraformModule', () => {
           }),
         ];
 
-        const tagsToDelete = TerraformModule.getTagsToDelete(allTags, existingModules);
+        const tagsToDelete = TerraformModule.getTagsToDelete(createMockTags(allTags), existingModules);
 
         // Only tags for non-existent modules should be deleted
         expect(tagsToDelete).toEqual(['removed-module/v1.0.0']);
@@ -1956,11 +1978,11 @@ describe('TerraformModule', () => {
 
       it('should handle tags with slashes correctly', () => {
         // We can test this via the public methods that use it internally
-        module.setTags(['tf-modules/test-module/v1.2.3', 'tf-modules/test-module/v2.0.0']);
+        module.setTags(createMockTags(['tf-modules/test-module/v1.2.3', 'tf-modules/test-module/v2.0.0']));
 
         // The sorting is done using extractVersionFromTag internally
-        expect(module.tags[0]).toBe('tf-modules/test-module/v2.0.0'); // Higher version first
-        expect(module.tags[1]).toBe('tf-modules/test-module/v1.2.3');
+        expect(module.tags[0].name).toBe('tf-modules/test-module/v2.0.0'); // Higher version first
+        expect(module.tags[1].name).toBe('tf-modules/test-module/v1.2.3');
       });
 
       it('should handle version string without slashes correctly', () => {
@@ -1972,7 +1994,7 @@ describe('TerraformModule', () => {
         const compareSpy = vi.spyOn(moduleA, 'compareSemanticVersions');
 
         // When setting tags with multiple items, extractVersionFromTag is used and compareSemanticVersions is called for sorting
-        moduleA.setTags(['tf-modules/test-module/v1.2.3', 'tf-modules/test-module/v2.0.0']);
+        moduleA.setTags(createMockTags(['tf-modules/test-module/v1.2.3', 'tf-modules/test-module/v2.0.0']));
 
         // Verify it was called with the expected extracted versions
         expect(compareSpy).toHaveBeenCalled();

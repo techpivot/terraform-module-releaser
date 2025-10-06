@@ -58,6 +58,7 @@ export const ACTION_INPUTS: Record<string, ActionInputMetadata> = {
   github_token: requiredString('githubToken'),
   'tag-directory-separator': requiredString('tagDirectorySeparator'),
   'use-version-prefix': requiredBoolean('useVersionPrefix'),
+  'module-ref-mode': requiredString('moduleRefMode'),
 } as const;
 
 /**

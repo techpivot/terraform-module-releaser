@@ -1,7 +1,7 @@
 import { config } from '@/config';
 import { context } from '@/context';
 import { TerraformModule } from '@/terraform-module';
-import type { CommitDetails, GitHubRelease } from '@/types';
+import type { CommitDetails, GitHubRelease, GitHubTag } from '@/types';
 import {
   findTerraformModuleDirectories,
   getRelativeTerraformModulePathFromFilePath,
@@ -29,7 +29,7 @@ import { endGroup, info, startGroup } from '@actions/core';
  */
 export function parseTerraformModules(
   commits: CommitDetails[],
-  allTags: string[] = [],
+  allTags: GitHubTag[] = [],
   allReleases: GitHubRelease[] = [],
 ): TerraformModule[] {
   startGroup('Parsing Terraform modules');

@@ -11,6 +11,21 @@ import type { Api } from '@octokit/plugin-rest-endpoint-methods';
 export type OctokitRestApi = Api & { paginate: PaginateInterface };
 
 /**
+ * GitHub tag information
+ */
+export interface GitHubTag {
+  /**
+   * The tag name. E.g. `modules/aws/vpc/v1.0.0`
+   */
+  name: string;
+
+  /**
+   * The commit SHA that this tag points to
+   */
+  commitSHA: string;
+}
+
+/**
  * GitHub release information
  */
 export interface GitHubRelease {

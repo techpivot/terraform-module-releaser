@@ -59,7 +59,7 @@ inputs:
 
       ```hcl
       module "{{module_name_terraform}}" {
-        source = "{{module_source}}?ref={{latest_tag}}"
+        source = "{{module_source}}?ref={{ref}}"{{ref_comment}}
 
         # See inputs below for additional required parameters
       }
@@ -143,6 +143,16 @@ inputs:
       the 'v' will be automatically removed to ensure consistency.
     required: true
     default: "true"
+  module-ref-mode:
+    description: >
+      Controls how Terraform module usage examples reference versions in generated documentation.
+      Valid values: "tag" or "sha". When "tag" (default), examples use the tag name in the ref parameter
+      (e.g., ?ref=aws/vpc-endpoint/v1.1.3). When "sha", examples use the commit SHA with the tag as a 
+      comment (e.g., ?ref=abc123def456 # aws/vpc-endpoint/v1.1.3). This allows pinning to immutable 
+      commit SHAs that cannot be deleted, useful with Renovate for handling module removal scenarios.
+      Note: This only affects generated documentation; tag and release creation remains unchanged.
+    required: true
+    default: "tag"
 
 outputs:
   changed-module-names:
