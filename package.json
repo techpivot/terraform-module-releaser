@@ -40,7 +40,7 @@
   },
   "scripts": {
     "check": "biome check . && npx prettier -c \"*.md\" \"**/*.yml\" \".github/**/*.md\"",
-    "check:fix": "biome check --write --unsafe . && npx prettier -w \"*.md\" \"**/*.yml\" \".github/**/*.md\"",
+    "check:fix": "biome check --write --unsafe . && npx prettier --list-different -w \"*.md\" \"**/*.yml\" \".github/**/*.md\"",
     "dev:parse-modules": "tsx scripts/dev-parse-modules.ts",
     "textlint": "textlint -c .github/linters/.textlintrc **/*.md",
     "textlint:fix": "textlint -c .github/linters/.textlintrc --fix **/*.md",
@@ -55,16 +55,16 @@
   },
   "dependencies": {
     "@actions/core": "^1.11.1",
-    "@octokit/core": "^7.0.4",
-    "@octokit/plugin-paginate-rest": "^13.0.1",
+    "@octokit/core": "^7.0.5",
+    "@octokit/plugin-paginate-rest": "^13.2.0",
     "@octokit/plugin-rest-endpoint-methods": "^16.1.0",
-    "@octokit/request-error": "^7.0.0",
+    "@octokit/request-error": "^7.0.1",
     "minimatch": "^10.0.1",
     "p-limit": "^7.1.1",
     "which": "^5.0.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.2.4",
+    "@biomejs/biome": "^2.2.5",
     "@octokit/types": "^15.0.0",
     "@octokit/webhooks-types": "^7.6.1",
     "@types/js-yaml": "^4.0.9",
@@ -77,10 +77,10 @@
     "openai": "^5.23.1",
     "textlint": "^15.2.2",
     "textlint-filter-rule-comments": "^1.2.2",
-    "textlint-rule-terminology": "^5.2.15",
+    "textlint-rule-terminology": "^5.2.16",
     "ts-deepmerge": "^7.0.2",
     "tsx": "^4.20.6",
-    "typescript": "^5.8.3",
+    "typescript": "^5.9.3",
     "vitest": "^3.0.5"
   }
 }

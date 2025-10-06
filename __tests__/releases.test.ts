@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { context } from '@/mocks/context';
@@ -22,6 +23,8 @@ vi.mock('node:fs', () => ({
   cpSync: vi.fn(),
   readdirSync: vi.fn().mockImplementation(() => []),
 }));
+
+const execFileSyncMock = vi.mocked(execFileSync);
 
 describe('releases', () => {
   const url = 'https://api.github.com/repos/techpivot/terraform-module-releaser/releases';
@@ -294,6 +297,14 @@ describe('releases', () => {
       context.set({
         workspaceDir: '/workspace',
       });
+      execFileSyncMock.mockReset();
+      execFileSyncMock.mockImplementation((_file, args) => {
+        if (Array.isArray(args) && args.includes('rev-parse')) {
+          return Buffer.from('abc123def456');
+        }
+
+        return Buffer.from('');
+      });
       mockTerraformModule = createMockTerraformModule({
         directory: '/workspace/path/to/test-module',
         commits: [
@@ -327,6 +338,7 @@ describe('releases', () => {
           name: 'path/to/test-module/v1.1.0',
           body: 'Mock changelog content',
           tag_name: 'path/to/test-module/v1.1.0',
+          target_commitish: 'abc123def456',
           draft: false,
           prerelease: false,
         },
@@ -352,19 +364,33 @@ describe('releases', () => {
         },
         ...originalReleases,
       ]);
-      expect(mockTerraformModule.setTags).toHaveBeenCalledWith(['path/to/test-module/v1.1.0', ...originalTags]);
+      expect(mockTerraformModule.setTags).toHaveBeenCalledWith([
+        {
+          name: 'path/to/test-module/v1.1.0',
+          commitSHA: 'abc123def456',
+        },
+        ...originalTags,
+      ]);
       expect(mockTerraformModule.needsRelease()).toBe(false);
       expect(startGroup).toHaveBeenCalledWith('Creating releases & tags for modules');
       expect(endGroup).toHaveBeenCalled();
     });
 
     it('should handle null/undefined name and body from GitHub API response', async () => {
+      execFileSyncMock.mockImplementation((_file, args) => {
+        if (Array.isArray(args) && args.includes('rev-parse')) {
+          return Buffer.from('def456abc789');
+        }
+
+        return Buffer.from('');
+      });
       const mockRelease = {
         data: {
           id: 789012,
           name: null, // Simulate GitHub API returning null for name
           body: undefined, // Simulate GitHub API returning undefined for body
           tag_name: 'path/to/test-module/v1.1.0',
+          target_commitish: 'def456abc789',
           draft: false,
           prerelease: false,
         },
@@ -390,7 +416,13 @@ describe('releases', () => {
       expect(newRelease.body).toContain('v1.1.0'); // Should fall back to generated changelog since body is undefined
       expect(newRelease.body).toContain('feat: Add new feature'); // Should contain the commit message
 
-      expect(mockTerraformModule.setTags).toHaveBeenCalledWith(['path/to/test-module/v1.1.0', ...originalTags]);
+      expect(mockTerraformModule.setTags).toHaveBeenCalledWith([
+        {
+          name: 'path/to/test-module/v1.1.0',
+          commitSHA: 'def456abc789',
+        },
+        ...originalTags,
+      ]);
       expect(endGroup).toHaveBeenCalled();
     });
 

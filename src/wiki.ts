@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import type { ExecSyncOptions } from 'node:child_process';
+import type { ExecFileSyncOptions } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import { cpus } from 'node:os';
@@ -14,6 +14,8 @@ import type { ExecSyncError, WikiStatusResult } from '@/types';
 import {
   BRANDING_WIKI,
   GITHUB_ACTIONS_BOT_NAME,
+  MODULE_REF_MODE_SHA,
+  MODULE_REF_MODE_TAG,
   PROJECT_URL,
   WIKI_FOOTER_FILENAME,
   WIKI_HOME_FILENAME,
@@ -22,7 +24,7 @@ import {
   WIKI_TITLE_REPLACEMENTS,
 } from '@/utils/constants';
 import { removeDirectoryContents } from '@/utils/file';
-import { getGitHubActionsBotEmail } from '@/utils/github';
+import { configureGitAuthentication, getGitHubActionsBotEmail } from '@/utils/github';
 import { endGroup, info, startGroup } from '@actions/core';
 import pLimit from 'p-limit';
 import which from 'which';
@@ -51,7 +53,7 @@ const WIKI_SUBDIRECTORY_NAME = '.wiki';
 export function checkoutWiki(): void {
   const wikiHtmlUrl = `${context.repoUrl}.wiki`;
   const wikiDirectory = resolve(context.workspaceDir, WIKI_SUBDIRECTORY_NAME);
-  const execWikiOpts: ExecSyncOptions = {
+  const execWikiOpts: ExecFileSyncOptions = {
     cwd: wikiDirectory,
     //stdio: 'inherit',
     stdio: ['inherit', 'inherit', 'pipe'], // stdin, stdout, stderr
@@ -87,23 +89,7 @@ export function checkoutWiki(): void {
   }
 
   info('Configuring authentication');
-
-  // Note: Extract the domain from serverUrl for the extraheader configuration (Same as pulling from the env Server URL)
-  const serverDomain = new URL(context.repoUrl).hostname;
-  const extraHeaderKey = `http.https://${serverDomain}/.extraheader`;
-  const basicCredential = Buffer.from(`x-access-token:${config.githubToken}`, 'utf8').toString('base64');
-
-  try {
-    execFileSync(gitPath, ['config', '--local', '--unset-all', extraHeaderKey], execWikiOpts);
-  } catch (error) {
-    // Git exits with status 5 if the config key doesn't exist to be unset.
-    // This is not a failure condition for us, so we ignore it.
-    if (error instanceof Error && (error as unknown as ExecSyncError).status !== 5) {
-      throw error;
-    }
-  }
-
-  execFileSync(gitPath, ['config', '--local', extraHeaderKey, `Authorization: Basic ${basicCredential}`], execWikiOpts);
+  configureGitAuthentication(gitPath, execWikiOpts);
 
   try {
     info('Fetching the repository');
@@ -306,11 +292,37 @@ async function generateWikiTerraformModule(terraformModule: TerraformModule): Pr
   const changelog = getTerraformModuleFullReleaseChangelog(terraformModule);
   const tfDocs = await generateTerraformDocs(terraformModule);
   const moduleSource = getModuleSource(context.repoUrl, config.useSSHSourceFormat);
+  const latestTag = terraformModule.getLatestTag();
+
+  // Determine the ref value and ref_comment based on config.moduleRefMode
+  let ref = '';
+  let refComment = '';
+
+  switch (config.moduleRefMode) {
+    case MODULE_REF_MODE_TAG:
+      // Use the tag as the ref
+      ref = latestTag ?? '';
+      break;
+    case MODULE_REF_MODE_SHA:
+      ref = terraformModule.getLatestTagCommitSHA() ?? '';
+      refComment = terraformModule.getLatestTagVersion() ? ` # ${terraformModule.getLatestTagVersion()}` : '';
+      break;
+    default:
+      // This should never happen due to validation at config load time
+      throw new Error(`Invalid module_ref_mode: ${config.moduleRefMode}`);
+  }
+
+  // Warn if ref is empty (could happen if latestTag is null/empty or SHA not found in SHA mode)
+  if (!ref) {
+    info(`Warning: No ref available for module '${terraformModule.name}' (tag: '${latestTag}')`);
+  }
 
   const usage = renderTemplate(config.wikiUsageTemplate, {
     module_name: terraformModule.name,
-    latest_tag: terraformModule.getLatestTag(),
+    latest_tag: latestTag,
     latest_tag_version_number: terraformModule.getLatestTagVersionNumber(),
+    ref: ref,
+    ref_comment: refComment,
     module_source: moduleSource,
     module_name_terraform: terraformModule.name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase(),
   });
@@ -578,7 +590,7 @@ export async function commitAndPushWikiChanges(): Promise<void> {
     // Ref: https://github.com/techpivot/terraform-module-releaser/issues/95
     const commitMessage = `PR #${prNumber} - ${prTitle}`.trim();
     const wikiDirectory = resolve(context.workspaceDir, WIKI_SUBDIRECTORY_NAME);
-    const execWikiOpts: ExecSyncOptions = { cwd: wikiDirectory, stdio: 'inherit' };
+    const execWikiOpts: ExecFileSyncOptions = { cwd: wikiDirectory, stdio: 'inherit' };
     const gitPath = which.sync('git');
 
     // Check if there are any changes (otherwise add/commit/push will error)

@@ -1,7 +1,7 @@
 import { relative } from 'node:path';
 import { config } from '@/config';
 import { context } from '@/context';
-import type { CommitDetails, GitHubRelease, ReleaseReason, ReleaseType } from '@/types';
+import type { CommitDetails, GitHubRelease, GitHubTag, ReleaseReason, ReleaseType } from '@/types';
 import {
   MODULE_TAG_REGEX,
   RELEASE_REASON,
@@ -38,7 +38,7 @@ export class TerraformModule {
   /**
    * Private list of tags relevant to this module.
    */
-  private _tags: string[] = [];
+  private _tags: GitHubTag[] = [];
 
   /**
    * Private list of releases relevant to this module.
@@ -147,35 +147,36 @@ export class TerraformModule {
   /**
    * Sets the Git tags associated with this Terraform module.
    *
-   * Accepts an array of tag strings and automatically sorts them by semantic version
-   * in descending order (newest first). Tags must follow the format `{moduleName}/v{x.y.z}` or `{moduleName}/x.y.z`.
-   * This method replaces any previously set tags. Throws if any tag is invalid.
+   * Accepts an array of GitHubTag objects and automatically sorts them by semantic version
+   * in descending order (newest first). Tags must have name following the format
+   * `{moduleName}/v{x.y.z}` or `{moduleName}/x.y.z`. Throws if any tag is invalid.
+   * This method replaces any previously set tags.
    *
-   * @param {ReadonlyArray<string>} tags - Array of Git tag strings to associate with this module
-   * @throws {Error} If any tag does not match the required format
+   * @param {ReadonlyArray<GitHubTag>} tags - Array of GitHubTag objects to associate with this module
+   * @throws {Error} If any tag name does not match the required format
    * @returns {void}
    *
    * @example
    * ```typescript
    * const module = new TerraformModule('/path/to/module');
    * module.setTags([
-   *   'my-module/v1.0.0',
-   *   'my-module/v1.1.0',
-   *   'my-module/v2.0.0'
+   *   { name: 'my-module/v1.0.0', commitSHA: 'abc123' },
+   *   { name: 'my-module/v1.1.0', commitSHA: 'def456' },
+   *   { name: 'my-module/v2.0.0', commitSHA: 'ghi789' }
    * ]);
-   * // Tags will be automatically sorted: v2.0.0, v1.1.0, v1.0.0
+   * // Tags will be automatically sorted by version (newest first)
    * ```
    */
-  public setTags(tags: ReadonlyArray<string>): void {
+  public setTags(tags: ReadonlyArray<GitHubTag>): void {
     // Extract versions once and validate during the process
-    const tagVersionMap = new Map<string, string>();
+    const tagVersionMap = new Map<GitHubTag, string>();
 
     // First pass: validate all tags and extract versions
     for (const tag of tags) {
-      tagVersionMap.set(tag, this.extractVersionFromTag(tag));
+      tagVersionMap.set(tag, this.extractVersionFromTag(tag.name));
     }
 
-    // Second pass: Sort using pre-extracted versions (create copy to avoid mutating input)
+    // Sort using pre-extracted versions (create copy to avoid mutating input)
     this._tags = [...tags].sort((a, b) => {
       const aVersion = tagVersionMap.get(a);
       const bVersion = tagVersionMap.get(b);
@@ -189,26 +190,53 @@ export class TerraformModule {
   /**
    * Gets all Git tags relevant to this Terraform module.
    *
-   * Returns a read-only array of tag strings that have been filtered and sorted
+   * Returns a read-only array of GitHubTag objects that have been filtered and sorted
    * for this specific module. Tags are sorted by semantic version in descending order.
+   * Each tag contains the name and commit SHA.
    *
-   * @returns {ReadonlyArray<string>} A read-only array of Git tag strings for this module
+   * @returns {ReadonlyArray<GitHubTag>} A read-only array of GitHubTag objects for this module
+   *
+   * @example
+   * ```typescript
+   * const module = new TerraformModule('/path/to/module');
+   * const tags = module.tags;
+   * console.log('Latest tag:', tags[0]?.name); // Most recent version
+   * console.log('Tag count:', tags.length);
+   *
+   * // Access tag details
+   * tags.forEach(tag => {
+   *   console.log(`Tag ${tag.name} -> ${tag.commitSHA}`);
+   * });
+   * ```
    */
-  public get tags(): ReadonlyArray<string> {
+  public get tags(): ReadonlyArray<GitHubTag> {
     return this._tags;
   }
 
   /**
-   * Returns the latest full tag for this module.
+   * Returns the latest full tag name for this module.
    *
-   * @returns {string | null} The latest tag string (e.g., 'module-name/v1.2.3'), or null if no tags exist.
+   * @returns {string | null} The latest tag name (e.g., 'module-name/v1.2.3'), or null if no tags exist.
    */
   public getLatestTag(): string | null {
     if (this.tags.length === 0) {
       return null;
     }
 
-    return this.tags[0];
+    return this.tags[0].name;
+  }
+
+  /**
+   * Returns the commit SHA for the latest tag.
+   *
+   * @returns {string | null} The commit SHA of the latest tag, or null if no tags exist.
+   */
+  public getLatestTagCommitSHA(): string | null {
+    if (this.tags.length === 0) {
+      return null;
+    }
+
+    return this.tags[0].commitSHA;
   }
 
   /**
@@ -276,8 +304,6 @@ export class TerraformModule {
     for (const release of releases) {
       releaseVersionMap.set(release, this.extractVersionFromTag(release.tagName));
     }
-
-    // Second pass: Sort using pre-extracted versions
 
     // Second pass: Sort using pre-extracted versions (create copy to avoid mutating input)
     this._releases = [...releases].sort((a, b) => {
@@ -591,7 +617,7 @@ export class TerraformModule {
     if (this.tags.length > 0) {
       lines.push('   Tags:');
       for (const tag of this.tags) {
-        lines.push(`     - ${tag}`);
+        lines.push(`     - ${tag.name}`);
       }
     }
 
@@ -698,11 +724,11 @@ export class TerraformModule {
    * Static utility to filter tags for a given module name.
    *
    * @param {string} moduleName - The Terraform module name to find current tags
-   * @param {string[]} allTags - An array of all available tags
-   * @returns {string[]} An array of all matching tags for the module
+   * @param {GitHubTag[]} allTags - An array of all available tags
+   * @returns {GitHubTag[]} An array of all matching tags for the module
    */
-  public static getTagsForModule(moduleName: string, allTags: string[]): string[] {
-    return allTags.filter((tag) => TerraformModule.isModuleAssociatedWithTag(moduleName, tag));
+  public static getTagsForModule(moduleName: string, allTags: GitHubTag[]): GitHubTag[] {
+    return allTags.filter((tag) => TerraformModule.isModuleAssociatedWithTag(moduleName, tag.name));
   }
 
   /**
@@ -734,11 +760,11 @@ export class TerraformModule {
    * This approach leverages the robust tag association logic that handles
    * different separator schemes over time.
    *
-   * @param {string[]} allTags - A list of all tags associated with the modules.
+   * @param {GitHubTag[]} allTags - A list of all tags associated with the modules.
    * @param {TerraformModule[]} terraformModules - An array of Terraform modules.
    * @returns {string[]} An array of tag names that need to be deleted.
    */
-  public static getTagsToDelete(allTags: string[], terraformModules: TerraformModule[]): string[] {
+  public static getTagsToDelete(allTags: GitHubTag[], terraformModules: TerraformModule[]): string[] {
     startGroup('Finding all Terraform tags that should be deleted');
 
     // Filter tags that are not associated with any current module
@@ -746,8 +772,9 @@ export class TerraformModule {
       .filter((tag) => {
         // Check if ANY current module is associated with this tag
         // This handles cases where tagging schemes changed over time
-        return !terraformModules.some((module) => TerraformModule.isModuleAssociatedWithTag(module.name, tag));
+        return !terraformModules.some((module) => TerraformModule.isModuleAssociatedWithTag(module.name, tag.name));
       })
+      .map((tag) => tag.name)
       .sort((a, b) => a.localeCompare(b));
 
     info('Terraform tags to delete:');

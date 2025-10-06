@@ -9,7 +9,7 @@ import { TerraformModule } from '@/terraform-module';
 import type { GitHubRelease } from '@/types';
 import { GITHUB_ACTIONS_BOT_NAME } from '@/utils/constants';
 import { copyModuleContents } from '@/utils/file';
-import { getGitHubActionsBotEmail } from '@/utils/github';
+import { configureGitAuthentication, getGitHubActionsBotEmail } from '@/utils/github';
 import { debug, endGroup, info, startGroup } from '@actions/core';
 import type { RestEndpointMethodTypes } from '@octokit/plugin-rest-endpoint-methods';
 import { RequestError } from '@octokit/request-error';
@@ -145,6 +145,9 @@ export async function createTaggedReleases(terraformModules: TerraformModule[]):
       // Execute git commands in temp directory without inheriting stdio to avoid output pollution
       const gitOpts: ExecSyncOptions = { cwd: tmpDir };
 
+      // Configure Git authentication
+      configureGitAuthentication(gitPath, gitOpts);
+
       for (const cmd of [
         ['config', '--local', 'user.name', GITHUB_ACTIONS_BOT_NAME],
         ['config', '--local', 'user.email', githubActionsBotEmail],
@@ -155,6 +158,9 @@ export async function createTaggedReleases(terraformModules: TerraformModule[]):
       ]) {
         execFileSync(gitPath, cmd, gitOpts);
       }
+
+      // Store the commit SHA that the tag points to (since it's not returned from the API via create release)
+      const commitSHA = execFileSync(gitPath, ['rev-parse', 'HEAD'], gitOpts).toString().trim();
 
       // Create a GitHub release using the tag
       info(`Creating GitHub release for ${moduleName}@${releaseTagVersion}`);
@@ -177,9 +183,13 @@ export async function createTaggedReleases(terraformModules: TerraformModule[]):
         body: response.data.body ?? body,
       };
 
-      // Update the module with the new release and tag
+      // Update the module with the new release and tag (with commit SHA from API response)
       module.setReleases([release, ...module.releases]);
-      module.setTags([releaseTag, ...module.tags]);
+      const newTag = {
+        name: releaseTag,
+        commitSHA,
+      };
+      module.setTags([newTag, ...module.tags]);
 
       // We also need to ensure that this module can't be released anymore. Thus, we need to clear existing commits
       // as this is the primary driver for determining release status.

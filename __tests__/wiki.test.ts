@@ -44,7 +44,7 @@ describe('wiki', async () => {
         files: ['vpc-endpoint/main.tf'],
       },
     ],
-    ['vpc-endpoint/v1.0.0'],
+    [{ name: 'vpc-endpoint/v1.0.0', commitSHA: 'sha00234' }],
     [
       {
         id: 123434,
@@ -68,6 +68,9 @@ describe('wiki', async () => {
       prNumber: 123,
       issueNumber: 123,
       prTitle: 'Test PR title',
+    });
+    config.set({
+      moduleRefMode: 'tag',
     });
   });
 
@@ -332,6 +335,56 @@ describe('wiki', async () => {
           }
         }
       }
+    });
+
+    it('should use SHA mode when moduleRefMode is set to "sha"', async () => {
+      // Reset config to defaults to clear any custom templates from previous tests
+      config.resetDefaults();
+      config.set({
+        moduleRefMode: 'sha',
+        modulePathIgnore: [],
+      });
+
+      const files = await generateWikiFiles(terraformModules);
+
+      // Find the vpc-endpoint module file (it has a tag)
+      const vpcEndpointFile = files.find((f) => basename(f) === 'vpc‒endpoint.md');
+      expect(vpcEndpointFile).toBeDefined();
+
+      if (vpcEndpointFile) {
+        const content = readFileSync(vpcEndpointFile, 'utf8');
+        // In SHA mode, the ref should be the commit SHA
+        expect(content).toContain('ref=sha00234');
+        // And should include a comment with the version
+        expect(content).toContain('# v1.0.0');
+      }
+    });
+
+    it('should handle SHA mode when no commit SHA is available', async () => {
+      // Reset config to defaults
+      config.resetDefaults();
+      config.set({
+        moduleRefMode: 'sha',
+        modulePathIgnore: [],
+      });
+
+      // Create a module with a tag but no commit SHA
+      const moduleWithoutSHA = terraformModules.find((m) => m.name !== 'vpc-endpoint');
+      if (moduleWithoutSHA) {
+        const files = await generateWikiFiles([moduleWithoutSHA]);
+
+        // The file should still be generated
+        expect(files.length).toBeGreaterThan(0);
+        expect(info).toHaveBeenCalledWith(expect.stringContaining('Warning: No ref available'));
+      }
+    });
+
+    it('should throw error for invalid module_ref_mode', async () => {
+      // Force an invalid moduleRefMode by bypassing validation
+      // @ts-expect-error - Testing invalid moduleRefMode value
+      config.set({ moduleRefMode: 'invalid-mode' });
+
+      await expect(generateWikiFiles(terraformModules)).rejects.toThrow('Invalid module_ref_mode: invalid-mode');
     });
   });
 

@@ -2,6 +2,8 @@
  * Configuration related types
  */
 
+export type ModuleRefMode = 'tag' | 'sha';
+
 /**
  * Configuration interface used for defining key GitHub Action input configuration.
  */
@@ -150,4 +152,21 @@ export interface Config {
    * with the useVersionPrefix setting (resulting in "1.0.0").
    */
   useVersionPrefix: boolean;
+
+  /**
+   * Controls how Terraform module usage examples reference versions in generated documentation.
+   *
+   * When "tag" (default), module examples use the tag name in the ref parameter:
+   * - Example: source = "git::https://github.com/owner/repo.git?ref=aws/vpc-endpoint/v1.1.3"
+   *
+   * When "sha", module examples use the commit SHA with the tag as a comment:
+   * - Example: source = "git::https://github.com/owner/repo.git?ref=abc123def456" # aws/vpc-endpoint/v1.1.3
+   *
+   * This allows users to pin to immutable commit SHAs (which cannot be deleted) while maintaining
+   * human-readable tag references in comments. Useful when working with Renovate to handle
+   * module removal scenarios where tags might be deleted.
+   *
+   * Note: This only affects generated documentation. Tag and release creation remains unchanged.
+   */
+  moduleRefMode: ModuleRefMode;
 }

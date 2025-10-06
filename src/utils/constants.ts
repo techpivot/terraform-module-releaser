@@ -128,3 +128,10 @@ export const WIKI_TITLE_REPLACEMENTS: { [key: string]: string } = {
   '/': '∕', // Replace forward slash with a visually similar division slash (U+2215)
   '-': '‒', // Replace hyphen with figure dash (U+2012) for better display and to avoid GitHub's auto-movement
 };
+
+/**
+ * Module reference mode constants - controls how module examples reference versions
+ */
+export const MODULE_REF_MODE_TAG = 'tag' as const;
+export const MODULE_REF_MODE_SHA = 'sha' as const;
+export const ALLOWED_MODULE_REF_MODES = [MODULE_REF_MODE_TAG, MODULE_REF_MODE_SHA] as const;
