@@ -60,7 +60,7 @@
     "@octokit/plugin-rest-endpoint-methods": "^16.1.0",
     "@octokit/request-error": "^7.0.1",
     "minimatch": "^10.0.1",
-    "p-limit": "^7.1.1",
+    "p-limit": "^7.2.0",
     "which": "^5.0.0"
   },
   "devDependencies": {
