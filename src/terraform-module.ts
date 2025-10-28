@@ -666,7 +666,25 @@ export class TerraformModule {
    * @returns {string} A valid Terraform module name based on the provided directory path.
    */
   public static getTerraformModuleNameFromRelativePath(terraformDirectory: string): string {
-    let name = terraformDirectory
+    let processedDirectory = terraformDirectory;
+
+    // Apply terraform provider prefix stripping if enabled
+    if (config.stripTerraformProviderPrefix) {
+      const pathParts = processedDirectory.split(/[/\\]/);
+      const lastPart = pathParts[pathParts.length - 1];
+
+      if (lastPart.startsWith('terraform-')) {
+        // Find the second hyphen to identify provider boundary
+        const secondHyphenIndex = lastPart.indexOf('-', 'terraform-'.length);
+        if (secondHyphenIndex !== -1) {
+          // Replace the last part with the stripped version
+          pathParts[pathParts.length - 1] = lastPart.substring(secondHyphenIndex + 1);
+          processedDirectory = pathParts.join('/');
+        }
+      }
+    }
+
+    let name = processedDirectory
       .trim()
       .toLowerCase()
       .replace(/[/\\]/g, config.tagDirectorySeparator) // Normalize backslashes and forward slashes to configured separator
