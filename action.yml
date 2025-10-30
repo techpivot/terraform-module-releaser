@@ -161,6 +161,15 @@ inputs:
       additional hyphen to identify the provider boundary.
     required: true
     default: "false"
+  include-ancestor-directories:
+    description: >
+      Whether to include ancestor directory hierarchy in tag/release archives. When enabled, module content 
+      is placed under its full directory path within the archive instead of at the root. For example, a module 
+      at 'aws/baseline/terraform-tillo-metadata' will have its content under 'aws/baseline/terraform-tillo-metadata/' 
+      in the archive rather than at the root level. This is useful for tools like Scalr that expect specific 
+      directory structures.
+    required: true
+    default: "false"
 
 outputs:
   changed-module-names:

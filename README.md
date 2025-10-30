@@ -204,6 +204,7 @@ configuring the following optional input parameters as needed.
 | `use-version-prefix`              | Whether to include the 'v' prefix on version tags (e.g., v1.2.3 vs 1.2.3)                                                                                                                                                                                                                                                                                                                                                                                                      | `true`                                                                                                |
 | `module-ref-mode`                 | Controls how module usage examples reference versions in generated documentation. Valid values: `tag` or `sha`. When `tag` (default), examples use tag names (e.g., `?ref=aws/vpc-endpoint/v1.1.3`). When `sha`, examples use commit SHAs with tag as comment (e.g., `?ref=abc123def456 # aws/vpc-endpoint/v1.1.3`). Useful with Renovate for handling module removal scenarios where tags might be deleted. Note: Only affects documentation; tag/release creation unchanged. | `tag`                                                                                                 |
 | `strip-terraform-provider-prefix` | Whether to strip the 'terraform-<provider>-' prefix from directory names when calculating module names. When enabled, a directory named 'terraform-aws-vpc' will have its module name calculated as 'vpc' instead of 'terraform-aws-vpc'. Only affects directories that start with 'terraform-' and contain at least one additional hyphen to identify the provider boundary.                                                                                                  | `false`                                                                                               |
+| `include-ancestor-directories`    | Whether to include ancestor directory hierarchy in tag/release archives. When enabled, module content is placed under its full directory path within the archive instead of at the root. For example, a module at 'aws/baseline/terraform-tillo-metadata' will have its content under 'aws/baseline/terraform-tillo-metadata/' in the archive. Useful for tools like Scalr that expect specific directory structures.                                                          | `false`                                                                                               |
 
 ### Understanding the filtering options
 
@@ -339,6 +340,7 @@ jobs:
           use-version-prefix: true
           module-ref-mode: tag
           strip-terraform-provider-prefix: false
+          include-ancestor-directories: false
           wiki-usage-template: |
             This is a custom wiki usage block that supports markdown.
 

@@ -1,7 +1,7 @@
 import { type ExecSyncOptions, execFileSync } from 'node:child_process';
-import { cpSync, mkdtempSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { createTerraformModuleChangelog } from '@/changelog';
 import { config } from '@/config';
 import { context } from '@/context';
@@ -132,7 +132,16 @@ export async function createTaggedReleases(terraformModules: TerraformModule[]):
       info(`Created temp directory: ${tmpDir}`);
 
       // Copy the module's contents to the temporary directory, excluding specified patterns
-      copyModuleContents(module.directory, tmpDir, config.moduleAssetExcludePatterns);
+      if (config.includeAncestorDirectories) {
+        // Get the relative path from workspace to module directory
+        const relativePath = relative(workspaceDir, module.directory);
+        // Create the full directory structure in temp directory
+        const targetDir = join(tmpDir, relativePath);
+        mkdirSync(targetDir, { recursive: true });
+        copyModuleContents(module.directory, targetDir, config.moduleAssetExcludePatterns);
+      } else {
+        copyModuleContents(module.directory, tmpDir, config.moduleAssetExcludePatterns);
+      }
 
       // Copy the module's .git directory
       cpSync(join(workspaceDir, '.git'), join(tmpDir, '.git'), { recursive: true });

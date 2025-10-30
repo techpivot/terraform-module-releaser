@@ -102,6 +102,7 @@ function initializeConfig(): Config {
     info(`Use Version Prefix: ${configInstance.useVersionPrefix}`);
     info(`Module Ref Mode: ${configInstance.moduleRefMode}`);
     info(`Strip Terraform Provider Prefix: ${configInstance.stripTerraformProviderPrefix}`);
+    info(`Include Ancestor Directories: ${configInstance.includeAncestorDirectories}`);
 
     return configInstance;
   } finally {

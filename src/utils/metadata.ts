@@ -60,6 +60,7 @@ export const ACTION_INPUTS: Record<string, ActionInputMetadata> = {
   'use-version-prefix': requiredBoolean('useVersionPrefix'),
   'module-ref-mode': requiredString('moduleRefMode'),
   'strip-terraform-provider-prefix': requiredBoolean('stripTerraformProviderPrefix'),
+  'include-ancestor-directories': requiredBoolean('includeAncestorDirectories'),
 } as const;
 
 /**

@@ -185,4 +185,21 @@ export interface Config {
    * When false (default), directory names are used as-is for module name calculation.
    */
   stripTerraformProviderPrefix: boolean;
+
+  /**
+   * Whether to include ancestor directory hierarchy in tag/release archives.
+   *
+   * When true, module content is placed under its full directory path within the archive instead of at the root.
+   * This preserves the complete directory structure from the workspace root to the module directory.
+   *
+   * Examples:
+   * - Module at 'terraform-tillo-metadata': archive contains 'terraform-tillo-metadata/main.tf'
+   * - Module at 'aws/baseline/terraform-tillo-metadata': archive contains 'aws/baseline/terraform-tillo-metadata/main.tf'
+   * - Module at 'modules/aws/networking/vpc': archive contains 'modules/aws/networking/vpc/main.tf'
+   *
+   * When false (default), module files are placed at the root of the archive.
+   *
+   * This is useful for tools like Scalr that expect specific directory structures in module archives.
+   */
+  includeAncestorDirectories: boolean;
 }

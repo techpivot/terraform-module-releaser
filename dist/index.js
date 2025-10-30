@@ -28144,6 +28144,7 @@ const ACTION_INPUTS = {
     'use-version-prefix': requiredBoolean('useVersionPrefix'),
     'module-ref-mode': requiredString('moduleRefMode'),
     'strip-terraform-provider-prefix': requiredBoolean('stripTerraformProviderPrefix'),
+    'include-ancestor-directories': requiredBoolean('includeAncestorDirectories'),
 };
 /**
  * Creates a config object by reading inputs using GitHub Actions API and converting them
@@ -28277,6 +28278,7 @@ function initializeConfig() {
         (0,core.info)(`Use Version Prefix: ${configInstance.useVersionPrefix}`);
         (0,core.info)(`Module Ref Mode: ${configInstance.moduleRefMode}`);
         (0,core.info)(`Strip Terraform Provider Prefix: ${configInstance.stripTerraformProviderPrefix}`);
+        (0,core.info)(`Include Ancestor Directories: ${configInstance.includeAncestorDirectories}`);
         return configInstance;
     }
     finally {
@@ -37059,7 +37061,17 @@ async function createTaggedReleases(terraformModules) {
             const tmpDir = (0,external_node_fs_namespaceObject.mkdtempSync)((0,external_node_path_namespaceObject.join)((0,external_node_os_namespaceObject.tmpdir)(), `${fileSystemSafeModuleName}-`));
             (0,core.info)(`Created temp directory: ${tmpDir}`);
             // Copy the module's contents to the temporary directory, excluding specified patterns
-            copyModuleContents(module.directory, tmpDir, config.moduleAssetExcludePatterns);
+            if (config.includeAncestorDirectories) {
+                // Get the relative path from workspace to module directory
+                const relativePath = (0,external_node_path_namespaceObject.relative)(workspaceDir, module.directory);
+                // Create the full directory structure in temp directory
+                const targetDir = (0,external_node_path_namespaceObject.join)(tmpDir, relativePath);
+                (0,external_node_fs_namespaceObject.mkdirSync)(targetDir, { recursive: true });
+                copyModuleContents(module.directory, targetDir, config.moduleAssetExcludePatterns);
+            }
+            else {
+                copyModuleContents(module.directory, tmpDir, config.moduleAssetExcludePatterns);
+            }
             // Copy the module's .git directory
             (0,external_node_fs_namespaceObject.cpSync)((0,external_node_path_namespaceObject.join)(workspaceDir, '.git'), (0,external_node_path_namespaceObject.join)(tmpDir, '.git'), { recursive: true });
             // Git operations: commit the changes and tag the release

@@ -280,6 +280,7 @@ describe('config', () => {
       expect(config.useVersionPrefix).toBe(true);
       expect(config.moduleRefMode).toBe('tag');
       expect(config.stripTerraformProviderPrefix).toBe(false);
+      expect(config.includeAncestorDirectories).toBe(false);
 
       expect(startGroup).toHaveBeenCalledWith('Initializing Config');
       expect(startGroup).toHaveBeenCalledTimes(1);
@@ -301,6 +302,7 @@ describe('config', () => {
         ['Use Version Prefix: true'],
         ['Module Ref Mode: tag'],
         ['Strip Terraform Provider Prefix: false'],
+        ['Include Ancestor Directories: false'],
       ]);
     });
   });
