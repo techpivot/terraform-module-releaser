@@ -153,6 +153,14 @@ inputs:
       Note: This only affects generated documentation; tag and release creation remains unchanged.
     required: true
     default: "tag"
+  strip-terraform-provider-prefix:
+    description: >
+      Whether to strip the 'terraform-<provider>-' prefix from directory names when calculating module names.
+      When enabled, a directory named 'terraform-aws-vpc' will have its module name calculated as 'vpc' instead 
+      of 'terraform-aws-vpc'. Only affects directories that start with 'terraform-' and contain at least one 
+      additional hyphen to identify the provider boundary.
+    required: true
+    default: "false"
 
 outputs:
   changed-module-names:

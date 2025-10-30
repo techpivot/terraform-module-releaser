@@ -59,6 +59,7 @@ export const ACTION_INPUTS: Record<string, ActionInputMetadata> = {
   'tag-directory-separator': requiredString('tagDirectorySeparator'),
   'use-version-prefix': requiredBoolean('useVersionPrefix'),
   'module-ref-mode': requiredString('moduleRefMode'),
+  'strip-terraform-provider-prefix': requiredBoolean('stripTerraformProviderPrefix'),
 } as const;
 
 /**

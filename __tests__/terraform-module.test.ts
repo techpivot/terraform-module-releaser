@@ -1091,6 +1091,78 @@ describe('TerraformModule', () => {
         });
       });
 
+      describe('terraform provider prefix stripping', () => {
+        beforeEach(() => {
+          config.set({ tagDirectorySeparator: '/' });
+        });
+
+        it('should not strip prefix when disabled (default)', () => {
+          config.set({ stripTerraformProviderPrefix: false });
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('terraform-aws-vpc')).toBe('terraform-aws-vpc');
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('modules/terraform-azure-storage')).toBe(
+            'modules/terraform-azure-storage',
+          );
+        });
+
+        it('should strip terraform provider prefix when enabled', () => {
+          config.set({ stripTerraformProviderPrefix: true });
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('terraform-aws-vpc')).toBe('vpc');
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('terraform-azure-storage-account')).toBe(
+            'storage-account',
+          );
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('terraform-gcp-compute-instance')).toBe(
+            'compute-instance',
+          );
+        });
+
+        it('should strip prefix from nested paths', () => {
+          config.set({ stripTerraformProviderPrefix: true });
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('modules/terraform-aws-vpc')).toBe(
+            'modules/vpc',
+          );
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('tf-modules/terraform-azure-storage')).toBe(
+            'tf-modules/storage',
+          );
+        });
+
+        it('should not strip when no provider separator exists', () => {
+          config.set({ stripTerraformProviderPrefix: true });
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('terraform-')).toBe('terraform');
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('terraform-module')).toBe('terraform-module');
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('terraform')).toBe('terraform');
+        });
+
+        it('should not strip when not starting with terraform-', () => {
+          config.set({ stripTerraformProviderPrefix: true });
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('aws-vpc')).toBe('aws-vpc');
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('my-terraform-aws-vpc')).toBe(
+            'my-terraform-aws-vpc',
+          );
+        });
+
+        it('should work with different tag directory separators', () => {
+          config.set({ stripTerraformProviderPrefix: true, tagDirectorySeparator: '-' });
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('modules/terraform-aws-vpc')).toBe(
+            'modules-vpc',
+          );
+
+          config.set({ tagDirectorySeparator: '_' });
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('modules/terraform-aws-vpc')).toBe(
+            'modules_vpc',
+          );
+        });
+
+        it('should handle complex provider names', () => {
+          config.set({ stripTerraformProviderPrefix: true });
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('terraform-aws-us-east-1-vpc')).toBe(
+            'us-east-1-vpc',
+          );
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('terraform-google-cloud-storage')).toBe(
+            'cloud-storage',
+          );
+        });
+      });
+
       describe('comprehensive scenarios with different separators', () => {
         const testScenarios = [
           {

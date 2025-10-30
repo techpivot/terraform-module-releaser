@@ -169,4 +169,20 @@ export interface Config {
    * Note: This only affects generated documentation. Tag and release creation remains unchanged.
    */
   moduleRefMode: ModuleRefMode;
+
+  /**
+   * Whether to strip the 'terraform-<provider>-' prefix from directory names when calculating module names.
+   *
+   * When true, directory names that start with 'terraform-' will have the 'terraform-<provider>-' prefix
+   * removed from the module name calculation. For example:
+   * - 'terraform-aws-vpc' becomes 'vpc'
+   * - 'terraform-azure-storage' becomes 'storage'
+   *
+   * Only affects directories that start with 'terraform-' and contain at least one additional hyphen
+   * to identify the provider boundary. Directories like 'terraform-' or 'terraform-module' (without
+   * a clear provider separator) will not be modified.
+   *
+   * When false (default), directory names are used as-is for module name calculation.
+   */
+  stripTerraformProviderPrefix: boolean;
 }

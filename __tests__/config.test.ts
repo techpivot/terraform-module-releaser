@@ -279,6 +279,7 @@ describe('config', () => {
       expect(config.tagDirectorySeparator).toBe('/');
       expect(config.useVersionPrefix).toBe(true);
       expect(config.moduleRefMode).toBe('tag');
+      expect(config.stripTerraformProviderPrefix).toBe(false);
 
       expect(startGroup).toHaveBeenCalledWith('Initializing Config');
       expect(startGroup).toHaveBeenCalledTimes(1);
@@ -299,6 +300,7 @@ describe('config', () => {
         ['Tag Directory Separator: /'],
         ['Use Version Prefix: true'],
         ['Module Ref Mode: tag'],
+        ['Strip Terraform Provider Prefix: false'],
       ]);
     });
   });
