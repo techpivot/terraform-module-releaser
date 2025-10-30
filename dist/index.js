@@ -28079,6 +28079,12 @@ const WIKI_TITLE_REPLACEMENTS = {
     '/': '∕', // Replace forward slash with a visually similar division slash (U+2215)
     '-': '‒', // Replace hyphen with figure dash (U+2012) for better display and to avoid GitHub's auto-movement
 };
+/**
+ * Module reference mode constants - controls how module examples reference versions
+ */
+const MODULE_REF_MODE_TAG = 'tag';
+const MODULE_REF_MODE_SHA = 'sha';
+const ALLOWED_MODULE_REF_MODES = [MODULE_REF_MODE_TAG, MODULE_REF_MODE_SHA];
 
 // EXTERNAL MODULE: ./node_modules/@actions/core/lib/core.js
 var core = __nccwpck_require__(7484);
@@ -28136,6 +28142,8 @@ const ACTION_INPUTS = {
     github_token: requiredString('githubToken'),
     'tag-directory-separator': requiredString('tagDirectorySeparator'),
     'use-version-prefix': requiredBoolean('useVersionPrefix'),
+    'module-ref-mode': requiredString('moduleRefMode'),
+    'strip-terraform-provider-prefix': requiredBoolean('stripTerraformProviderPrefix'),
 };
 /**
  * Creates a config object by reading inputs using GitHub Actions API and converting them
@@ -28249,6 +28257,10 @@ function initializeConfig() {
         if (!configInstance.useVersionPrefix && configInstance.defaultFirstTag.startsWith('v')) {
             configInstance.defaultFirstTag = configInstance.defaultFirstTag.substring(1);
         }
+        // Validate module ref mode
+        if (!ALLOWED_MODULE_REF_MODES.includes(configInstance.moduleRefMode)) {
+            throw new TypeError(`Invalid module_ref_mode '${configInstance.moduleRefMode}'. Must be one of: ${ALLOWED_MODULE_REF_MODES.join(', ')}`);
+        }
         (0,core.info)(`Major Keywords: ${configInstance.majorKeywords.join(', ')}`);
         (0,core.info)(`Minor Keywords: ${configInstance.minorKeywords.join(', ')}`);
         (0,core.info)(`Patch Keywords: ${configInstance.patchKeywords.join(', ')}`);
@@ -28263,6 +28275,8 @@ function initializeConfig() {
         (0,core.info)(`Use SSH Source Format: ${configInstance.useSSHSourceFormat}`);
         (0,core.info)(`Tag Directory Separator: ${configInstance.tagDirectorySeparator}`);
         (0,core.info)(`Use Version Prefix: ${configInstance.useVersionPrefix}`);
+        (0,core.info)(`Module Ref Mode: ${configInstance.moduleRefMode}`);
+        (0,core.info)(`Strip Terraform Provider Prefix: ${configInstance.stripTerraformProviderPrefix}`);
         return configInstance;
     }
     finally {
@@ -28838,7 +28852,7 @@ class RequestError extends Error {
 
 
 // pkg/dist-src/version.js
-var dist_bundle_VERSION = "10.0.3";
+var dist_bundle_VERSION = "10.0.5";
 
 // pkg/dist-src/defaults.js
 var defaults_default = {
@@ -29209,7 +29223,7 @@ var createTokenAuth = function createTokenAuth2(token) {
 
 
 ;// CONCATENATED MODULE: ./node_modules/@octokit/core/dist-src/version.js
-const version_VERSION = "7.0.4";
+const version_VERSION = "7.0.5";
 
 
 ;// CONCATENATED MODULE: ./node_modules/@octokit/core/dist-src/index.js
@@ -29500,9 +29514,11 @@ var paginatingEndpoints = (/* unused pure expression or super */ null && ([
   "GET /networks/{owner}/{repo}/events",
   "GET /notifications",
   "GET /organizations",
+  "GET /organizations/{org}/dependabot/repository-access",
   "GET /orgs/{org}/actions/cache/usage-by-repository",
   "GET /orgs/{org}/actions/hosted-runners",
   "GET /orgs/{org}/actions/permissions/repositories",
+  "GET /orgs/{org}/actions/permissions/self-hosted-runners/repositories",
   "GET /orgs/{org}/actions/runner-groups",
   "GET /orgs/{org}/actions/runner-groups/{runner_group_id}/hosted-runners",
   "GET /orgs/{org}/actions/runner-groups/{runner_group_id}/repositories",
@@ -29552,6 +29568,9 @@ var paginatingEndpoints = (/* unused pure expression or super */ null && ([
   "GET /orgs/{org}/personal-access-tokens/{pat_id}/repositories",
   "GET /orgs/{org}/private-registries",
   "GET /orgs/{org}/projects",
+  "GET /orgs/{org}/projectsV2",
+  "GET /orgs/{org}/projectsV2/{project_number}/fields",
+  "GET /orgs/{org}/projectsV2/{project_number}/items",
   "GET /orgs/{org}/properties/values",
   "GET /orgs/{org}/public_members",
   "GET /orgs/{org}/repos",
@@ -29572,7 +29591,6 @@ var paginatingEndpoints = (/* unused pure expression or super */ null && ([
   "GET /orgs/{org}/teams/{team_slug}/projects",
   "GET /orgs/{org}/teams/{team_slug}/repos",
   "GET /orgs/{org}/teams/{team_slug}/teams",
-  "GET /projects/columns/{column_id}/cards",
   "GET /projects/{project_id}/collaborators",
   "GET /projects/{project_id}/columns",
   "GET /repos/{owner}/{repo}/actions/artifacts",
@@ -29632,6 +29650,8 @@ var paginatingEndpoints = (/* unused pure expression or super */ null && ([
   "GET /repos/{owner}/{repo}/issues/comments/{comment_id}/reactions",
   "GET /repos/{owner}/{repo}/issues/events",
   "GET /repos/{owner}/{repo}/issues/{issue_number}/comments",
+  "GET /repos/{owner}/{repo}/issues/{issue_number}/dependencies/blocked_by",
+  "GET /repos/{owner}/{repo}/issues/{issue_number}/dependencies/blocking",
   "GET /repos/{owner}/{repo}/issues/{issue_number}/events",
   "GET /repos/{owner}/{repo}/issues/{issue_number}/labels",
   "GET /repos/{owner}/{repo}/issues/{issue_number}/reactions",
@@ -29712,6 +29732,8 @@ var paginatingEndpoints = (/* unused pure expression or super */ null && ([
   "GET /user/subscriptions",
   "GET /user/teams",
   "GET /users",
+  "GET /users/{user_id}/projectsV2/{project_number}/fields",
+  "GET /users/{user_id}/projectsV2/{project_number}/items",
   "GET /users/{username}/attestations/{subject_digest}",
   "GET /users/{username}/events",
   "GET /users/{username}/events/orgs/{org}",
@@ -29724,6 +29746,7 @@ var paginatingEndpoints = (/* unused pure expression or super */ null && ([
   "GET /users/{username}/orgs",
   "GET /users/{username}/packages",
   "GET /users/{username}/projects",
+  "GET /users/{username}/projectsV2",
   "GET /users/{username}/received_events",
   "GET /users/{username}/received_events/public",
   "GET /users/{username}/repos",
@@ -32461,23 +32484,24 @@ class TerraformModule {
     /**
      * Sets the Git tags associated with this Terraform module.
      *
-     * Accepts an array of tag strings and automatically sorts them by semantic version
-     * in descending order (newest first). Tags must follow the format `{moduleName}/v{x.y.z}` or `{moduleName}/x.y.z`.
-     * This method replaces any previously set tags. Throws if any tag is invalid.
+     * Accepts an array of GitHubTag objects and automatically sorts them by semantic version
+     * in descending order (newest first). Tags must have name following the format
+     * `{moduleName}/v{x.y.z}` or `{moduleName}/x.y.z`. Throws if any tag is invalid.
+     * This method replaces any previously set tags.
      *
-     * @param {ReadonlyArray<string>} tags - Array of Git tag strings to associate with this module
-     * @throws {Error} If any tag does not match the required format
+     * @param {ReadonlyArray<GitHubTag>} tags - Array of GitHubTag objects to associate with this module
+     * @throws {Error} If any tag name does not match the required format
      * @returns {void}
      *
      * @example
      * ```typescript
      * const module = new TerraformModule('/path/to/module');
      * module.setTags([
-     *   'my-module/v1.0.0',
-     *   'my-module/v1.1.0',
-     *   'my-module/v2.0.0'
+     *   { name: 'my-module/v1.0.0', commitSHA: 'abc123' },
+     *   { name: 'my-module/v1.1.0', commitSHA: 'def456' },
+     *   { name: 'my-module/v2.0.0', commitSHA: 'ghi789' }
      * ]);
-     * // Tags will be automatically sorted: v2.0.0, v1.1.0, v1.0.0
+     * // Tags will be automatically sorted by version (newest first)
      * ```
      */
     setTags(tags) {
@@ -32485,9 +32509,9 @@ class TerraformModule {
         const tagVersionMap = new Map();
         // First pass: validate all tags and extract versions
         for (const tag of tags) {
-            tagVersionMap.set(tag, this.extractVersionFromTag(tag));
+            tagVersionMap.set(tag, this.extractVersionFromTag(tag.name));
         }
-        // Second pass: Sort using pre-extracted versions (create copy to avoid mutating input)
+        // Sort using pre-extracted versions (create copy to avoid mutating input)
         this._tags = [...tags].sort((a, b) => {
             const aVersion = tagVersionMap.get(a);
             const bVersion = tagVersionMap.get(b);
@@ -32500,24 +32524,49 @@ class TerraformModule {
     /**
      * Gets all Git tags relevant to this Terraform module.
      *
-     * Returns a read-only array of tag strings that have been filtered and sorted
+     * Returns a read-only array of GitHubTag objects that have been filtered and sorted
      * for this specific module. Tags are sorted by semantic version in descending order.
+     * Each tag contains the name and commit SHA.
      *
-     * @returns {ReadonlyArray<string>} A read-only array of Git tag strings for this module
+     * @returns {ReadonlyArray<GitHubTag>} A read-only array of GitHubTag objects for this module
+     *
+     * @example
+     * ```typescript
+     * const module = new TerraformModule('/path/to/module');
+     * const tags = module.tags;
+     * console.log('Latest tag:', tags[0]?.name); // Most recent version
+     * console.log('Tag count:', tags.length);
+     *
+     * // Access tag details
+     * tags.forEach(tag => {
+     *   console.log(`Tag ${tag.name} -> ${tag.commitSHA}`);
+     * });
+     * ```
      */
     get tags() {
         return this._tags;
     }
     /**
-     * Returns the latest full tag for this module.
+     * Returns the latest full tag name for this module.
      *
-     * @returns {string | null} The latest tag string (e.g., 'module-name/v1.2.3'), or null if no tags exist.
+     * @returns {string | null} The latest tag name (e.g., 'module-name/v1.2.3'), or null if no tags exist.
      */
     getLatestTag() {
         if (this.tags.length === 0) {
             return null;
         }
-        return this.tags[0];
+        return this.tags[0].name;
+    }
+    /**
+     * Returns the commit SHA for the latest tag.
+     *
+     * @returns {string | null} The commit SHA of the latest tag, or null if no tags exist.
+     */
+    getLatestTagCommitSHA() {
+        if (this.tags.length === 0) {
+            return null;
+        }
+        return this.tags[0].commitSHA;
     }
     /**
      * Returns the version part of the latest tag for this module.
@@ -32578,7 +32627,6 @@ class TerraformModule {
         for (const release of releases) {
             releaseVersionMap.set(release, this.extractVersionFromTag(release.tagName));
         }
-        // Second pass: Sort using pre-extracted versions
         // Second pass: Sort using pre-extracted versions (create copy to avoid mutating input)
         this._releases = [...releases].sort((a, b) => {
             const aVersion = releaseVersionMap.get(a);
@@ -32859,7 +32907,7 @@ class TerraformModule {
         if (this.tags.length > 0) {
             lines.push('   Tags:');
             for (const tag of this.tags) {
-                lines.push(`     - ${tag}`);
+                lines.push(`     - ${tag.name}`);
             }
         }
         if (this.releases.length > 0) {
@@ -32902,7 +32950,22 @@ class TerraformModule {
      * @returns {string} A valid Terraform module name based on the provided directory path.
      */
     static getTerraformModuleNameFromRelativePath(terraformDirectory) {
-        let name = terraformDirectory
+        let processedDirectory = terraformDirectory;
+        // Apply terraform provider prefix stripping if enabled
+        if (config.stripTerraformProviderPrefix) {
+            const pathParts = processedDirectory.split(/[/\\]/);
+            const lastPart = pathParts[pathParts.length - 1];
+            if (lastPart.startsWith('terraform-')) {
+                // Find the second hyphen to identify provider boundary
+                const secondHyphenIndex = lastPart.indexOf('-', 'terraform-'.length);
+                if (secondHyphenIndex !== -1) {
+                    // Replace the last part with the stripped version
+                    pathParts[pathParts.length - 1] = lastPart.substring(secondHyphenIndex + 1);
+                    processedDirectory = pathParts.join('/');
+                }
+            }
+        }
+        let name = processedDirectory
             .trim()
             .toLowerCase()
             .replace(/[/\\]/g, config.tagDirectorySeparator) // Normalize backslashes and forward slashes to configured separator
@@ -32952,11 +33015,11 @@ class TerraformModule {
      * Static utility to filter tags for a given module name.
      *
      * @param {string} moduleName - The Terraform module name to find current tags
-     * @param {string[]} allTags - An array of all available tags
-     * @returns {string[]} An array of all matching tags for the module
+     * @param {GitHubTag[]} allTags - An array of all available tags
+     * @returns {GitHubTag[]} An array of all matching tags for the module
      */
     static getTagsForModule(moduleName, allTags) {
-        return allTags.filter((tag) => TerraformModule.isModuleAssociatedWithTag(moduleName, tag));
+        return allTags.filter((tag) => TerraformModule.isModuleAssociatedWithTag(moduleName, tag.name));
     }
     /**
      * Static utility to filter releases for a given module name.
@@ -32985,7 +33048,7 @@ class TerraformModule {
      * This approach leverages the robust tag association logic that handles
      * different separator schemes over time.
      *
-     * @param {string[]} allTags - A list of all tags associated with the modules.
+     * @param {GitHubTag[]} allTags - A list of all tags associated with the modules.
      * @param {TerraformModule[]} terraformModules - An array of Terraform modules.
      * @returns {string[]} An array of tag names that need to be deleted.
      */
@@ -32996,8 +33059,9 @@ class TerraformModule {
             .filter((tag) => {
             // Check if ANY current module is associated with this tag
             // This handles cases where tagging schemes changed over time
-            return !terraformModules.some((module) => TerraformModule.isModuleAssociatedWithTag(module.name, tag));
+            return !terraformModules.some((module) => TerraformModule.isModuleAssociatedWithTag(module.name, tag.name));
         })
+            .map((tag) => tag.name)
             .sort((a, b) => a.localeCompare(b));
         (0,core.info)('Terraform tags to delete:');
         (0,core.info)(JSON.stringify(tagsToRemove, null, 2));
@@ -35734,6 +35798,8 @@ async function generateTerraformDocs({ name, directory }) {
 ;// CONCATENATED MODULE: ./src/utils/github.ts
 
 
+
+
 /**
  * Retrieves the GitHub Actions bot email address dynamically by querying the GitHub API.
  * This function handles both GitHub.com and GitHub Enterprise Server environments.
@@ -35748,6 +35814,49 @@ async function getGitHubActionsBotEmail() {
         username: GITHUB_ACTIONS_BOT_USERNAME,
     });
     return `${response.data.id}+${GITHUB_ACTIONS_BOT_USERNAME}@users.noreply.github.com`;
+}
+/**
+ * Configures Git authentication for HTTPS operations using the GitHub token.
+ *
+ * This function sets up Git's HTTP extraheader configuration to authenticate
+ * HTTPS operations (like push/fetch) using the provided GitHub token. It uses
+ * the same authentication mechanism as GitHub Actions' checkout action.
+ *
+ * The function:
+ * 1. Extracts the server domain from the repository URL
+ * 2. Unsets any existing authentication headers (ignoring errors if none exist)
+ * 3. Sets a new authentication header with the GitHub token as a base64-encoded credential
+ *
+ * @param {string} gitPath - The path to the git executable
+ * @param {ExecFileSyncOptions} execOptions - Options for executing git commands (e.g., cwd, env)
+ * @throws {Error} If git configuration fails (except for status 5 when unsetting non-existent config)
+ *
+ * @example
+ * ```typescript
+ * const gitPath = await which('git');
+ * const execOptions = { cwd: '/path/to/repo' };
+ * configureGitAuthentication(gitPath, execOptions);
+ * // Now git push/fetch operations will be authenticated
+ * ```
+ */
+function configureGitAuthentication(gitPath, execOptions) {
+    // Extract the domain from the repository URL for the extraheader configuration
+    const serverDomain = new URL(context.repoUrl).hostname;
+    const extraHeaderKey = `http.https://${serverDomain}/.extraheader`;
+    const basicCredential = Buffer.from(`x-access-token:${config.githubToken}`, 'utf8').toString('base64');
+    // Unset any existing extraheader configuration
+    try {
+        (0,external_node_child_process_namespaceObject.execFileSync)(gitPath, ['config', '--local', '--unset-all', extraHeaderKey], execOptions);
+    }
+    catch (error) {
+        // Git exits with status 5 if the config key doesn't exist to be unset.
+        // This is not a failure condition, so we ignore it.
+        if (error instanceof Error && error.status !== 5) {
+            throw error;
+        }
+    }
+    // Set authentication header
+    (0,external_node_child_process_namespaceObject.execFileSync)(gitPath, ['config', '--local', extraHeaderKey, `Authorization: Basic ${basicCredential}`], execOptions);
 }
 
 ;// CONCATENATED MODULE: ./node_modules/yocto-queue/index.js
@@ -35921,8 +36030,8 @@ function pLimit(concurrency) {
 			},
 		},
 		map: {
-			async value(array, function_) {
-				const promises = array.map((value, index) => this(function_, value, index));
+			async value(iterable, function_) {
+				const promises = Array.from(iterable, (value, index) => this(function_, value, index));
 				return Promise.all(promises);
 			},
 		},
@@ -36014,21 +36123,7 @@ function checkoutWiki() {
         (0,external_node_child_process_namespaceObject.execFileSync)(gitPath, ['remote', 'add', 'origin', wikiHtmlUrl], execWikiOpts);
     }
     (0,core.info)('Configuring authentication');
-    // Note: Extract the domain from serverUrl for the extraheader configuration (Same as pulling from the env Server URL)
-    const serverDomain = new URL(context.repoUrl).hostname;
-    const extraHeaderKey = `http.https://${serverDomain}/.extraheader`;
-    const basicCredential = Buffer.from(`x-access-token:${config.githubToken}`, 'utf8').toString('base64');
-    try {
-        (0,external_node_child_process_namespaceObject.execFileSync)(gitPath, ['config', '--local', '--unset-all', extraHeaderKey], execWikiOpts);
-    }
-    catch (error) {
-        // Git exits with status 5 if the config key doesn't exist to be unset.
-        // This is not a failure condition for us, so we ignore it.
-        if (error instanceof Error && error.status !== 5) {
-            throw error;
-        }
-    }
-    (0,external_node_child_process_namespaceObject.execFileSync)(gitPath, ['config', '--local', extraHeaderKey, `Authorization: Basic ${basicCredential}`], execWikiOpts);
+    configureGitAuthentication(gitPath, execWikiOpts);
     try {
         (0,core.info)('Fetching the repository');
         (0,external_node_child_process_namespaceObject.execFileSync)(gitPath, [
@@ -36213,10 +36308,33 @@ async function generateWikiTerraformModule(terraformModule) {
     const changelog = getTerraformModuleFullReleaseChangelog(terraformModule);
     const tfDocs = await generateTerraformDocs(terraformModule);
     const moduleSource = getModuleSource(context.repoUrl, config.useSSHSourceFormat);
+    const latestTag = terraformModule.getLatestTag();
+    // Determine the ref value and ref_comment based on config.moduleRefMode
+    let ref = '';
+    let refComment = '';
+    switch (config.moduleRefMode) {
+        case MODULE_REF_MODE_TAG:
+            // Use the tag as the ref
+            ref = latestTag ?? '';
+            break;
+        case MODULE_REF_MODE_SHA:
+            ref = terraformModule.getLatestTagCommitSHA() ?? '';
+            refComment = terraformModule.getLatestTagVersion() ? ` # ${terraformModule.getLatestTagVersion()}` : '';
+            break;
+        default:
+            // This should never happen due to validation at config load time
+            throw new Error(`Invalid module_ref_mode: ${config.moduleRefMode}`);
+    }
+    // Warn if ref is empty (could happen if latestTag is null/empty or SHA not found in SHA mode)
+    if (!ref) {
+        (0,core.info)(`Warning: No ref available for module '${terraformModule.name}' (tag: '${latestTag}')`);
+    }
     const usage = renderTemplate(config.wikiUsageTemplate, {
         module_name: terraformModule.name,
-        latest_tag: terraformModule.getLatestTag(),
+        latest_tag: latestTag,
         latest_tag_version_number: terraformModule.getLatestTagVersionNumber(),
+        ref: ref,
+        ref_comment: refComment,
         module_source: moduleSource,
         module_name_terraform: terraformModule.name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase(),
     });
@@ -36950,6 +37068,8 @@ async function createTaggedReleases(terraformModules) {
             const githubActionsBotEmail = await getGitHubActionsBotEmail();
             // Execute git commands in temp directory without inheriting stdio to avoid output pollution
             const gitOpts = { cwd: tmpDir };
+            // Configure Git authentication
+            configureGitAuthentication(gitPath, gitOpts);
             for (const cmd of [
                 ['config', '--local', 'user.name', GITHUB_ACTIONS_BOT_NAME],
                 ['config', '--local', 'user.email', githubActionsBotEmail],
@@ -36960,6 +37080,8 @@ async function createTaggedReleases(terraformModules) {
             ]) {
                 (0,external_node_child_process_namespaceObject.execFileSync)(gitPath, cmd, gitOpts);
             }
+            // Store the commit SHA that the tag points to (since it's not returned from the API via create release)
+            const commitSHA = (0,external_node_child_process_namespaceObject.execFileSync)(gitPath, ['rev-parse', 'HEAD'], gitOpts).toString().trim();
             // Create a GitHub release using the tag
             (0,core.info)(`Creating GitHub release for ${moduleName}@${releaseTagVersion}`);
             const body = createTerraformModuleChangelog(module);
@@ -36978,9 +37100,13 @@ async function createTaggedReleases(terraformModules) {
                 tagName: response.data.tag_name,
                 body: response.data.body ?? body,
             };
-            // Update the module with the new release and tag
+            // Update the module with the new release and tag (with commit SHA from API response)
             module.setReleases([release, ...module.releases]);
-            module.setTags([releaseTag, ...module.tags]);
+            const newTag = {
+                name: releaseTag,
+                commitSHA,
+            };
+            module.setTags([newTag, ...module.tags]);
             // We also need to ensure that this module can't be released anymore. Thus, we need to clear existing commits
             // as this is the primary driver for determining release status.
             module.clearCommits();
@@ -37074,28 +37200,38 @@ async function deleteReleases(releasesToDelete) {
 /**
  * Fetches all tags from the specified GitHub repository.
  *
- * This function utilizes pagination to retrieve all tags, returning them as an array of strings.
+ * This function utilizes pagination to retrieve all tags with their commit SHAs,
+ * returning them as an array of GitHubTag objects.
  *
- * @param {GetAllTagsOptions} options - Optional configuration for the API request
+ * @param {ListTagsParams} options - Optional configuration for the API request
  * @param {number} options.perPage - Number of items per page (default: 100)
- * @returns {Promise<string[]>} A promise that resolves to an array of tag names.
+ * @returns {Promise<GitHubTag[]>} A promise that resolves to an array of tag objects with name and commitSHA.
  * @throws {RequestError} Throws an error if the request to fetch tags fails.
  */
-async function getAllTags(options = { per_page: 100, page: 1 }) {
+async function getAllTags(options) {
+    const { per_page = 100, page = 1, ...rest } = options ?? {};
     console.time('Elapsed time fetching tags');
     (0,core.startGroup)('Fetching repository tags');
     try {
         const { octokit, repo: { owner, repo }, } = context;
         const tags = [];
         let totalRequests = 0;
+        const paginationOptions = {
+            per_page,
+            page,
+            ...rest,
+        };
         for await (const response of octokit.paginate.iterator(octokit.rest.repos.listTags, {
-            ...options,
+            ...paginationOptions,
             owner,
             repo,
         })) {
             totalRequests++;
             for (const tag of response.data) {
-                tags.push(tag.name);
+                tags.push({
+                    name: tag.name,
+                    commitSHA: tag.commit.sha,
+                });
             }
         }
         (0,core.debug)(`Total page requests: ${totalRequests}`);

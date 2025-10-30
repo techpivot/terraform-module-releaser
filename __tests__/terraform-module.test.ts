@@ -1160,6 +1160,7 @@ describe('TerraformModule', () => {
           expect(TerraformModule.getTerraformModuleNameFromRelativePath('terraform-google-cloud-storage')).toBe(
             'cloud-storage',
           );
+          expect(TerraformModule.getTerraformModuleNameFromRelativePath('terraform-tillo-metadata')).toBe('metadata');
         });
       });
 
