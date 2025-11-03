@@ -64,7 +64,7 @@
     "which": "^5.0.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.3.1",
+    "@biomejs/biome": "^2.3.2",
     "@octokit/types": "^15.0.1",
     "@octokit/webhooks-types": "^7.6.1",
     "@types/js-yaml": "^4.0.9",
