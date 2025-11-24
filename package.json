@@ -81,6 +81,6 @@
     "ts-deepmerge": "^7.0.2",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3",
-    "vitest": "^3.0.5"
+    "vitest": "^4.0.13"
   }
 }
