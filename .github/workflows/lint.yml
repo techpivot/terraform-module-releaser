@@ -55,6 +55,7 @@ jobs:
           VALIDATE_JAVASCRIPT_PRETTIER: false # Using biome
           VALIDATE_JSON_PRETTIER: false # Using biome
           VALIDATE_JSCPD: false # Using biome
+          VALIDATE_MARKDOWN: false # Not needed, using textlint and prettier
           VALIDATE_TERRAFORM_FMT: false # Terraform modules here aren't needed (They're for testing only)
           VALIDATE_TERRAFORM_TFLINT: false # Terraform modules here aren't needed (They're for testing only)
           VALIDATE_TYPESCRIPT_STANDARD: false # Using biome
