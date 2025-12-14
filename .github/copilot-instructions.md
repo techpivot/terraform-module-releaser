@@ -1,118 +1,102 @@
 # Terraform Module Releaser
 
 A GitHub Action written in TypeScript that automates versioning, releases, and documentation for Terraform modules in
-GitHub monorepos. The action creates module-specific Git tags, GitHub releases, pull request comments, and generates
-comprehensive wiki documentation.
+monorepos. Creates module-specific Git tags, GitHub releases, PR comments, and comprehensive wiki documentation.
 
-**Always reference these instructions first and fallback to search or Bash commands only when you encounter unexpected
-information that does not match the info here.**
+## Tech Stack
 
-## Working Effectively
+- **TypeScript 5.9+** with strict mode
+- **Node.js 22+** (see `.node-version`)
+- **Vitest** for testing with V8 coverage
+- **Biome** for linting/formatting (not ESLint/Prettier)
+- **@actions/core** and **@octokit** for GitHub integration
 
-### Bootstrap and Build the Repository
+## Essential Commands
 
-- Install Node.js dependencies: `npm ci --no-fund`
-- Run TypeScript type checking: `npm run typecheck`
-- Lint and format code: `npm run check`
+```bash
+# Format and lint (run before every commit)
+npm run check:fix
+npm run textlint:fix
 
-### Testing
+# Type checking
+npm run typecheck
 
-- Run full test suite: `npm run test` (requires GITHUB_TOKEN for some tests)
-- Run tests in watch mode during development: `npm run test:watch`
-
-## Validation
-
-### Required Environment Variables for Full Testing
-
-- `GITHUB_TOKEN` - Required for tests that interact with GitHub API. Without this, some tests will be skipped with clear
-  error messages.
-
-### External Dependencies
-
-External dependencies like terraform-docs are automatically installed and handled during `npm run test` - no manual
-prerequisite downloads needed. Note that firewall restrictions may block some operations in certain environments.
-
-### Manual Validation Scenarios
-
-- **Always validate TypeScript compilation**: Run `npm run typecheck` to catch type errors.
-- **Always test functionality**: Run `npm run test` to verify operation and functionality.
-- **Validate linting compliance**: Run `npm run check` to ensure code meets style requirements.
-
-## Common Tasks
-
-### Build and Test Workflow
-
-- `npm ci --no-fund` -- Install dependencies
-- `npm run typecheck` -- Type checking
-- `npm run check` -- Lint/formatting code
-- `npm run test` -- Run full test suite
-
-### Development
-
-- Use `npm run test:watch` for continuous testing during development
-- Use `npm run check` to check linting without fixing
-- Always run `npm run check:fix` before committing or the CI (.github/workflows/lint.yml) will fail
-
-### Working with the Action Locally
-
-- The action can be tested locally using the CI workflow configuration in `.github/workflows/ci.yml`
-- Test terraform modules are located in `tf-modules/` directory
-- Use GitHub Codespaces or Dev Containers for a consistent development environment (configuration in `.devcontainer/`)
-
-## Key Repository Structure
-
-```shell
-/home/runner/work/terraform-module-releaser/terraform-module-releaser/
-├── .devcontainer/          # Dev container configuration
-├── .github/workflows/      # CI/CD workflows (ci.yml, test.yml, lint.yml)
-├── __mocks__/              # Test mocks
-├── __tests__/              # Test files (mirror src/ structure)
-├── action.yml              # GitHub Action metadata and inputs
-├── dist/                   # Compiled action bundle (generated)
-├── package.json            # Dependencies and scripts
-├── scripts/                # Utility scripts (changelog.js, parse-modules-test.ts)
-├── src/                    # TypeScript source code
-│   ├── index.ts            # Action entry point
-│   ├── main.ts             # Main action logic
-│   ├── config.ts           # Configuration handling
-│   ├── context.ts          # GitHub Actions context
-│   ├── parser.ts           # Terraform module discovery
-│   ├── terraform-module.ts # Module representation
-│   ├── wiki.ts             # Wiki generation
-│   ├── terraform-docs.ts   # Terraform documentation
-│   ├── releases.ts         # GitHub releases
-│   ├── tags.ts             # Git tags
-│   ├── pull-request.ts     # PR comments
-│   └── types/              # TypeScript type definitions
-├── tf-modules/             # Example Terraform modules for testing
-├── biome.json              # Biome linter/formatter configuration
-├── tsconfig.json           # TypeScript configuration
-└── vitest.config.ts        # Test configuration
+# Testing
+npm run test          # Full test suite (requires GITHUB_TOKEN)
+npm run test:watch    # Watch mode for development
 ```
 
-## Linting and Formatting
+## GITHUB_TOKEN Setup
 
-- Uses **Biome** (not Prettier or ESLint) for TypeScript linting and formatting
-- Configuration in `biome.json`
-- Super Linter runs in CI but defers TypeScript formatting to Biome
+Integration tests require a valid GitHub token. Set it in your environment:
 
-## Testing Framework
+```bash
+# For current session
+export GITHUB_TOKEN="ghp_your_token_here"
 
-- Uses **Vitest** for testing with TypeScript support
-- Configuration in `vitest.config.ts`
-- Tests include both unit tests and integration tests with real GitHub API calls
-- Coverage reporting with V8 provider
-- Path aliases configured: `@/` points to `src/`, `@/tests/` to `__tests__/`
+# Or create .env file (add to .gitignore)
+echo "GITHUB_TOKEN=ghp_your_token_here" > .env
+```
 
-## Known Limitations
+Get a token at: https://github.com/settings/tokens (needs `repo` scope for tests)
 
-- Some tests require `GITHUB_TOKEN` environment variable - they will be skipped with clear messages if not provided
-- Some tests require internet access to download terraform-docs binary
-- The action is designed to run in GitHub Actions environment with appropriate permissions
+## Project Structure
 
-### Troubleshooting
+```
+src/                    # TypeScript source
+├── index.ts           # Entry point
+├── ...                # Core logic and utilities
+└── types/             # Type definitions
+__tests__/             # Tests (mirror src/)
+tf-modules/            # Example Terraform modules for testing
+dist/                  # Compiled output (auto-generated)
+```
 
-- If API tests fail with "GITHUB_TOKEN environment variable must be set": Provide a valid GitHub token or skip
-  integration tests
-- If build fails: Ensure Node.js 22 is installed (specified in `.node-version`)
-- If linting fails: Run `npm run check:fix` to autofix formatting issues
+## Code Standards
+
+**Naming:**
+
+- Functions/variables: `camelCase` (`parseModules`, `tagName`)
+- Types/interfaces: `PascalCase` (`TerraformModule`, `WikiConfig`)
+- Constants: `UPPER_SNAKE_CASE` (`DEFAULT_TAG_VERSION`)
+
+**Style:** Biome enforces all formatting automatically via `npm run check:fix`
+
+## Development Workflow
+
+1. Make changes in `src/`
+2. Run `npm run check:fix && npm run textlint:fix` (autofix formatting)
+3. Run `npm run typecheck` (verify compilation)
+4. Run `npm run test` (ensure tests pass)
+5. Commit using [Conventional Commits](https://www.conventionalcommits.org/) format (e.g., `feat:`, `fix:`, `chore:`)
+
+**Commit Format:** We follow Conventional Commits with semantic versioning. Examples: `feat: add new feature`, `fix: resolve bug`, `chore: update dependencies`
+
+## Testing Notes
+
+- Path aliases: `@/` → `src/`, `@/tests/` → `__tests__/`
+- Some tests download terraform-docs binary (requires internet)
+- Tests without GITHUB_TOKEN are automatically skipped
+- Test modules in `tf-modules/` directory
+
+## Boundaries
+
+✅ **Always do:**
+
+- Run `npm run check:fix` before committing
+- Add/update tests for code changes
+- Follow TypeScript strict mode
+- Use existing patterns in codebase
+
+⚠️ **Ask first:**
+
+- Adding new dependencies
+- Changing build configuration
+- Modifying GitHub Actions workflows
+
+🚫 **Never do:**
+
+- Commit without running lint/tests
+- Modify `dist/` manually (auto-generated)
+- Bypass TypeScript strict checks
+- Use ESLint or Prettier (use Biome only)
