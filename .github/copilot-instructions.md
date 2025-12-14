@@ -6,7 +6,8 @@ monorepos. Creates module-specific Git tags, GitHub releases, PR comments, and c
 ## Tech Stack
 
 - **TypeScript 5.9+** with strict mode
-- **Node.js 22+** for local development (`.node-version`); compiles to Node.js 20+ compatible output
+- **Node.js 24+** for local development (`.node-version`); compiles to Node.js 20+ compatible output for GitHub Actions
+  runtime (action.yml uses `node20`)
 - **Vitest** for testing with V8 coverage
 - **Biome** for linting/formatting (not ESLint/Prettier)
 - **@actions/core** and **@octokit** for GitHub integration
