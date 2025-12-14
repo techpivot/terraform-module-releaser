@@ -38,11 +38,9 @@ export GITHUB_TOKEN="ghp_your_token_here"
 echo "GITHUB_TOKEN=ghp_your_token_here" > .env
 ```
 
-Get a token at: https://github.com/settings/tokens (needs `repo` scope for tests)
-
 ## Project Structure
 
-```
+```bash
 src/                    # TypeScript source
 ├── index.ts           # Entry point
 ├── ...                # Core logic and utilities
