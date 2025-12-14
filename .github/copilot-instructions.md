@@ -6,7 +6,7 @@ monorepos. Creates module-specific Git tags, GitHub releases, PR comments, and c
 ## Tech Stack
 
 - **TypeScript 5.9+** with strict mode
-- **Node.js 22+** (see `.node-version`)
+- **Node.js 22+** for local development (`.node-version`); compiles to Node.js 20+ compatible output
 - **Vitest** for testing with V8 coverage
 - **Biome** for linting/formatting (not ESLint/Prettier)
 - **@actions/core** and **@octokit** for GitHub integration
@@ -58,7 +58,7 @@ dist/                  # Compiled output (auto-generated)
 
 - Functions/variables: `camelCase` (`parseModules`, `tagName`)
 - Types/interfaces: `PascalCase` (`TerraformModule`, `WikiConfig`)
-- Constants: `UPPER_SNAKE_CASE` (`DEFAULT_TAG_VERSION`)
+- Constants: `UPPER_SNAKE_CASE` (`WIKI_HOME_FILENAME`)
 
 **Style:** Biome enforces all formatting automatically via `npm run check:fix`
 
@@ -70,7 +70,8 @@ dist/                  # Compiled output (auto-generated)
 4. Run `npm run test` (ensure tests pass)
 5. Commit using [Conventional Commits](https://www.conventionalcommits.org/) format (e.g., `feat:`, `fix:`, `chore:`)
 
-**Commit Format:** We follow Conventional Commits with semantic versioning. Examples: `feat: add new feature`, `fix: resolve bug`, `chore: update dependencies`
+**Commit Format:** We follow Conventional Commits with semantic versioning. Examples: `feat: add new feature`,
+`fix: resolve bug`, `chore: update dependencies`
 
 ## Testing Notes
 
@@ -99,4 +100,3 @@ dist/                  # Compiled output (auto-generated)
 - Commit without running lint/tests
 - Modify `dist/` manually (auto-generated)
 - Bypass TypeScript strict checks
-- Use ESLint or Prettier (use Biome only)
