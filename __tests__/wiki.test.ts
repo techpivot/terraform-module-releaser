@@ -104,6 +104,22 @@ describe('wiki', async () => {
       expect(endGroup).toHaveBeenCalled();
     });
 
+    it('should skip git init when repository already exists', () => {
+      // Create .git directory to simulate existing repository
+      const gitDir = join(wikiDir, '.git');
+      mkdirSync(gitDir, { recursive: true });
+
+      checkoutWiki();
+
+      const gitCalls = vi.mocked(execFileSync).mock.calls.map((call) => call?.[1]?.join(' ') || '');
+
+      // Verify git init was NOT called
+      expect(gitCalls.some((call) => call.includes('init'))).toBe(false);
+
+      // Verify "Initializing new repository" was NOT logged
+      expect(info).not.toHaveBeenCalledWith('Initializing new repository');
+    });
+
     it('should handle unsetting config extraheader and throwing error accordingly', () => {
       const mockExecFileSync = vi.fn(
         (_command: string, args?: readonly string[] | undefined, _options?: ExecFileSyncOptions) => {

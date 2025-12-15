@@ -221,4 +221,34 @@ describe('context', () => {
       expect(info).not.toHaveBeenCalled();
     });
   });
+
+  describe('clearContextForTesting()', () => {
+    it('should only clear context in test environment', () => {
+      const originalEnv = process.env.NODE_ENV;
+
+      try {
+        // Get initial context
+        const initialContext = getContext();
+        expect(initialContext).toBeDefined();
+
+        // Should clear successfully in test environment
+        clearContextForTesting();
+        const newContext = getContext();
+        expect(newContext).toBeDefined();
+
+        // Temporarily change to non-test environment
+        process.env.NODE_ENV = 'production';
+
+        // Should not clear in non-test environment
+        clearContextForTesting();
+        // Context should still be the same instance
+        const sameContext = getContext();
+        expect(sameContext).toBe(newContext);
+      } finally {
+        // Restore environment
+        process.env.NODE_ENV = originalEnv;
+        clearContextForTesting();
+      }
+    });
+  });
 });

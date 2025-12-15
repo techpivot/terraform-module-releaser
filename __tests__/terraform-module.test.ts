@@ -2038,7 +2038,11 @@ describe('TerraformModule', () => {
       mockMap.set = vi.fn().mockImplementation(() => mockMap);
       mockMap.get = vi.fn().mockReturnValueOnce('1.0.0').mockReturnValueOnce(undefined);
 
-      const mapSpy = vi.spyOn(global, 'Map').mockImplementation(() => mockMap);
+      // Vitest 4 requires function keyword for constructor mocks
+      // biome-ignore lint/complexity/useArrowFunction: Vitest 4 requires function keyword for constructor mocks
+      const mapSpy = vi.spyOn(global, 'Map').mockImplementation(function () {
+        return mockMap;
+      });
 
       expect(() => module.setReleases(releases)).toThrow('Internal error: version not found in map');
 

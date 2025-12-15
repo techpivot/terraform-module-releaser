@@ -323,4 +323,35 @@ describe('config', () => {
       expect(info).not.toHaveBeenCalled();
     });
   });
+
+  describe('clearConfigForTesting()', () => {
+    it('should only clear config in test environment', () => {
+      const originalEnv = process.env.NODE_ENV;
+
+      try {
+        // Set up initial config
+        setupTestInputs({});
+        const initialConfig = getConfig();
+        expect(initialConfig).toBeDefined();
+
+        // Should clear successfully in test environment
+        clearConfigForTesting();
+        const newConfig = getConfig();
+        expect(newConfig).toBeDefined();
+
+        // Temporarily change to non-test environment
+        process.env.NODE_ENV = 'production';
+
+        // Should not clear in non-test environment
+        clearConfigForTesting();
+        // Config should still be the same instance
+        const sameConfig = getConfig();
+        expect(sameConfig).toBe(newConfig);
+      } finally {
+        // Restore environment
+        process.env.NODE_ENV = originalEnv;
+        clearConfigForTesting();
+      }
+    });
+  });
 });

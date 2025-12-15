@@ -52,10 +52,9 @@ export function getPullRequestChangelog(terraformModules: TerraformModule[]): st
 
   for (const terraformModule of terraformModules) {
     if (terraformModule.needsRelease()) {
-      const releaseTag = terraformModule.getReleaseTag();
-      if (releaseTag !== null) {
-        pullRequestChangelog.push(createTerraformModuleChangelogEntry(releaseTag, terraformModule.commitMessages));
-      }
+      // When needsRelease() is true, getReleaseTag() is guaranteed to return a non-null value
+      const releaseTag = terraformModule.getReleaseTag() as string;
+      pullRequestChangelog.push(createTerraformModuleChangelogEntry(releaseTag, terraformModule.commitMessages));
     }
   }
 

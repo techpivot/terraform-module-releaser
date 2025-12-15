@@ -537,15 +537,8 @@ export class TerraformModule {
     }
 
     // Parse the tag using MODULE_TAG_REGEX to extract version components
-    // Note: This will never be null since TerraformModule.isModuleAssociatedWithTag already checks for this;
-    // however, for typing, we'll just recheck.
-    const match = MODULE_TAG_REGEX.exec(tag);
-    /* v8 ignore next 5 */
-    if (!match) {
-      throw new Error(
-        `Invalid tag format: '${tag}'. Expected format: '${this.name}[separator]v#.#.#' or '${this.name}[separator]#.#.#'.`,
-      );
-    }
+    // This will never be null since TerraformModule.isModuleAssociatedWithTag already validates the regex match
+    const match = MODULE_TAG_REGEX.exec(tag) as RegExpExecArray;
 
     // Extract the numerical version components (groups 4, 5, 6 are major.minor.patch)
     const major = match[4];
