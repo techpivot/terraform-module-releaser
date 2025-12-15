@@ -21,36 +21,68 @@ var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (
 }) : function(o, v) {
     o["default"] = v;
 });
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-    __setModuleDefault(result, mod);
-    return result;
-};
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.issue = exports.issueCommand = void 0;
+exports.issueCommand = issueCommand;
+exports.issue = issue;
 const os = __importStar(__nccwpck_require__(857));
 const utils_1 = __nccwpck_require__(302);
 /**
- * Commands
+ * Issues a command to the GitHub Actions runner
+ *
+ * @param command - The command name to issue
+ * @param properties - Additional properties for the command (key-value pairs)
+ * @param message - The message to include with the command
+ * @remarks
+ * This function outputs a specially formatted string to stdout that the Actions
+ * runner interprets as a command. These commands can control workflow behavior,
+ * set outputs, create annotations, mask values, and more.
  *
  * Command Format:
  *   ::name key=value,key=value::message
  *
- * Examples:
- *   ::warning::This is the message
- *   ::set-env name=MY_VAR::some value
+ * @example
+ * ```typescript
+ * // Issue a warning annotation
+ * issueCommand('warning', {}, 'This is a warning message');
+ * // Output: ::warning::This is a warning message
+ *
+ * // Set an environment variable
+ * issueCommand('set-env', { name: 'MY_VAR' }, 'some value');
+ * // Output: ::set-env name=MY_VAR::some value
+ *
+ * // Add a secret mask
+ * issueCommand('add-mask', {}, 'secretValue123');
+ * // Output: ::add-mask::secretValue123
+ * ```
+ *
+ * @internal
+ * This is an internal utility function that powers the public API functions
+ * such as setSecret, warning, error, and exportVariable.
  */
 function issueCommand(command, properties, message) {
     const cmd = new Command(command, properties, message);
     process.stdout.write(cmd.toString() + os.EOL);
 }
-exports.issueCommand = issueCommand;
 function issue(name, message = '') {
     issueCommand(name, {}, message);
 }
-exports.issue = issue;
 const CMD_STRING = '::';
 class Command {
     constructor(command, properties, message) {
@@ -123,13 +155,23 @@ var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (
 }) : function(o, v) {
     o["default"] = v;
 });
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-    __setModuleDefault(result, mod);
-    return result;
-};
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -140,7 +182,28 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.platform = exports.toPlatformPath = exports.toWin32Path = exports.toPosixPath = exports.markdownSummary = exports.summary = exports.getIDToken = exports.getState = exports.saveState = exports.group = exports.endGroup = exports.startGroup = exports.info = exports.notice = exports.warning = exports.error = exports.debug = exports.isDebug = exports.setFailed = exports.setCommandEcho = exports.setOutput = exports.getBooleanInput = exports.getMultilineInput = exports.getInput = exports.addPath = exports.setSecret = exports.exportVariable = exports.ExitCode = void 0;
+exports.platform = exports.toPlatformPath = exports.toWin32Path = exports.toPosixPath = exports.markdownSummary = exports.summary = exports.ExitCode = void 0;
+exports.exportVariable = exportVariable;
+exports.setSecret = setSecret;
+exports.addPath = addPath;
+exports.getInput = getInput;
+exports.getMultilineInput = getMultilineInput;
+exports.getBooleanInput = getBooleanInput;
+exports.setOutput = setOutput;
+exports.setCommandEcho = setCommandEcho;
+exports.setFailed = setFailed;
+exports.isDebug = isDebug;
+exports.debug = debug;
+exports.error = error;
+exports.warning = warning;
+exports.notice = notice;
+exports.info = info;
+exports.startGroup = startGroup;
+exports.endGroup = endGroup;
+exports.group = group;
+exports.saveState = saveState;
+exports.getState = getState;
+exports.getIDToken = getIDToken;
 const command_1 = __nccwpck_require__(4914);
 const file_command_1 = __nccwpck_require__(4753);
 const utils_1 = __nccwpck_require__(302);
@@ -179,15 +242,38 @@ function exportVariable(name, val) {
     }
     (0, command_1.issueCommand)('set-env', { name }, convertedVal);
 }
-exports.exportVariable = exportVariable;
 /**
  * Registers a secret which will get masked from logs
- * @param secret value of the secret
+ *
+ * @param secret - Value of the secret to be masked
+ * @remarks
+ * This function instructs the Actions runner to mask the specified value in any
+ * logs produced during the workflow run. Once registered, the secret value will
+ * be replaced with asterisks (***) whenever it appears in console output, logs,
+ * or error messages.
+ *
+ * This is useful for protecting sensitive information such as:
+ * - API keys
+ * - Access tokens
+ * - Authentication credentials
+ * - URL parameters containing signatures (SAS tokens)
+ *
+ * Note that masking only affects future logs; any previous appearances of the
+ * secret in logs before calling this function will remain unmasked.
+ *
+ * @example
+ * ```typescript
+ * // Register an API token as a secret
+ * const apiToken = "abc123xyz456";
+ * setSecret(apiToken);
+ *
+ * // Now any logs containing this value will show *** instead
+ * console.log(`Using token: ${apiToken}`); // Outputs: "Using token: ***"
+ * ```
  */
 function setSecret(secret) {
     (0, command_1.issueCommand)('add-mask', {}, secret);
 }
-exports.setSecret = setSecret;
 /**
  * Prepends inputPath to the PATH (for this action and future actions)
  * @param inputPath
@@ -202,7 +288,6 @@ function addPath(inputPath) {
     }
     process.env['PATH'] = `${inputPath}${path.delimiter}${process.env['PATH']}`;
 }
-exports.addPath = addPath;
 /**
  * Gets the value of an input.
  * Unless trimWhitespace is set to false in InputOptions, the value is also trimmed.
@@ -222,7 +307,6 @@ function getInput(name, options) {
     }
     return val.trim();
 }
-exports.getInput = getInput;
 /**
  * Gets the values of an multiline input.  Each value is also trimmed.
  *
@@ -240,7 +324,6 @@ function getMultilineInput(name, options) {
     }
     return inputs.map(input => input.trim());
 }
-exports.getMultilineInput = getMultilineInput;
 /**
  * Gets the input value of the boolean type in the YAML 1.2 "core schema" specification.
  * Support boolean input list: `true | True | TRUE | false | False | FALSE` .
@@ -262,7 +345,6 @@ function getBooleanInput(name, options) {
     throw new TypeError(`Input does not meet YAML 1.2 "Core Schema" specification: ${name}\n` +
         `Support boolean input list: \`true | True | TRUE | false | False | FALSE\``);
 }
-exports.getBooleanInput = getBooleanInput;
 /**
  * Sets the value of an output.
  *
@@ -278,7 +360,6 @@ function setOutput(name, value) {
     process.stdout.write(os.EOL);
     (0, command_1.issueCommand)('set-output', { name }, (0, utils_1.toCommandValue)(value));
 }
-exports.setOutput = setOutput;
 /**
  * Enables or disables the echoing of commands into stdout for the rest of the step.
  * Echoing is disabled by default if ACTIONS_STEP_DEBUG is not set.
@@ -287,7 +368,6 @@ exports.setOutput = setOutput;
 function setCommandEcho(enabled) {
     (0, command_1.issue)('echo', enabled ? 'on' : 'off');
 }
-exports.setCommandEcho = setCommandEcho;
 //-----------------------------------------------------------------------
 // Results
 //-----------------------------------------------------------------------
@@ -300,7 +380,6 @@ function setFailed(message) {
     process.exitCode = ExitCode.Failure;
     error(message);
 }
-exports.setFailed = setFailed;
 //-----------------------------------------------------------------------
 // Logging Commands
 //-----------------------------------------------------------------------
@@ -310,7 +389,6 @@ exports.setFailed = setFailed;
 function isDebug() {
     return process.env['RUNNER_DEBUG'] === '1';
 }
-exports.isDebug = isDebug;
 /**
  * Writes debug message to user log
  * @param message debug message
@@ -318,7 +396,6 @@ exports.isDebug = isDebug;
 function debug(message) {
     (0, command_1.issueCommand)('debug', {}, message);
 }
-exports.debug = debug;
 /**
  * Adds an error issue
  * @param message error issue message. Errors will be converted to string via toString()
@@ -327,7 +404,6 @@ exports.debug = debug;
 function error(message, properties = {}) {
     (0, command_1.issueCommand)('error', (0, utils_1.toCommandProperties)(properties), message instanceof Error ? message.toString() : message);
 }
-exports.error = error;
 /**
  * Adds a warning issue
  * @param message warning issue message. Errors will be converted to string via toString()
@@ -336,7 +412,6 @@ exports.error = error;
 function warning(message, properties = {}) {
     (0, command_1.issueCommand)('warning', (0, utils_1.toCommandProperties)(properties), message instanceof Error ? message.toString() : message);
 }
-exports.warning = warning;
 /**
  * Adds a notice issue
  * @param message notice issue message. Errors will be converted to string via toString()
@@ -345,7 +420,6 @@ exports.warning = warning;
 function notice(message, properties = {}) {
     (0, command_1.issueCommand)('notice', (0, utils_1.toCommandProperties)(properties), message instanceof Error ? message.toString() : message);
 }
-exports.notice = notice;
 /**
  * Writes info to log with console.log.
  * @param message info message
@@ -353,7 +427,6 @@ exports.notice = notice;
 function info(message) {
     process.stdout.write(message + os.EOL);
 }
-exports.info = info;
 /**
  * Begin an output group.
  *
@@ -364,14 +437,12 @@ exports.info = info;
 function startGroup(name) {
     (0, command_1.issue)('group', name);
 }
-exports.startGroup = startGroup;
 /**
  * End an output group.
  */
 function endGroup() {
     (0, command_1.issue)('endgroup');
 }
-exports.endGroup = endGroup;
 /**
  * Wrap an asynchronous function call in a group.
  *
@@ -393,7 +464,6 @@ function group(name, fn) {
         return result;
     });
 }
-exports.group = group;
 //-----------------------------------------------------------------------
 // Wrapper action state
 //-----------------------------------------------------------------------
@@ -411,7 +481,6 @@ function saveState(name, value) {
     }
     (0, command_1.issueCommand)('save-state', { name }, (0, utils_1.toCommandValue)(value));
 }
-exports.saveState = saveState;
 /**
  * Gets the value of an state set by this action's main execution.
  *
@@ -421,13 +490,11 @@ exports.saveState = saveState;
 function getState(name) {
     return process.env[`STATE_${name}`] || '';
 }
-exports.getState = getState;
 function getIDToken(aud) {
     return __awaiter(this, void 0, void 0, function* () {
         return yield oidc_utils_1.OidcClient.getIDToken(aud);
     });
 }
-exports.getIDToken = getIDToken;
 /**
  * Summary exports
  */
@@ -474,15 +541,26 @@ var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (
 }) : function(o, v) {
     o["default"] = v;
 });
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-    __setModuleDefault(result, mod);
-    return result;
-};
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.prepareKeyValueMessage = exports.issueFileCommand = void 0;
+exports.issueFileCommand = issueFileCommand;
+exports.prepareKeyValueMessage = prepareKeyValueMessage;
 // We use any as a valid input type
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const crypto = __importStar(__nccwpck_require__(6982));
@@ -501,7 +579,6 @@ function issueFileCommand(command, message) {
         encoding: 'utf8'
     });
 }
-exports.issueFileCommand = issueFileCommand;
 function prepareKeyValueMessage(key, value) {
     const delimiter = `ghadelimiter_${crypto.randomUUID()}`;
     const convertedValue = (0, utils_1.toCommandValue)(value);
@@ -516,7 +593,6 @@ function prepareKeyValueMessage(key, value) {
     }
     return `${key}<<${delimiter}${os.EOL}${convertedValue}${os.EOL}${delimiter}`;
 }
-exports.prepareKeyValueMessage = prepareKeyValueMessage;
 //# sourceMappingURL=file-command.js.map
 
 /***/ }),
@@ -562,8 +638,8 @@ class OidcClient {
         return runtimeUrl;
     }
     static getCall(id_token_url) {
-        var _a;
         return __awaiter(this, void 0, void 0, function* () {
+            var _a;
             const httpclient = OidcClient.createHttpClient();
             const res = yield httpclient
                 .getJson(id_token_url)
@@ -624,15 +700,27 @@ var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (
 }) : function(o, v) {
     o["default"] = v;
 });
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-    __setModuleDefault(result, mod);
-    return result;
-};
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.toPlatformPath = exports.toWin32Path = exports.toPosixPath = void 0;
+exports.toPosixPath = toPosixPath;
+exports.toWin32Path = toWin32Path;
+exports.toPlatformPath = toPlatformPath;
 const path = __importStar(__nccwpck_require__(6928));
 /**
  * toPosixPath converts the given path to the posix form. On Windows, \\ will be
@@ -644,7 +732,6 @@ const path = __importStar(__nccwpck_require__(6928));
 function toPosixPath(pth) {
     return pth.replace(/[\\]/g, '/');
 }
-exports.toPosixPath = toPosixPath;
 /**
  * toWin32Path converts the given path to the win32 form. On Linux, / will be
  * replaced with \\.
@@ -655,7 +742,6 @@ exports.toPosixPath = toPosixPath;
 function toWin32Path(pth) {
     return pth.replace(/[/]/g, '\\');
 }
-exports.toWin32Path = toWin32Path;
 /**
  * toPlatformPath converts the given path to a platform-specific path. It does
  * this by replacing instances of / and \ with the platform-specific path
@@ -667,7 +753,6 @@ exports.toWin32Path = toWin32Path;
 function toPlatformPath(pth) {
     return pth.replace(/[/\\]/g, path.sep);
 }
-exports.toPlatformPath = toPlatformPath;
 //# sourceMappingURL=path-utils.js.map
 
 /***/ }),
@@ -692,13 +777,23 @@ var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (
 }) : function(o, v) {
     o["default"] = v;
 });
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-    __setModuleDefault(result, mod);
-    return result;
-};
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -712,7 +807,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.getDetails = exports.isLinux = exports.isMacOS = exports.isWindows = exports.arch = exports.platform = void 0;
+exports.isLinux = exports.isMacOS = exports.isWindows = exports.arch = exports.platform = void 0;
+exports.getDetails = getDetails;
 const os_1 = __importDefault(__nccwpck_require__(857));
 const exec = __importStar(__nccwpck_require__(5236));
 const getWindowsInfo = () => __awaiter(void 0, void 0, void 0, function* () {
@@ -767,7 +863,6 @@ function getDetails() {
             isLinux: exports.isLinux });
     });
 }
-exports.getDetails = getDetails;
 //# sourceMappingURL=platform.js.map
 
 /***/ }),
@@ -1068,7 +1163,8 @@ exports.summary = _summary;
 // We use any as a valid input type
 /* eslint-disable @typescript-eslint/no-explicit-any */
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.toCommandProperties = exports.toCommandValue = void 0;
+exports.toCommandValue = toCommandValue;
+exports.toCommandProperties = toCommandProperties;
 /**
  * Sanitizes an input into a string so it can be passed into issueCommand safely
  * @param input input to sanitize into a string
@@ -1082,7 +1178,6 @@ function toCommandValue(input) {
     }
     return JSON.stringify(input);
 }
-exports.toCommandValue = toCommandValue;
 /**
  *
  * @param annotationProperties
@@ -1102,7 +1197,6 @@ function toCommandProperties(annotationProperties) {
         endColumn: annotationProperties.endColumn
     };
 }
-exports.toCommandProperties = toCommandProperties;
 //# sourceMappingURL=utils.js.map
 
 /***/ }),
@@ -1113,7 +1207,11 @@ exports.toCommandProperties = toCommandProperties;
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
-    Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
 }) : (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
     o[k2] = m[k];
@@ -1123,13 +1221,23 @@ var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (
 }) : function(o, v) {
     o["default"] = v;
 });
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (k !== "default" && Object.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-    __setModuleDefault(result, mod);
-    return result;
-};
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -1140,7 +1248,8 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.getExecOutput = exports.exec = void 0;
+exports.exec = exec;
+exports.getExecOutput = getExecOutput;
 const string_decoder_1 = __nccwpck_require__(3193);
 const tr = __importStar(__nccwpck_require__(6665));
 /**
@@ -1166,7 +1275,6 @@ function exec(commandLine, args, options) {
         return runner.exec();
     });
 }
-exports.exec = exec;
 /**
  * Exec a command and get the output.
  * Output will be streamed to the live console.
@@ -1178,8 +1286,8 @@ exports.exec = exec;
  * @returns   Promise<ExecOutput>   exit code, stdout, and stderr
  */
 function getExecOutput(commandLine, args, options) {
-    var _a, _b;
     return __awaiter(this, void 0, void 0, function* () {
+        var _a, _b;
         let stdout = '';
         let stderr = '';
         //Using string decoder covers the case where a mult-byte character is split
@@ -1211,7 +1319,6 @@ function getExecOutput(commandLine, args, options) {
         };
     });
 }
-exports.getExecOutput = getExecOutput;
 //# sourceMappingURL=exec.js.map
 
 /***/ }),
@@ -1222,7 +1329,11 @@ exports.getExecOutput = getExecOutput;
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
-    Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
 }) : (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
     o[k2] = m[k];
@@ -1232,13 +1343,23 @@ var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (
 }) : function(o, v) {
     o["default"] = v;
 });
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (k !== "default" && Object.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-    __setModuleDefault(result, mod);
-    return result;
-};
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -1249,7 +1370,8 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.argStringToArray = exports.ToolRunner = void 0;
+exports.ToolRunner = void 0;
+exports.argStringToArray = argStringToArray;
 const os = __importStar(__nccwpck_require__(857));
 const events = __importStar(__nccwpck_require__(4434));
 const child = __importStar(__nccwpck_require__(5317));
@@ -1481,10 +1603,7 @@ class ToolRunner extends events.EventEmitter {
             }
         }
         reverse += '"';
-        return reverse
-            .split('')
-            .reverse()
-            .join('');
+        return reverse.split('').reverse().join('');
     }
     _uvQuoteCmdArg(arg) {
         // Tool runner wraps child_process.spawn() and needs to apply the same quoting as
@@ -1560,10 +1679,7 @@ class ToolRunner extends events.EventEmitter {
             }
         }
         reverse += '"';
-        return reverse
-            .split('')
-            .reverse()
-            .join('');
+        return reverse.split('').reverse().join('');
     }
     _cloneExecOptions(options) {
         options = options || {};
@@ -1767,7 +1883,6 @@ function argStringToArray(argString) {
     }
     return args;
 }
-exports.argStringToArray = argStringToArray;
 class ExecState extends events.EventEmitter {
     constructor(options, toolPath) {
         super();
@@ -1796,7 +1911,7 @@ class ExecState extends events.EventEmitter {
             this._setResult();
         }
         else if (this.processExited) {
-            this.timeout = timers_1.setTimeout(ExecState.HandleTimeout, this.delay, this);
+            this.timeout = (0, timers_1.setTimeout)(ExecState.HandleTimeout, this.delay, this);
         }
     }
     _debug(message) {
@@ -1829,8 +1944,7 @@ class ExecState extends events.EventEmitter {
             return;
         }
         if (!state.processClosed && state.processExited) {
-            const message = `The STDIO streams did not close within ${state.delay /
-                1000} seconds of the exit event from process '${state.toolPath}'. This may indicate a child process inherited the STDIO streams and has not yet exited.`;
+            const message = `The STDIO streams did not close within ${state.delay / 1000} seconds of the exit event from process '${state.toolPath}'. This may indicate a child process inherited the STDIO streams and has not yet exited.`;
             state._debug(message);
         }
         state._setResult();
@@ -1948,13 +2062,23 @@ var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (
 }) : function(o, v) {
     o["default"] = v;
 });
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-    __setModuleDefault(result, mod);
-    return result;
-};
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -1965,7 +2089,9 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.HttpClient = exports.isHttps = exports.HttpClientResponse = exports.HttpClientError = exports.getProxyUrl = exports.MediaTypes = exports.Headers = exports.HttpCodes = void 0;
+exports.HttpClient = exports.HttpClientResponse = exports.HttpClientError = exports.MediaTypes = exports.Headers = exports.HttpCodes = void 0;
+exports.getProxyUrl = getProxyUrl;
+exports.isHttps = isHttps;
 const http = __importStar(__nccwpck_require__(8611));
 const https = __importStar(__nccwpck_require__(5692));
 const pm = __importStar(__nccwpck_require__(4988));
@@ -2018,7 +2144,6 @@ function getProxyUrl(serverUrl) {
     const proxyUrl = pm.getProxyUrl(new URL(serverUrl));
     return proxyUrl ? proxyUrl.href : '';
 }
-exports.getProxyUrl = getProxyUrl;
 const HttpRedirectCodes = [
     HttpCodes.MovedPermanently,
     HttpCodes.ResourceMoved,
@@ -2079,7 +2204,6 @@ function isHttps(requestUrl) {
     const parsedUrl = new URL(requestUrl);
     return parsedUrl.protocol === 'https:';
 }
-exports.isHttps = isHttps;
 class HttpClient {
     constructor(userAgent, handlers, requestOptions) {
         this._ignoreSslError = false;
@@ -2162,36 +2286,39 @@ class HttpClient {
      * Gets a typed object from an endpoint
      * Be aware that not found returns a null.  Other errors (4xx, 5xx) reject the promise
      */
-    getJson(requestUrl, additionalHeaders = {}) {
-        return __awaiter(this, void 0, void 0, function* () {
+    getJson(requestUrl_1) {
+        return __awaiter(this, arguments, void 0, function* (requestUrl, additionalHeaders = {}) {
             additionalHeaders[Headers.Accept] = this._getExistingOrDefaultHeader(additionalHeaders, Headers.Accept, MediaTypes.ApplicationJson);
             const res = yield this.get(requestUrl, additionalHeaders);
             return this._processResponse(res, this.requestOptions);
         });
     }
-    postJson(requestUrl, obj, additionalHeaders = {}) {
-        return __awaiter(this, void 0, void 0, function* () {
+    postJson(requestUrl_1, obj_1) {
+        return __awaiter(this, arguments, void 0, function* (requestUrl, obj, additionalHeaders = {}) {
             const data = JSON.stringify(obj, null, 2);
             additionalHeaders[Headers.Accept] = this._getExistingOrDefaultHeader(additionalHeaders, Headers.Accept, MediaTypes.ApplicationJson);
-            additionalHeaders[Headers.ContentType] = this._getExistingOrDefaultHeader(additionalHeaders, Headers.ContentType, MediaTypes.ApplicationJson);
+            additionalHeaders[Headers.ContentType] =
+                this._getExistingOrDefaultContentTypeHeader(additionalHeaders, MediaTypes.ApplicationJson);
             const res = yield this.post(requestUrl, data, additionalHeaders);
             return this._processResponse(res, this.requestOptions);
         });
     }
-    putJson(requestUrl, obj, additionalHeaders = {}) {
-        return __awaiter(this, void 0, void 0, function* () {
+    putJson(requestUrl_1, obj_1) {
+        return __awaiter(this, arguments, void 0, function* (requestUrl, obj, additionalHeaders = {}) {
             const data = JSON.stringify(obj, null, 2);
             additionalHeaders[Headers.Accept] = this._getExistingOrDefaultHeader(additionalHeaders, Headers.Accept, MediaTypes.ApplicationJson);
-            additionalHeaders[Headers.ContentType] = this._getExistingOrDefaultHeader(additionalHeaders, Headers.ContentType, MediaTypes.ApplicationJson);
+            additionalHeaders[Headers.ContentType] =
+                this._getExistingOrDefaultContentTypeHeader(additionalHeaders, MediaTypes.ApplicationJson);
             const res = yield this.put(requestUrl, data, additionalHeaders);
             return this._processResponse(res, this.requestOptions);
         });
     }
-    patchJson(requestUrl, obj, additionalHeaders = {}) {
-        return __awaiter(this, void 0, void 0, function* () {
+    patchJson(requestUrl_1, obj_1) {
+        return __awaiter(this, arguments, void 0, function* (requestUrl, obj, additionalHeaders = {}) {
             const data = JSON.stringify(obj, null, 2);
             additionalHeaders[Headers.Accept] = this._getExistingOrDefaultHeader(additionalHeaders, Headers.Accept, MediaTypes.ApplicationJson);
-            additionalHeaders[Headers.ContentType] = this._getExistingOrDefaultHeader(additionalHeaders, Headers.ContentType, MediaTypes.ApplicationJson);
+            additionalHeaders[Headers.ContentType] =
+                this._getExistingOrDefaultContentTypeHeader(additionalHeaders, MediaTypes.ApplicationJson);
             const res = yield this.patch(requestUrl, data, additionalHeaders);
             return this._processResponse(res, this.requestOptions);
         });
@@ -2420,12 +2547,73 @@ class HttpClient {
         }
         return lowercaseKeys(headers || {});
     }
+    /**
+     * Gets an existing header value or returns a default.
+     * Handles converting number header values to strings since HTTP headers must be strings.
+     * Note: This returns string | string[] since some headers can have multiple values.
+     * For headers that must always be a single string (like Content-Type), use the
+     * specialized _getExistingOrDefaultContentTypeHeader method instead.
+     */
     _getExistingOrDefaultHeader(additionalHeaders, header, _default) {
         let clientHeader;
         if (this.requestOptions && this.requestOptions.headers) {
-            clientHeader = lowercaseKeys(this.requestOptions.headers)[header];
+            const headerValue = lowercaseKeys(this.requestOptions.headers)[header];
+            if (headerValue) {
+                clientHeader =
+                    typeof headerValue === 'number' ? headerValue.toString() : headerValue;
+            }
         }
-        return additionalHeaders[header] || clientHeader || _default;
+        const additionalValue = additionalHeaders[header];
+        if (additionalValue !== undefined) {
+            return typeof additionalValue === 'number'
+                ? additionalValue.toString()
+                : additionalValue;
+        }
+        if (clientHeader !== undefined) {
+            return clientHeader;
+        }
+        return _default;
+    }
+    /**
+     * Specialized version of _getExistingOrDefaultHeader for Content-Type header.
+     * Always returns a single string (not an array) since Content-Type should be a single value.
+     * Converts arrays to comma-separated strings and numbers to strings to ensure type safety.
+     * This was split from _getExistingOrDefaultHeader to provide stricter typing for callers
+     * that assign the result to places expecting a string (e.g., additionalHeaders[Headers.ContentType]).
+     */
+    _getExistingOrDefaultContentTypeHeader(additionalHeaders, _default) {
+        let clientHeader;
+        if (this.requestOptions && this.requestOptions.headers) {
+            const headerValue = lowercaseKeys(this.requestOptions.headers)[Headers.ContentType];
+            if (headerValue) {
+                if (typeof headerValue === 'number') {
+                    clientHeader = String(headerValue);
+                }
+                else if (Array.isArray(headerValue)) {
+                    clientHeader = headerValue.join(', ');
+                }
+                else {
+                    clientHeader = headerValue;
+                }
+            }
+        }
+        const additionalValue = additionalHeaders[Headers.ContentType];
+        // Return the first non-undefined value, converting numbers or arrays to strings if necessary
+        if (additionalValue !== undefined) {
+            if (typeof additionalValue === 'number') {
+                return String(additionalValue);
+            }
+            else if (Array.isArray(additionalValue)) {
+                return additionalValue.join(', ');
+            }
+            else {
+                return additionalValue;
+            }
+        }
+        if (clientHeader !== undefined) {
+            return clientHeader;
+        }
+        return _default;
     }
     _getAgent(parsedUrl) {
         let agent;
@@ -2590,7 +2778,8 @@ const lowercaseKeys = (obj) => Object.keys(obj).reduce((c, k) => ((c[k.toLowerCa
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.checkBypass = exports.getProxyUrl = void 0;
+exports.getProxyUrl = getProxyUrl;
+exports.checkBypass = checkBypass;
 function getProxyUrl(reqUrl) {
     const usingSsl = reqUrl.protocol === 'https:';
     if (checkBypass(reqUrl)) {
@@ -2617,7 +2806,6 @@ function getProxyUrl(reqUrl) {
         return undefined;
     }
 }
-exports.getProxyUrl = getProxyUrl;
 function checkBypass(reqUrl) {
     if (!reqUrl.hostname) {
         return false;
@@ -2661,7 +2849,6 @@ function checkBypass(reqUrl) {
     }
     return false;
 }
-exports.checkBypass = checkBypass;
 function isLoopbackAddress(host) {
     const hostLower = host.toLowerCase();
     return (hostLower === 'localhost' ||
@@ -2692,7 +2879,11 @@ class DecodedURL extends URL {
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
-    Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
 }) : (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
     o[k2] = m[k];
@@ -2702,13 +2893,23 @@ var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (
 }) : function(o, v) {
     o["default"] = v;
 });
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (k !== "default" && Object.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-    __setModuleDefault(result, mod);
-    return result;
-};
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -2720,21 +2921,49 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 var _a;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.getCmdPath = exports.tryGetExecutablePath = exports.isRooted = exports.isDirectory = exports.exists = exports.READONLY = exports.UV_FS_O_EXLOCK = exports.IS_WINDOWS = exports.unlink = exports.symlink = exports.stat = exports.rmdir = exports.rm = exports.rename = exports.readlink = exports.readdir = exports.open = exports.mkdir = exports.lstat = exports.copyFile = exports.chmod = void 0;
+exports.READONLY = exports.UV_FS_O_EXLOCK = exports.IS_WINDOWS = exports.unlink = exports.symlink = exports.stat = exports.rmdir = exports.rm = exports.rename = exports.readdir = exports.open = exports.mkdir = exports.lstat = exports.copyFile = exports.chmod = void 0;
+exports.readlink = readlink;
+exports.exists = exists;
+exports.isDirectory = isDirectory;
+exports.isRooted = isRooted;
+exports.tryGetExecutablePath = tryGetExecutablePath;
+exports.getCmdPath = getCmdPath;
 const fs = __importStar(__nccwpck_require__(9896));
 const path = __importStar(__nccwpck_require__(6928));
 _a = fs.promises
 // export const {open} = 'fs'
-, exports.chmod = _a.chmod, exports.copyFile = _a.copyFile, exports.lstat = _a.lstat, exports.mkdir = _a.mkdir, exports.open = _a.open, exports.readdir = _a.readdir, exports.readlink = _a.readlink, exports.rename = _a.rename, exports.rm = _a.rm, exports.rmdir = _a.rmdir, exports.stat = _a.stat, exports.symlink = _a.symlink, exports.unlink = _a.unlink;
+, exports.chmod = _a.chmod, exports.copyFile = _a.copyFile, exports.lstat = _a.lstat, exports.mkdir = _a.mkdir, exports.open = _a.open, exports.readdir = _a.readdir, exports.rename = _a.rename, exports.rm = _a.rm, exports.rmdir = _a.rmdir, exports.stat = _a.stat, exports.symlink = _a.symlink, exports.unlink = _a.unlink;
 // export const {open} = 'fs'
 exports.IS_WINDOWS = process.platform === 'win32';
+/**
+ * Custom implementation of readlink to ensure Windows junctions
+ * maintain trailing backslash for backward compatibility with Node.js < 24
+ *
+ * In Node.js 20, Windows junctions (directory symlinks) always returned paths
+ * with trailing backslashes. Node.js 24 removed this behavior, which breaks
+ * code that relied on this format for path operations.
+ *
+ * This implementation restores the Node 20 behavior by adding a trailing
+ * backslash to all junction results on Windows.
+ */
+function readlink(fsPath) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const result = yield fs.promises.readlink(fsPath);
+        // On Windows, restore Node 20 behavior: add trailing backslash to all results
+        // since junctions on Windows are always directory links
+        if (exports.IS_WINDOWS && !result.endsWith('\\')) {
+            return `${result}\\`;
+        }
+        return result;
+    });
+}
 // See https://github.com/nodejs/node/blob/d0153aee367422d0858105abec186da4dff0a0c5/deps/uv/include/uv/win.h#L691
 exports.UV_FS_O_EXLOCK = 0x10000000;
 exports.READONLY = fs.constants.O_RDONLY;
 function exists(fsPath) {
     return __awaiter(this, void 0, void 0, function* () {
         try {
-            yield exports.stat(fsPath);
+            yield (0, exports.stat)(fsPath);
         }
         catch (err) {
             if (err.code === 'ENOENT') {
@@ -2745,14 +2974,12 @@ function exists(fsPath) {
         return true;
     });
 }
-exports.exists = exists;
-function isDirectory(fsPath, useStat = false) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const stats = useStat ? yield exports.stat(fsPath) : yield exports.lstat(fsPath);
+function isDirectory(fsPath_1) {
+    return __awaiter(this, arguments, void 0, function* (fsPath, useStat = false) {
+        const stats = useStat ? yield (0, exports.stat)(fsPath) : yield (0, exports.lstat)(fsPath);
         return stats.isDirectory();
     });
 }
-exports.isDirectory = isDirectory;
 /**
  * On OSX/Linux, true if path starts with '/'. On Windows, true for paths like:
  * \, \hello, \\hello\share, C:, and C:\hello (and corresponding alternate separator cases).
@@ -2768,7 +2995,6 @@ function isRooted(p) {
     }
     return p.startsWith('/');
 }
-exports.isRooted = isRooted;
 /**
  * Best effort attempt to determine whether a file exists and is executable.
  * @param filePath    file path to check
@@ -2780,7 +3006,7 @@ function tryGetExecutablePath(filePath, extensions) {
         let stats = undefined;
         try {
             // test file exists
-            stats = yield exports.stat(filePath);
+            stats = yield (0, exports.stat)(filePath);
         }
         catch (err) {
             if (err.code !== 'ENOENT') {
@@ -2808,7 +3034,7 @@ function tryGetExecutablePath(filePath, extensions) {
             filePath = originalFilePath + extension;
             stats = undefined;
             try {
-                stats = yield exports.stat(filePath);
+                stats = yield (0, exports.stat)(filePath);
             }
             catch (err) {
                 if (err.code !== 'ENOENT') {
@@ -2822,7 +3048,7 @@ function tryGetExecutablePath(filePath, extensions) {
                     try {
                         const directory = path.dirname(filePath);
                         const upperName = path.basename(filePath).toUpperCase();
-                        for (const actualName of yield exports.readdir(directory)) {
+                        for (const actualName of yield (0, exports.readdir)(directory)) {
                             if (upperName === actualName.toUpperCase()) {
                                 filePath = path.join(directory, actualName);
                                 break;
@@ -2845,7 +3071,6 @@ function tryGetExecutablePath(filePath, extensions) {
         return '';
     });
 }
-exports.tryGetExecutablePath = tryGetExecutablePath;
 function normalizeSeparators(p) {
     p = p || '';
     if (exports.IS_WINDOWS) {
@@ -2862,15 +3087,18 @@ function normalizeSeparators(p) {
 //   256 128 64 32 16 8 4 2 1
 function isUnixExecutable(stats) {
     return ((stats.mode & 1) > 0 ||
-        ((stats.mode & 8) > 0 && stats.gid === process.getgid()) ||
-        ((stats.mode & 64) > 0 && stats.uid === process.getuid()));
+        ((stats.mode & 8) > 0 &&
+            process.getgid !== undefined &&
+            stats.gid === process.getgid()) ||
+        ((stats.mode & 64) > 0 &&
+            process.getuid !== undefined &&
+            stats.uid === process.getuid()));
 }
 // Get the path of cmd.exe in windows
 function getCmdPath() {
     var _a;
     return (_a = process.env['COMSPEC']) !== null && _a !== void 0 ? _a : `cmd.exe`;
 }
-exports.getCmdPath = getCmdPath;
 //# sourceMappingURL=io-util.js.map
 
 /***/ }),
@@ -2881,7 +3109,11 @@ exports.getCmdPath = getCmdPath;
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
-    Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
 }) : (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
     o[k2] = m[k];
@@ -2891,13 +3123,23 @@ var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (
 }) : function(o, v) {
     o["default"] = v;
 });
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (k !== "default" && Object.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-    __setModuleDefault(result, mod);
-    return result;
-};
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -2908,7 +3150,12 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.findInPath = exports.which = exports.mkdirP = exports.rmRF = exports.mv = exports.cp = void 0;
+exports.cp = cp;
+exports.mv = mv;
+exports.rmRF = rmRF;
+exports.mkdirP = mkdirP;
+exports.which = which;
+exports.findInPath = findInPath;
 const assert_1 = __nccwpck_require__(2613);
 const path = __importStar(__nccwpck_require__(6928));
 const ioUtil = __importStar(__nccwpck_require__(5207));
@@ -2920,8 +3167,8 @@ const ioUtil = __importStar(__nccwpck_require__(5207));
  * @param     dest      destination path
  * @param     options   optional. See CopyOptions.
  */
-function cp(source, dest, options = {}) {
-    return __awaiter(this, void 0, void 0, function* () {
+function cp(source_1, dest_1) {
+    return __awaiter(this, arguments, void 0, function* (source, dest, options = {}) {
         const { force, recursive, copySourceDirectory } = readCopyOptions(options);
         const destStat = (yield ioUtil.exists(dest)) ? yield ioUtil.stat(dest) : null;
         // Dest is an existing file, but not forcing
@@ -2953,7 +3200,6 @@ function cp(source, dest, options = {}) {
         }
     });
 }
-exports.cp = cp;
 /**
  * Moves a path.
  *
@@ -2961,8 +3207,8 @@ exports.cp = cp;
  * @param     dest      destination path
  * @param     options   optional. See MoveOptions.
  */
-function mv(source, dest, options = {}) {
-    return __awaiter(this, void 0, void 0, function* () {
+function mv(source_1, dest_1) {
+    return __awaiter(this, arguments, void 0, function* (source, dest, options = {}) {
         if (yield ioUtil.exists(dest)) {
             let destExists = true;
             if (yield ioUtil.isDirectory(dest)) {
@@ -2983,7 +3229,6 @@ function mv(source, dest, options = {}) {
         yield ioUtil.rename(source, dest);
     });
 }
-exports.mv = mv;
 /**
  * Remove a path recursively with force
  *
@@ -3012,7 +3257,6 @@ function rmRF(inputPath) {
         }
     });
 }
-exports.rmRF = rmRF;
 /**
  * Make a directory.  Creates the full path with folders in between
  * Will throw if it fails
@@ -3022,11 +3266,10 @@ exports.rmRF = rmRF;
  */
 function mkdirP(fsPath) {
     return __awaiter(this, void 0, void 0, function* () {
-        assert_1.ok(fsPath, 'a path argument must be provided');
+        (0, assert_1.ok)(fsPath, 'a path argument must be provided');
         yield ioUtil.mkdir(fsPath, { recursive: true });
     });
 }
-exports.mkdirP = mkdirP;
 /**
  * Returns path of a tool had the tool actually been invoked.  Resolves via paths.
  * If you check and the tool does not exist, it will throw.
@@ -3060,7 +3303,6 @@ function which(tool, check) {
         return '';
     });
 }
-exports.which = which;
 /**
  * Returns a list of all occurrences of the given tool on the system path.
  *
@@ -3117,7 +3359,6 @@ function findInPath(tool) {
         return matches;
     });
 }
-exports.findInPath = findInPath;
 function readCopyOptions(options) {
     const force = options.force == null ? true : options.force;
     const recursive = Boolean(options.recursive);
@@ -28079,6 +28320,12 @@ const WIKI_TITLE_REPLACEMENTS = {
     '/': '∕', // Replace forward slash with a visually similar division slash (U+2215)
     '-': '‒', // Replace hyphen with figure dash (U+2012) for better display and to avoid GitHub's auto-movement
 };
+/**
+ * Module reference mode constants - controls how module examples reference versions
+ */
+const MODULE_REF_MODE_TAG = 'tag';
+const MODULE_REF_MODE_SHA = 'sha';
+const ALLOWED_MODULE_REF_MODES = [MODULE_REF_MODE_TAG, MODULE_REF_MODE_SHA];
 
 // EXTERNAL MODULE: ./node_modules/@actions/core/lib/core.js
 var core = __nccwpck_require__(7484);
@@ -28136,6 +28383,7 @@ const ACTION_INPUTS = {
     github_token: requiredString('githubToken'),
     'tag-directory-separator': requiredString('tagDirectorySeparator'),
     'use-version-prefix': requiredBoolean('useVersionPrefix'),
+    'module-ref-mode': requiredString('moduleRefMode'),
 };
 /**
  * Creates a config object by reading inputs using GitHub Actions API and converting them
@@ -28249,6 +28497,10 @@ function initializeConfig() {
         if (!configInstance.useVersionPrefix && configInstance.defaultFirstTag.startsWith('v')) {
             configInstance.defaultFirstTag = configInstance.defaultFirstTag.substring(1);
         }
+        // Validate module ref mode
+        if (!ALLOWED_MODULE_REF_MODES.includes(configInstance.moduleRefMode)) {
+            throw new TypeError(`Invalid module_ref_mode '${configInstance.moduleRefMode}'. Must be one of: ${ALLOWED_MODULE_REF_MODES.join(', ')}`);
+        }
         (0,core.info)(`Major Keywords: ${configInstance.majorKeywords.join(', ')}`);
         (0,core.info)(`Minor Keywords: ${configInstance.minorKeywords.join(', ')}`);
         (0,core.info)(`Patch Keywords: ${configInstance.patchKeywords.join(', ')}`);
@@ -28263,6 +28515,7 @@ function initializeConfig() {
         (0,core.info)(`Use SSH Source Format: ${configInstance.useSSHSourceFormat}`);
         (0,core.info)(`Tag Directory Separator: ${configInstance.tagDirectorySeparator}`);
         (0,core.info)(`Use Version Prefix: ${configInstance.useVersionPrefix}`);
+        (0,core.info)(`Module Ref Mode: ${configInstance.moduleRefMode}`);
         return configInstance;
     }
     finally {
@@ -28806,12 +29059,13 @@ class RequestError extends Error {
    */
   response;
   constructor(message, statusCode, options) {
-    super(message);
+    super(message, { cause: options.cause });
     this.name = "HttpError";
     this.status = Number.parseInt(statusCode);
     if (Number.isNaN(this.status)) {
       this.status = 0;
     }
+    /* v8 ignore else -- @preserve -- Bug with vitest coverage where it sees an else branch that doesn't exist */
     if ("response" in options) {
       this.response = options.response;
     }
@@ -28838,7 +29092,7 @@ class RequestError extends Error {
 
 
 // pkg/dist-src/version.js
-var dist_bundle_VERSION = "10.0.3";
+var dist_bundle_VERSION = "10.0.6";
 
 // pkg/dist-src/defaults.js
 var defaults_default = {
@@ -29209,7 +29463,7 @@ var createTokenAuth = function createTokenAuth2(token) {
 
 
 ;// CONCATENATED MODULE: ./node_modules/@octokit/core/dist-src/version.js
-const version_VERSION = "7.0.4";
+const version_VERSION = "7.0.6";
 
 
 ;// CONCATENATED MODULE: ./node_modules/@octokit/core/dist-src/index.js
@@ -29482,7 +29736,9 @@ var paginatingEndpoints = (/* unused pure expression or super */ null && ([
   "GET /enterprises/{enterprise}/code-security/configurations",
   "GET /enterprises/{enterprise}/code-security/configurations/{configuration_id}/repositories",
   "GET /enterprises/{enterprise}/dependabot/alerts",
-  "GET /enterprises/{enterprise}/secret-scanning/alerts",
+  "GET /enterprises/{enterprise}/teams",
+  "GET /enterprises/{enterprise}/teams/{enterprise-team}/memberships",
+  "GET /enterprises/{enterprise}/teams/{enterprise-team}/organizations",
   "GET /events",
   "GET /gists",
   "GET /gists/public",
@@ -29500,9 +29756,11 @@ var paginatingEndpoints = (/* unused pure expression or super */ null && ([
   "GET /networks/{owner}/{repo}/events",
   "GET /notifications",
   "GET /organizations",
+  "GET /organizations/{org}/dependabot/repository-access",
   "GET /orgs/{org}/actions/cache/usage-by-repository",
   "GET /orgs/{org}/actions/hosted-runners",
   "GET /orgs/{org}/actions/permissions/repositories",
+  "GET /orgs/{org}/actions/permissions/self-hosted-runners/repositories",
   "GET /orgs/{org}/actions/runner-groups",
   "GET /orgs/{org}/actions/runner-groups/{runner_group_id}/hosted-runners",
   "GET /orgs/{org}/actions/runner-groups/{runner_group_id}/repositories",
@@ -29512,6 +29770,7 @@ var paginatingEndpoints = (/* unused pure expression or super */ null && ([
   "GET /orgs/{org}/actions/secrets/{secret_name}/repositories",
   "GET /orgs/{org}/actions/variables",
   "GET /orgs/{org}/actions/variables/{name}/repositories",
+  "GET /orgs/{org}/attestations/repositories",
   "GET /orgs/{org}/attestations/{subject_digest}",
   "GET /orgs/{org}/blocks",
   "GET /orgs/{org}/campaigns",
@@ -29552,6 +29811,9 @@ var paginatingEndpoints = (/* unused pure expression or super */ null && ([
   "GET /orgs/{org}/personal-access-tokens/{pat_id}/repositories",
   "GET /orgs/{org}/private-registries",
   "GET /orgs/{org}/projects",
+  "GET /orgs/{org}/projectsV2",
+  "GET /orgs/{org}/projectsV2/{project_number}/fields",
+  "GET /orgs/{org}/projectsV2/{project_number}/items",
   "GET /orgs/{org}/properties/values",
   "GET /orgs/{org}/public_members",
   "GET /orgs/{org}/repos",
@@ -29560,6 +29822,7 @@ var paginatingEndpoints = (/* unused pure expression or super */ null && ([
   "GET /orgs/{org}/rulesets/{ruleset_id}/history",
   "GET /orgs/{org}/secret-scanning/alerts",
   "GET /orgs/{org}/security-advisories",
+  "GET /orgs/{org}/settings/immutable-releases/repositories",
   "GET /orgs/{org}/settings/network-configurations",
   "GET /orgs/{org}/team/{team_slug}/copilot/metrics",
   "GET /orgs/{org}/teams",
@@ -29572,9 +29835,7 @@ var paginatingEndpoints = (/* unused pure expression or super */ null && ([
   "GET /orgs/{org}/teams/{team_slug}/projects",
   "GET /orgs/{org}/teams/{team_slug}/repos",
   "GET /orgs/{org}/teams/{team_slug}/teams",
-  "GET /projects/columns/{column_id}/cards",
   "GET /projects/{project_id}/collaborators",
-  "GET /projects/{project_id}/columns",
   "GET /repos/{owner}/{repo}/actions/artifacts",
   "GET /repos/{owner}/{repo}/actions/caches",
   "GET /repos/{owner}/{repo}/actions/organization-secrets",
@@ -29632,6 +29893,8 @@ var paginatingEndpoints = (/* unused pure expression or super */ null && ([
   "GET /repos/{owner}/{repo}/issues/comments/{comment_id}/reactions",
   "GET /repos/{owner}/{repo}/issues/events",
   "GET /repos/{owner}/{repo}/issues/{issue_number}/comments",
+  "GET /repos/{owner}/{repo}/issues/{issue_number}/dependencies/blocked_by",
+  "GET /repos/{owner}/{repo}/issues/{issue_number}/dependencies/blocking",
   "GET /repos/{owner}/{repo}/issues/{issue_number}/events",
   "GET /repos/{owner}/{repo}/issues/{issue_number}/labels",
   "GET /repos/{owner}/{repo}/issues/{issue_number}/reactions",
@@ -29724,6 +29987,9 @@ var paginatingEndpoints = (/* unused pure expression or super */ null && ([
   "GET /users/{username}/orgs",
   "GET /users/{username}/packages",
   "GET /users/{username}/projects",
+  "GET /users/{username}/projectsV2",
+  "GET /users/{username}/projectsV2/{project_number}/fields",
+  "GET /users/{username}/projectsV2/{project_number}/items",
   "GET /users/{username}/received_events",
   "GET /users/{username}/received_events/public",
   "GET /users/{username}/repos",
@@ -29754,7 +30020,7 @@ paginateRest.VERSION = plugin_paginate_rest_dist_bundle_VERSION;
 
 
 ;// CONCATENATED MODULE: ./node_modules/@octokit/plugin-rest-endpoint-methods/dist-src/version.js
-const dist_src_version_VERSION = "16.1.0";
+const dist_src_version_VERSION = "17.0.0";
 
 //# sourceMappingURL=version.js.map
 
@@ -29816,6 +30082,12 @@ const Endpoints = {
     ],
     deleteArtifact: [
       "DELETE /repos/{owner}/{repo}/actions/artifacts/{artifact_id}"
+    ],
+    deleteCustomImageFromOrg: [
+      "DELETE /orgs/{org}/actions/hosted-runners/images/custom/{image_definition_id}"
+    ],
+    deleteCustomImageVersionFromOrg: [
+      "DELETE /orgs/{org}/actions/hosted-runners/images/custom/{image_definition_id}/versions/{version}"
     ],
     deleteEnvironmentSecret: [
       "DELETE /repos/{owner}/{repo}/environments/{environment_name}/secrets/{secret_name}"
@@ -29890,6 +30162,12 @@ const Endpoints = {
       "GET /repos/{owner}/{repo}/actions/permissions/selected-actions"
     ],
     getArtifact: ["GET /repos/{owner}/{repo}/actions/artifacts/{artifact_id}"],
+    getCustomImageForOrg: [
+      "GET /orgs/{org}/actions/hosted-runners/images/custom/{image_definition_id}"
+    ],
+    getCustomImageVersionForOrg: [
+      "GET /orgs/{org}/actions/hosted-runners/images/custom/{image_definition_id}/versions/{version}"
+    ],
     getCustomOidcSubClaimForRepo: [
       "GET /repos/{owner}/{repo}/actions/oidc/customization/sub"
     ],
@@ -29969,6 +30247,12 @@ const Endpoints = {
       "GET /repos/{owner}/{repo}/actions/workflows/{workflow_id}/timing"
     ],
     listArtifactsForRepo: ["GET /repos/{owner}/{repo}/actions/artifacts"],
+    listCustomImageVersionsForOrg: [
+      "GET /orgs/{org}/actions/hosted-runners/images/custom/{image_definition_id}/versions"
+    ],
+    listCustomImagesForOrg: [
+      "GET /orgs/{org}/actions/hosted-runners/images/custom"
+    ],
     listEnvironmentSecrets: [
       "GET /repos/{owner}/{repo}/environments/{environment_name}/secrets"
     ],
@@ -30226,6 +30510,12 @@ const Endpoints = {
     getGithubActionsBillingOrg: ["GET /orgs/{org}/settings/billing/actions"],
     getGithubActionsBillingUser: [
       "GET /users/{username}/settings/billing/actions"
+    ],
+    getGithubBillingPremiumRequestUsageReportOrg: [
+      "GET /organizations/{org}/settings/billing/premium_request/usage"
+    ],
+    getGithubBillingPremiumRequestUsageReportUser: [
+      "GET /users/{username}/settings/billing/premium_request/usage"
     ],
     getGithubBillingUsageReportOrg: [
       "GET /organizations/{org}/settings/billing/usage"
@@ -30594,6 +30884,51 @@ const Endpoints = {
     exportSbom: ["GET /repos/{owner}/{repo}/dependency-graph/sbom"]
   },
   emojis: { get: ["GET /emojis"] },
+  enterpriseTeamMemberships: {
+    add: [
+      "PUT /enterprises/{enterprise}/teams/{enterprise-team}/memberships/{username}"
+    ],
+    bulkAdd: [
+      "POST /enterprises/{enterprise}/teams/{enterprise-team}/memberships/add"
+    ],
+    bulkRemove: [
+      "POST /enterprises/{enterprise}/teams/{enterprise-team}/memberships/remove"
+    ],
+    get: [
+      "GET /enterprises/{enterprise}/teams/{enterprise-team}/memberships/{username}"
+    ],
+    list: ["GET /enterprises/{enterprise}/teams/{enterprise-team}/memberships"],
+    remove: [
+      "DELETE /enterprises/{enterprise}/teams/{enterprise-team}/memberships/{username}"
+    ]
+  },
+  enterpriseTeamOrganizations: {
+    add: [
+      "PUT /enterprises/{enterprise}/teams/{enterprise-team}/organizations/{org}"
+    ],
+    bulkAdd: [
+      "POST /enterprises/{enterprise}/teams/{enterprise-team}/organizations/add"
+    ],
+    bulkRemove: [
+      "POST /enterprises/{enterprise}/teams/{enterprise-team}/organizations/remove"
+    ],
+    delete: [
+      "DELETE /enterprises/{enterprise}/teams/{enterprise-team}/organizations/{org}"
+    ],
+    getAssignment: [
+      "GET /enterprises/{enterprise}/teams/{enterprise-team}/organizations/{org}"
+    ],
+    getAssignments: [
+      "GET /enterprises/{enterprise}/teams/{enterprise-team}/organizations"
+    ]
+  },
+  enterpriseTeams: {
+    create: ["POST /enterprises/{enterprise}/teams"],
+    delete: ["DELETE /enterprises/{enterprise}/teams/{team_slug}"],
+    get: ["GET /enterprises/{enterprise}/teams/{team_slug}"],
+    list: ["GET /enterprises/{enterprise}/teams"],
+    update: ["PATCH /enterprises/{enterprise}/teams/{team_slug}"]
+  },
   gists: {
     checkIsStarred: ["GET /gists/{gist_id}/star"],
     create: ["POST /gists"],
@@ -30863,14 +31198,34 @@ const Endpoints = {
     ],
     createInvitation: ["POST /orgs/{org}/invitations"],
     createIssueType: ["POST /orgs/{org}/issue-types"],
-    createOrUpdateCustomProperties: ["PATCH /orgs/{org}/properties/schema"],
-    createOrUpdateCustomPropertiesValuesForRepos: [
-      "PATCH /orgs/{org}/properties/values"
+    createWebhook: ["POST /orgs/{org}/hooks"],
+    customPropertiesForOrgsCreateOrUpdateOrganizationValues: [
+      "PATCH /organizations/{org}/org-properties/values"
     ],
-    createOrUpdateCustomProperty: [
+    customPropertiesForOrgsGetOrganizationValues: [
+      "GET /organizations/{org}/org-properties/values"
+    ],
+    customPropertiesForReposCreateOrUpdateOrganizationDefinition: [
       "PUT /orgs/{org}/properties/schema/{custom_property_name}"
     ],
-    createWebhook: ["POST /orgs/{org}/hooks"],
+    customPropertiesForReposCreateOrUpdateOrganizationDefinitions: [
+      "PATCH /orgs/{org}/properties/schema"
+    ],
+    customPropertiesForReposCreateOrUpdateOrganizationValues: [
+      "PATCH /orgs/{org}/properties/values"
+    ],
+    customPropertiesForReposDeleteOrganizationDefinition: [
+      "DELETE /orgs/{org}/properties/schema/{custom_property_name}"
+    ],
+    customPropertiesForReposGetOrganizationDefinition: [
+      "GET /orgs/{org}/properties/schema/{custom_property_name}"
+    ],
+    customPropertiesForReposGetOrganizationDefinitions: [
+      "GET /orgs/{org}/properties/schema"
+    ],
+    customPropertiesForReposGetOrganizationValues: [
+      "GET /orgs/{org}/properties/values"
+    ],
     delete: ["DELETE /orgs/{org}"],
     deleteAttestationsBulk: ["POST /orgs/{org}/attestations/delete-request"],
     deleteAttestationsById: [
@@ -30881,10 +31236,18 @@ const Endpoints = {
     ],
     deleteIssueType: ["DELETE /orgs/{org}/issue-types/{issue_type_id}"],
     deleteWebhook: ["DELETE /orgs/{org}/hooks/{hook_id}"],
+    disableSelectedRepositoryImmutableReleasesOrganization: [
+      "DELETE /orgs/{org}/settings/immutable-releases/repositories/{repository_id}"
+    ],
+    enableSelectedRepositoryImmutableReleasesOrganization: [
+      "PUT /orgs/{org}/settings/immutable-releases/repositories/{repository_id}"
+    ],
     get: ["GET /orgs/{org}"],
-    getAllCustomProperties: ["GET /orgs/{org}/properties/schema"],
-    getCustomProperty: [
-      "GET /orgs/{org}/properties/schema/{custom_property_name}"
+    getImmutableReleasesSettings: [
+      "GET /orgs/{org}/settings/immutable-releases"
+    ],
+    getImmutableReleasesSettingsRepositories: [
+      "GET /orgs/{org}/settings/immutable-releases/repositories"
     ],
     getMembershipForAuthenticatedUser: ["GET /user/memberships/orgs/{org}"],
     getMembershipForUser: ["GET /orgs/{org}/memberships/{username}"],
@@ -30903,12 +31266,12 @@ const Endpoints = {
     listArtifactStorageRecords: [
       "GET /orgs/{org}/artifacts/{subject_digest}/metadata/storage-records"
     ],
+    listAttestationRepositories: ["GET /orgs/{org}/attestations/repositories"],
     listAttestations: ["GET /orgs/{org}/attestations/{subject_digest}"],
     listAttestationsBulk: [
       "POST /orgs/{org}/attestations/bulk-list{?per_page,before,after}"
     ],
     listBlockedUsers: ["GET /orgs/{org}/blocks"],
-    listCustomPropertiesValuesForRepos: ["GET /orgs/{org}/properties/values"],
     listFailedInvitations: ["GET /orgs/{org}/failed_invitations"],
     listForAuthenticatedUser: ["GET /user/orgs"],
     listForUser: ["GET /users/{username}/orgs"],
@@ -30946,9 +31309,6 @@ const Endpoints = {
     redeliverWebhookDelivery: [
       "POST /orgs/{org}/hooks/{hook_id}/deliveries/{delivery_id}/attempts"
     ],
-    removeCustomProperty: [
-      "DELETE /orgs/{org}/properties/schema/{custom_property_name}"
-    ],
     removeMember: ["DELETE /orgs/{org}/members/{username}"],
     removeMembershipForUser: ["DELETE /orgs/{org}/memberships/{username}"],
     removeOutsideCollaborator: [
@@ -30981,6 +31341,12 @@ const Endpoints = {
     ],
     revokeOrgRoleUser: [
       "DELETE /orgs/{org}/organization-roles/users/{username}/{role_id}"
+    ],
+    setImmutableReleasesSettings: [
+      "PUT /orgs/{org}/settings/immutable-releases"
+    ],
+    setImmutableReleasesSettingsRepositories: [
+      "PUT /orgs/{org}/settings/immutable-releases/repositories"
     ],
     setMembershipForUser: ["PUT /orgs/{org}/memberships/{username}"],
     setPublicMembershipForAuthenticatedUser: [
@@ -31103,40 +31469,42 @@ const Endpoints = {
   },
   projects: {
     addItemForOrg: ["POST /orgs/{org}/projectsV2/{project_number}/items"],
-    addItemForUser: ["POST /users/{user_id}/projectsV2/{project_number}/items"],
+    addItemForUser: [
+      "POST /users/{username}/projectsV2/{project_number}/items"
+    ],
     deleteItemForOrg: [
       "DELETE /orgs/{org}/projectsV2/{project_number}/items/{item_id}"
     ],
     deleteItemForUser: [
-      "DELETE /users/{user_id}/projectsV2/{project_number}/items/{item_id}"
+      "DELETE /users/{username}/projectsV2/{project_number}/items/{item_id}"
     ],
     getFieldForOrg: [
       "GET /orgs/{org}/projectsV2/{project_number}/fields/{field_id}"
     ],
     getFieldForUser: [
-      "GET /users/{user_id}/projectsV2/{project_number}/fields/{field_id}"
+      "GET /users/{username}/projectsV2/{project_number}/fields/{field_id}"
     ],
     getForOrg: ["GET /orgs/{org}/projectsV2/{project_number}"],
-    getForUser: ["GET /users/{user_id}/projectsV2/{project_number}"],
+    getForUser: ["GET /users/{username}/projectsV2/{project_number}"],
     getOrgItem: ["GET /orgs/{org}/projectsV2/{project_number}/items/{item_id}"],
     getUserItem: [
-      "GET /users/{user_id}/projectsV2/{project_number}/items/{item_id}"
+      "GET /users/{username}/projectsV2/{project_number}/items/{item_id}"
     ],
     listFieldsForOrg: ["GET /orgs/{org}/projectsV2/{project_number}/fields"],
     listFieldsForUser: [
-      "GET /users/{user_id}/projectsV2/{project_number}/fields"
+      "GET /users/{username}/projectsV2/{project_number}/fields"
     ],
     listForOrg: ["GET /orgs/{org}/projectsV2"],
     listForUser: ["GET /users/{username}/projectsV2"],
     listItemsForOrg: ["GET /orgs/{org}/projectsV2/{project_number}/items"],
     listItemsForUser: [
-      "GET /users/{user_id}/projectsV2/{project_number}/items"
+      "GET /users/{username}/projectsV2/{project_number}/items"
     ],
     updateItemForOrg: [
       "PATCH /orgs/{org}/projectsV2/{project_number}/items/{item_id}"
     ],
     updateItemForUser: [
-      "PATCH /users/{user_id}/projectsV2/{project_number}/items/{item_id}"
+      "PATCH /users/{username}/projectsV2/{project_number}/items/{item_id}"
     ]
   },
   pulls: {
@@ -31299,6 +31667,7 @@ const Endpoints = {
       "GET /repos/{owner}/{repo}/automated-security-fixes"
     ],
     checkCollaborator: ["GET /repos/{owner}/{repo}/collaborators/{username}"],
+    checkImmutableReleases: ["GET /repos/{owner}/{repo}/immutable-releases"],
     checkPrivateVulnerabilityReporting: [
       "GET /repos/{owner}/{repo}/private-vulnerability-reporting"
     ],
@@ -31334,9 +31703,6 @@ const Endpoints = {
     createForAuthenticatedUser: ["POST /user/repos"],
     createFork: ["POST /repos/{owner}/{repo}/forks"],
     createInOrg: ["POST /orgs/{org}/repos"],
-    createOrUpdateCustomPropertiesValues: [
-      "PATCH /repos/{owner}/{repo}/properties/values"
-    ],
     createOrUpdateEnvironment: [
       "PUT /repos/{owner}/{repo}/environments/{environment_name}"
     ],
@@ -31350,6 +31716,12 @@ const Endpoints = {
       "POST /repos/{template_owner}/{template_repo}/generate"
     ],
     createWebhook: ["POST /repos/{owner}/{repo}/hooks"],
+    customPropertiesForReposCreateOrUpdateRepositoryValues: [
+      "PATCH /repos/{owner}/{repo}/properties/values"
+    ],
+    customPropertiesForReposGetRepositoryValues: [
+      "GET /repos/{owner}/{repo}/properties/values"
+    ],
     declineInvitation: [
       "DELETE /user/repository_invitations/{invitation_id}",
       {},
@@ -31404,6 +31776,9 @@ const Endpoints = {
     disableDeploymentProtectionRule: [
       "DELETE /repos/{owner}/{repo}/environments/{environment_name}/deployment_protection_rules/{protection_rule_id}"
     ],
+    disableImmutableReleases: [
+      "DELETE /repos/{owner}/{repo}/immutable-releases"
+    ],
     disablePrivateVulnerabilityReporting: [
       "DELETE /repos/{owner}/{repo}/private-vulnerability-reporting"
     ],
@@ -31420,6 +31795,7 @@ const Endpoints = {
     enableAutomatedSecurityFixes: [
       "PUT /repos/{owner}/{repo}/automated-security-fixes"
     ],
+    enableImmutableReleases: ["PUT /repos/{owner}/{repo}/immutable-releases"],
     enablePrivateVulnerabilityReporting: [
       "PUT /repos/{owner}/{repo}/private-vulnerability-reporting"
     ],
@@ -31471,7 +31847,6 @@ const Endpoints = {
     getCustomDeploymentProtectionRule: [
       "GET /repos/{owner}/{repo}/environments/{environment_name}/deployment_protection_rules/{protection_rule_id}"
     ],
-    getCustomPropertiesValues: ["GET /repos/{owner}/{repo}/properties/values"],
     getDeployKey: ["GET /repos/{owner}/{repo}/keys/{key_id}"],
     getDeployment: ["GET /repos/{owner}/{repo}/deployments/{deployment_id}"],
     getDeploymentBranchPolicy: [
@@ -31689,13 +32064,7 @@ const Endpoints = {
   search: {
     code: ["GET /search/code"],
     commits: ["GET /search/commits"],
-    issuesAndPullRequests: [
-      "GET /search/issues",
-      {},
-      {
-        deprecated: "octokit.rest.search.issuesAndPullRequests() is deprecated, see https://docs.github.com/rest/search/search#search-issues-and-pull-requests"
-      }
-    ],
+    issuesAndPullRequests: ["GET /search/issues"],
     labels: ["GET /search/labels"],
     repos: ["GET /search/repositories"],
     topics: ["GET /search/topics"],
@@ -31709,9 +32078,6 @@ const Endpoints = {
       "GET /repos/{owner}/{repo}/secret-scanning/alerts/{alert_number}"
     ],
     getScanHistory: ["GET /repos/{owner}/{repo}/secret-scanning/scan-history"],
-    listAlertsForEnterprise: [
-      "GET /enterprises/{enterprise}/secret-scanning/alerts"
-    ],
     listAlertsForOrg: ["GET /orgs/{org}/secret-scanning/alerts"],
     listAlertsForRepo: ["GET /repos/{owner}/{repo}/secret-scanning/alerts"],
     listLocationsForAlert: [
@@ -32100,7 +32466,7 @@ legacyRestEndpointMethods.VERSION = dist_src_version_VERSION;
 //# sourceMappingURL=index.js.map
 
 ;// CONCATENATED MODULE: ./package.json
-const package_namespaceObject = /*#__PURE__*/JSON.parse('{"rE":"1.7.1","TB":"https://github.com/techpivot/terraform-module-releaser"}');
+const package_namespaceObject = /*#__PURE__*/JSON.parse('{"rE":"1.8.0","TB":"https://github.com/techpivot/terraform-module-releaser"}');
 ;// CONCATENATED MODULE: ./src/context.ts
 
 
@@ -32461,23 +32827,24 @@ class TerraformModule {
     /**
      * Sets the Git tags associated with this Terraform module.
      *
-     * Accepts an array of tag strings and automatically sorts them by semantic version
-     * in descending order (newest first). Tags must follow the format `{moduleName}/v{x.y.z}` or `{moduleName}/x.y.z`.
-     * This method replaces any previously set tags. Throws if any tag is invalid.
+     * Accepts an array of GitHubTag objects and automatically sorts them by semantic version
+     * in descending order (newest first). Tags must have name following the format
+     * `{moduleName}/v{x.y.z}` or `{moduleName}/x.y.z`. Throws if any tag is invalid.
+     * This method replaces any previously set tags.
      *
-     * @param {ReadonlyArray<string>} tags - Array of Git tag strings to associate with this module
-     * @throws {Error} If any tag does not match the required format
+     * @param {ReadonlyArray<GitHubTag>} tags - Array of GitHubTag objects to associate with this module
+     * @throws {Error} If any tag name does not match the required format
      * @returns {void}
      *
      * @example
      * ```typescript
      * const module = new TerraformModule('/path/to/module');
      * module.setTags([
-     *   'my-module/v1.0.0',
-     *   'my-module/v1.1.0',
-     *   'my-module/v2.0.0'
+     *   { name: 'my-module/v1.0.0', commitSHA: 'abc123' },
+     *   { name: 'my-module/v1.1.0', commitSHA: 'def456' },
+     *   { name: 'my-module/v2.0.0', commitSHA: 'ghi789' }
      * ]);
-     * // Tags will be automatically sorted: v2.0.0, v1.1.0, v1.0.0
+     * // Tags will be automatically sorted by version (newest first)
      * ```
      */
     setTags(tags) {
@@ -32485,9 +32852,9 @@ class TerraformModule {
         const tagVersionMap = new Map();
         // First pass: validate all tags and extract versions
         for (const tag of tags) {
-            tagVersionMap.set(tag, this.extractVersionFromTag(tag));
+            tagVersionMap.set(tag, this.extractVersionFromTag(tag.name));
         }
-        // Second pass: Sort using pre-extracted versions (create copy to avoid mutating input)
+        // Sort using pre-extracted versions (create copy to avoid mutating input)
         this._tags = [...tags].sort((a, b) => {
             const aVersion = tagVersionMap.get(a);
             const bVersion = tagVersionMap.get(b);
@@ -32500,24 +32867,49 @@ class TerraformModule {
     /**
      * Gets all Git tags relevant to this Terraform module.
      *
-     * Returns a read-only array of tag strings that have been filtered and sorted
+     * Returns a read-only array of GitHubTag objects that have been filtered and sorted
      * for this specific module. Tags are sorted by semantic version in descending order.
+     * Each tag contains the name and commit SHA.
      *
-     * @returns {ReadonlyArray<string>} A read-only array of Git tag strings for this module
+     * @returns {ReadonlyArray<GitHubTag>} A read-only array of GitHubTag objects for this module
+     *
+     * @example
+     * ```typescript
+     * const module = new TerraformModule('/path/to/module');
+     * const tags = module.tags;
+     * console.log('Latest tag:', tags[0]?.name); // Most recent version
+     * console.log('Tag count:', tags.length);
+     *
+     * // Access tag details
+     * tags.forEach(tag => {
+     *   console.log(`Tag ${tag.name} -> ${tag.commitSHA}`);
+     * });
+     * ```
      */
     get tags() {
         return this._tags;
     }
     /**
-     * Returns the latest full tag for this module.
+     * Returns the latest full tag name for this module.
      *
-     * @returns {string | null} The latest tag string (e.g., 'module-name/v1.2.3'), or null if no tags exist.
+     * @returns {string | null} The latest tag name (e.g., 'module-name/v1.2.3'), or null if no tags exist.
      */
     getLatestTag() {
         if (this.tags.length === 0) {
             return null;
         }
-        return this.tags[0];
+        return this.tags[0].name;
+    }
+    /**
+     * Returns the commit SHA for the latest tag.
+     *
+     * @returns {string | null} The commit SHA of the latest tag, or null if no tags exist.
+     */
+    getLatestTagCommitSHA() {
+        if (this.tags.length === 0) {
+            return null;
+        }
+        return this.tags[0].commitSHA;
     }
     /**
      * Returns the version part of the latest tag for this module.
@@ -32578,7 +32970,6 @@ class TerraformModule {
         for (const release of releases) {
             releaseVersionMap.set(release, this.extractVersionFromTag(release.tagName));
         }
-        // Second pass: Sort using pre-extracted versions
         // Second pass: Sort using pre-extracted versions (create copy to avoid mutating input)
         this._releases = [...releases].sort((a, b) => {
             const aVersion = releaseVersionMap.get(a);
@@ -32786,13 +33177,8 @@ class TerraformModule {
             throw new Error(`Invalid tag format: '${tag}'. Expected format: '${this.name}[separator]v#.#.#' or '${this.name}[separator]#.#.#'.`);
         }
         // Parse the tag using MODULE_TAG_REGEX to extract version components
-        // Note: This will never be null since TerraformModule.isModuleAssociatedWithTag already checks for this;
-        // however, for typing, we'll just recheck.
+        // This will never be null since TerraformModule.isModuleAssociatedWithTag already validates the regex match
         const match = MODULE_TAG_REGEX.exec(tag);
-        /* v8 ignore next 5 */
-        if (!match) {
-            throw new Error(`Invalid tag format: '${tag}'. Expected format: '${this.name}[separator]v#.#.#' or '${this.name}[separator]#.#.#'.`);
-        }
         // Extract the numerical version components (groups 4, 5, 6 are major.minor.patch)
         const major = match[4];
         const minor = match[5];
@@ -32859,7 +33245,7 @@ class TerraformModule {
         if (this.tags.length > 0) {
             lines.push('   Tags:');
             for (const tag of this.tags) {
-                lines.push(`     - ${tag}`);
+                lines.push(`     - ${tag.name}`);
             }
         }
         if (this.releases.length > 0) {
@@ -32952,11 +33338,11 @@ class TerraformModule {
      * Static utility to filter tags for a given module name.
      *
      * @param {string} moduleName - The Terraform module name to find current tags
-     * @param {string[]} allTags - An array of all available tags
-     * @returns {string[]} An array of all matching tags for the module
+     * @param {GitHubTag[]} allTags - An array of all available tags
+     * @returns {GitHubTag[]} An array of all matching tags for the module
      */
     static getTagsForModule(moduleName, allTags) {
-        return allTags.filter((tag) => TerraformModule.isModuleAssociatedWithTag(moduleName, tag));
+        return allTags.filter((tag) => TerraformModule.isModuleAssociatedWithTag(moduleName, tag.name));
     }
     /**
      * Static utility to filter releases for a given module name.
@@ -32985,7 +33371,7 @@ class TerraformModule {
      * This approach leverages the robust tag association logic that handles
      * different separator schemes over time.
      *
-     * @param {string[]} allTags - A list of all tags associated with the modules.
+     * @param {GitHubTag[]} allTags - A list of all tags associated with the modules.
      * @param {TerraformModule[]} terraformModules - An array of Terraform modules.
      * @returns {string[]} An array of tag names that need to be deleted.
      */
@@ -32996,8 +33382,9 @@ class TerraformModule {
             .filter((tag) => {
             // Check if ANY current module is associated with this tag
             // This handles cases where tagging schemes changed over time
-            return !terraformModules.some((module) => TerraformModule.isModuleAssociatedWithTag(module.name, tag));
+            return !terraformModules.some((module) => TerraformModule.isModuleAssociatedWithTag(module.name, tag.name));
         })
+            .map((tag) => tag.name)
             .sort((a, b) => a.localeCompare(b));
         (0,core.info)('Terraform tags to delete:');
         (0,core.info)(JSON.stringify(tagsToRemove, null, 2));
@@ -33451,21 +33838,35 @@ const parseClass = (glob, position) => {
 /**
  * Un-escape a string that has been escaped with {@link escape}.
  *
- * If the {@link windowsPathsNoEscape} option is used, then square-brace
- * escapes are removed, but not backslash escapes.  For example, it will turn
- * the string `'[*]'` into `*`, but it will not turn `'\\*'` into `'*'`,
- * becuase `\` is a path separator in `windowsPathsNoEscape` mode.
+ * If the {@link MinimatchOptions.windowsPathsNoEscape} option is used, then
+ * square-bracket escapes are removed, but not backslash escapes.
  *
- * When `windowsPathsNoEscape` is not set, then both brace escapes and
+ * For example, it will turn the string `'[*]'` into `*`, but it will not
+ * turn `'\\*'` into `'*'`, because `\` is a path separator in
+ * `windowsPathsNoEscape` mode.
+ *
+ * When `windowsPathsNoEscape` is not set, then both square-bracket escapes and
  * backslash escapes are removed.
  *
  * Slashes (and backslashes in `windowsPathsNoEscape` mode) cannot be escaped
  * or unescaped.
+ *
+ * When `magicalBraces` is not set, escapes of braces (`{` and `}`) will not be
+ * unescaped.
  */
-const unescape_unescape = (s, { windowsPathsNoEscape = false, } = {}) => {
+const unescape_unescape = (s, { windowsPathsNoEscape = false, magicalBraces = true, } = {}) => {
+    if (magicalBraces) {
+        return windowsPathsNoEscape
+            ? s.replace(/\[([^\/\\])\]/g, '$1')
+            : s
+                .replace(/((?!\\).|^)\[([^\/\\])\]/g, '$1$2')
+                .replace(/\\([^\/])/g, '$1');
+    }
     return windowsPathsNoEscape
-        ? s.replace(/\[([^\/\\])\]/g, '$1')
-        : s.replace(/((?!\\).|^)\[([^\/\\])\]/g, '$1$2').replace(/\\([^\/])/g, '$1');
+        ? s.replace(/\[([^\/\\{}])\]/g, '$1')
+        : s
+            .replace(/((?!\\).|^)\[([^\/\\{}])\]/g, '$1$2')
+            .replace(/\\([^\/{}])/g, '$1');
 };
 //# sourceMappingURL=unescape.js.map
 ;// CONCATENATED MODULE: ./node_modules/minimatch/dist/esm/ast.js
@@ -33883,7 +34284,9 @@ class AST {
         if (this.#root === this)
             this.#fillNegs();
         if (!this.type) {
-            const noEmpty = this.isStart() && this.isEnd();
+            const noEmpty = this.isStart() &&
+                this.isEnd() &&
+                !this.#parts.some(s => typeof s !== 'string');
             const src = this.#parts
                 .map(p => {
                 const [re, _, hasMagic, uflag] = typeof p === 'string'
@@ -34039,10 +34442,7 @@ class AST {
                 }
             }
             if (c === '*') {
-                if (noEmpty && glob === '*')
-                    re += starNoEmpty;
-                else
-                    re += star;
+                re += noEmpty && glob === '*' ? starNoEmpty : star;
                 hasMagic = true;
                 continue;
             }
@@ -34061,16 +34461,24 @@ class AST {
 /**
  * Escape all magic characters in a glob pattern.
  *
- * If the {@link windowsPathsNoEscape | GlobOptions.windowsPathsNoEscape}
+ * If the {@link MinimatchOptions.windowsPathsNoEscape}
  * option is used, then characters are escaped by wrapping in `[]`, because
  * a magic character wrapped in a character class can only be satisfied by
  * that exact character.  In this mode, `\` is _not_ escaped, because it is
  * not interpreted as a magic character, but instead as a path separator.
+ *
+ * If the {@link MinimatchOptions.magicalBraces} option is used,
+ * then braces (`{` and `}`) will be escaped.
  */
-const escape_escape = (s, { windowsPathsNoEscape = false, } = {}) => {
+const escape_escape = (s, { windowsPathsNoEscape = false, magicalBraces = false, } = {}) => {
     // don't need to escape +@! because we escape the parens
     // that make those magic, and escaping ! as [!] isn't valid,
     // because [!]] is a valid glob class meaning not ']'.
+    if (magicalBraces) {
+        return windowsPathsNoEscape
+            ? s.replace(/[?*()[\]{}]/g, '[$&]')
+            : s.replace(/[?*()[\]\\{}]/g, '\\$&');
+    }
     return windowsPathsNoEscape
         ? s.replace(/[?*()[\]]/g, '[$&]')
         : s.replace(/[?*()[\]\\]/g, '\\$&');
@@ -34710,7 +35118,7 @@ class Minimatch {
             }
         }
         // resolve and reduce . and .. portions in the file as well.
-        // dont' need to do the second phase, because it's only one string[]
+        // don't need to do the second phase, because it's only one string[]
         const { optimizationLevel = 1 } = this.options;
         if (optimizationLevel >= 2) {
             file = this.levelTwoFileOptimize(file);
@@ -34963,14 +35371,25 @@ class Minimatch {
                     }
                 }
                 else if (next === undefined) {
-                    pp[i - 1] = prev + '(?:\\/|' + twoStar + ')?';
+                    pp[i - 1] = prev + '(?:\\/|\\/' + twoStar + ')?';
                 }
                 else if (next !== GLOBSTAR) {
                     pp[i - 1] = prev + '(?:\\/|\\/' + twoStar + '\\/)' + next;
                     pp[i + 1] = GLOBSTAR;
                 }
             });
-            return pp.filter(p => p !== GLOBSTAR).join('/');
+            const filtered = pp.filter(p => p !== GLOBSTAR);
+            // For partial matches, we need to make the pattern match
+            // any prefix of the full path. We do this by generating
+            // alternative patterns that match progressively longer prefixes.
+            if (this.partial && filtered.length >= 1) {
+                const prefixes = [];
+                for (let i = 1; i <= filtered.length; i++) {
+                    prefixes.push(filtered.slice(0, i).join('/'));
+                }
+                return '(?:' + prefixes.join('|') + ')';
+            }
+            return filtered.join('/');
         })
             .join('|');
         // need to wrap in parens if we had more than one thing with |,
@@ -34979,6 +35398,10 @@ class Minimatch {
         // must match entire pattern
         // ending in a * or ** will make it less strict.
         re = '^' + open + re + close + '$';
+        // In partial mode, '/' should always match as it's a valid prefix for any pattern
+        if (this.partial) {
+            re = '^(?:\\/|' + open + re.slice(1, -1) + close + ')$';
+        }
         // can match anything, as long as it's not this.
         if (this.negate)
             re = '^(?!' + re + ').+$';
@@ -35458,10 +35881,9 @@ function getPullRequestChangelog(terraformModules) {
     const pullRequestChangelog = [];
     for (const terraformModule of terraformModules) {
         if (terraformModule.needsRelease()) {
+            // When needsRelease() is true, getReleaseTag() is guaranteed to return a non-null value
             const releaseTag = terraformModule.getReleaseTag();
-            if (releaseTag !== null) {
-                pullRequestChangelog.push(createTerraformModuleChangelogEntry(releaseTag, terraformModule.commitMessages));
-            }
+            pullRequestChangelog.push(createTerraformModuleChangelogEntry(releaseTag, terraformModule.commitMessages));
         }
     }
     return pullRequestChangelog.join('\n\n');
@@ -35734,6 +36156,8 @@ async function generateTerraformDocs({ name, directory }) {
 ;// CONCATENATED MODULE: ./src/utils/github.ts
 
 
+
+
 /**
  * Retrieves the GitHub Actions bot email address dynamically by querying the GitHub API.
  * This function handles both GitHub.com and GitHub Enterprise Server environments.
@@ -35748,6 +36172,49 @@ async function getGitHubActionsBotEmail() {
         username: GITHUB_ACTIONS_BOT_USERNAME,
     });
     return `${response.data.id}+${GITHUB_ACTIONS_BOT_USERNAME}@users.noreply.github.com`;
+}
+/**
+ * Configures Git authentication for HTTPS operations using the GitHub token.
+ *
+ * This function sets up Git's HTTP extraheader configuration to authenticate
+ * HTTPS operations (like push/fetch) using the provided GitHub token. It uses
+ * the same authentication mechanism as GitHub Actions' checkout action.
+ *
+ * The function:
+ * 1. Extracts the server domain from the repository URL
+ * 2. Unsets any existing authentication headers (ignoring errors if none exist)
+ * 3. Sets a new authentication header with the GitHub token as a base64-encoded credential
+ *
+ * @param {string} gitPath - The path to the git executable
+ * @param {ExecFileSyncOptions} execOptions - Options for executing git commands (e.g., cwd, env)
+ * @throws {Error} If git configuration fails (except for status 5 when unsetting non-existent config)
+ *
+ * @example
+ * ```typescript
+ * const gitPath = await which('git');
+ * const execOptions = { cwd: '/path/to/repo' };
+ * configureGitAuthentication(gitPath, execOptions);
+ * // Now git push/fetch operations will be authenticated
+ * ```
+ */
+function configureGitAuthentication(gitPath, execOptions) {
+    // Extract the domain from the repository URL for the extraheader configuration
+    const serverDomain = new URL(context.repoUrl).hostname;
+    const extraHeaderKey = `http.https://${serverDomain}/.extraheader`;
+    const basicCredential = Buffer.from(`x-access-token:${config.githubToken}`, 'utf8').toString('base64');
+    // Unset any existing extraheader configuration
+    try {
+        (0,external_node_child_process_namespaceObject.execFileSync)(gitPath, ['config', '--local', '--unset-all', extraHeaderKey], execOptions);
+    }
+    catch (error) {
+        // Git exits with status 5 if the config key doesn't exist to be unset.
+        // This is not a failure condition, so we ignore it.
+        if (error instanceof Error && error.status !== 5) {
+            throw error;
+        }
+    }
+    // Set authentication header
+    (0,external_node_child_process_namespaceObject.execFileSync)(gitPath, ['config', '--local', extraHeaderKey, `Authorization: Basic ${basicCredential}`], execOptions);
 }
 
 ;// CONCATENATED MODULE: ./node_modules/yocto-queue/index.js
@@ -35921,8 +36388,8 @@ function pLimit(concurrency) {
 			},
 		},
 		map: {
-			async value(array, function_) {
-				const promises = array.map((value, index) => this(function_, value, index));
+			async value(iterable, function_) {
+				const promises = Array.from(iterable, (value, index) => this(function_, value, index));
 				return Promise.all(promises);
 			},
 		},
@@ -36014,21 +36481,7 @@ function checkoutWiki() {
         (0,external_node_child_process_namespaceObject.execFileSync)(gitPath, ['remote', 'add', 'origin', wikiHtmlUrl], execWikiOpts);
     }
     (0,core.info)('Configuring authentication');
-    // Note: Extract the domain from serverUrl for the extraheader configuration (Same as pulling from the env Server URL)
-    const serverDomain = new URL(context.repoUrl).hostname;
-    const extraHeaderKey = `http.https://${serverDomain}/.extraheader`;
-    const basicCredential = Buffer.from(`x-access-token:${config.githubToken}`, 'utf8').toString('base64');
-    try {
-        (0,external_node_child_process_namespaceObject.execFileSync)(gitPath, ['config', '--local', '--unset-all', extraHeaderKey], execWikiOpts);
-    }
-    catch (error) {
-        // Git exits with status 5 if the config key doesn't exist to be unset.
-        // This is not a failure condition for us, so we ignore it.
-        if (error instanceof Error && error.status !== 5) {
-            throw error;
-        }
-    }
-    (0,external_node_child_process_namespaceObject.execFileSync)(gitPath, ['config', '--local', extraHeaderKey, `Authorization: Basic ${basicCredential}`], execWikiOpts);
+    configureGitAuthentication(gitPath, execWikiOpts);
     try {
         (0,core.info)('Fetching the repository');
         (0,external_node_child_process_namespaceObject.execFileSync)(gitPath, [
@@ -36213,10 +36666,33 @@ async function generateWikiTerraformModule(terraformModule) {
     const changelog = getTerraformModuleFullReleaseChangelog(terraformModule);
     const tfDocs = await generateTerraformDocs(terraformModule);
     const moduleSource = getModuleSource(context.repoUrl, config.useSSHSourceFormat);
+    const latestTag = terraformModule.getLatestTag();
+    // Determine the ref value and ref_comment based on config.moduleRefMode
+    let ref = '';
+    let refComment = '';
+    switch (config.moduleRefMode) {
+        case MODULE_REF_MODE_TAG:
+            // Use the tag as the ref
+            ref = latestTag ?? '';
+            break;
+        case MODULE_REF_MODE_SHA:
+            ref = terraformModule.getLatestTagCommitSHA() ?? '';
+            refComment = terraformModule.getLatestTagVersion() ? ` # ${terraformModule.getLatestTagVersion()}` : '';
+            break;
+        default:
+            // This should never happen due to validation at config load time
+            throw new Error(`Invalid module_ref_mode: ${config.moduleRefMode}`);
+    }
+    // Warn if ref is empty (could happen if latestTag is null/empty or SHA not found in SHA mode)
+    if (!ref) {
+        (0,core.info)(`Warning: No ref available for module '${terraformModule.name}' (tag: '${latestTag}')`);
+    }
     const usage = renderTemplate(config.wikiUsageTemplate, {
         module_name: terraformModule.name,
-        latest_tag: terraformModule.getLatestTag(),
+        latest_tag: latestTag,
         latest_tag_version_number: terraformModule.getLatestTagVersionNumber(),
+        ref: ref,
+        ref_comment: refComment,
         module_source: moduleSource,
         module_name_terraform: terraformModule.name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase(),
     });
@@ -36950,6 +37426,8 @@ async function createTaggedReleases(terraformModules) {
             const githubActionsBotEmail = await getGitHubActionsBotEmail();
             // Execute git commands in temp directory without inheriting stdio to avoid output pollution
             const gitOpts = { cwd: tmpDir };
+            // Configure Git authentication
+            configureGitAuthentication(gitPath, gitOpts);
             for (const cmd of [
                 ['config', '--local', 'user.name', GITHUB_ACTIONS_BOT_NAME],
                 ['config', '--local', 'user.email', githubActionsBotEmail],
@@ -36960,6 +37438,8 @@ async function createTaggedReleases(terraformModules) {
             ]) {
                 (0,external_node_child_process_namespaceObject.execFileSync)(gitPath, cmd, gitOpts);
             }
+            // Store the commit SHA that the tag points to (since it's not returned from the API via create release)
+            const commitSHA = (0,external_node_child_process_namespaceObject.execFileSync)(gitPath, ['rev-parse', 'HEAD'], gitOpts).toString().trim();
             // Create a GitHub release using the tag
             (0,core.info)(`Creating GitHub release for ${moduleName}@${releaseTagVersion}`);
             const body = createTerraformModuleChangelog(module);
@@ -36978,9 +37458,13 @@ async function createTaggedReleases(terraformModules) {
                 tagName: response.data.tag_name,
                 body: response.data.body ?? body,
             };
-            // Update the module with the new release and tag
+            // Update the module with the new release and tag (with commit SHA from API response)
             module.setReleases([release, ...module.releases]);
-            module.setTags([releaseTag, ...module.tags]);
+            const newTag = {
+                name: releaseTag,
+                commitSHA,
+            };
+            module.setTags([newTag, ...module.tags]);
             // We also need to ensure that this module can't be released anymore. Thus, we need to clear existing commits
             // as this is the primary driver for determining release status.
             module.clearCommits();
@@ -37074,28 +37558,38 @@ async function deleteReleases(releasesToDelete) {
 /**
  * Fetches all tags from the specified GitHub repository.
  *
- * This function utilizes pagination to retrieve all tags, returning them as an array of strings.
+ * This function utilizes pagination to retrieve all tags with their commit SHAs,
+ * returning them as an array of GitHubTag objects.
  *
- * @param {GetAllTagsOptions} options - Optional configuration for the API request
+ * @param {ListTagsParams} options - Optional configuration for the API request
  * @param {number} options.perPage - Number of items per page (default: 100)
- * @returns {Promise<string[]>} A promise that resolves to an array of tag names.
+ * @returns {Promise<GitHubTag[]>} A promise that resolves to an array of tag objects with name and commitSHA.
  * @throws {RequestError} Throws an error if the request to fetch tags fails.
  */
-async function getAllTags(options = { per_page: 100, page: 1 }) {
+async function getAllTags(options) {
+    const { per_page = 100, page = 1, ...rest } = options ?? {};
     console.time('Elapsed time fetching tags');
     (0,core.startGroup)('Fetching repository tags');
     try {
         const { octokit, repo: { owner, repo }, } = context;
         const tags = [];
         let totalRequests = 0;
+        const paginationOptions = {
+            per_page,
+            page,
+            ...rest,
+        };
         for await (const response of octokit.paginate.iterator(octokit.rest.repos.listTags, {
-            ...options,
+            ...paginationOptions,
             owner,
             repo,
         })) {
             totalRequests++;
             for (const tag of response.data) {
-                tags.push(tag.name);
+                tags.push({
+                    name: tag.name,
+                    commitSHA: tag.commit.sha,
+                });
             }
         }
         (0,core.debug)(`Total page requests: ${totalRequests}`);
