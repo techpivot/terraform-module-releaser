@@ -72,6 +72,30 @@ describe('changelog', () => {
       expect(getPullRequestChangelog([])).toBe('');
     });
 
+    it('should skip modules that do not need release', () => {
+      const terraformModules: TerraformModule[] = [
+        createMockTerraformModule({
+          directory: 'modules/module1',
+          commitMessages: ['feat: Add new feature'],
+        }),
+        createMockTerraformModule({
+          directory: 'modules/module2',
+          commitMessages: [], // No commits = no release needed
+          tags: ['modules/module2/v1.0.0'], // Already has a tag
+        }),
+      ];
+
+      // Only module1 should appear in changelog
+      const expectedChangelog = [
+        '## `modules/module1/v1.0.0` (2024-11-05)',
+        '',
+        '- :twisted_rightwards_arrows:**[PR #123](https://github.com/techpivot/terraform-module-releaser/pull/123)** - Test PR Title',
+        '- feat: Add new feature',
+      ].join('\n');
+
+      expect(getPullRequestChangelog(terraformModules)).toBe(expectedChangelog);
+    });
+
     it('should remove duplicate PR title from commit messages', () => {
       const terraformModules: TerraformModule[] = [
         createMockTerraformModule({
