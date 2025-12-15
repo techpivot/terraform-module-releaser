@@ -62,7 +62,7 @@ import https from 'node:https';
 import OpenAI from 'openai';
 
 const ENDPOINT = 'https://models.github.ai/inference';
-const MODEL = 'openai/gpt-4.1'; // gpt-5 has max request size of 4000 tokens on free
+const MODEL = 'openai/gpt-4.1'; // 4000 token input limit (smaller than gpt-4o but sufficient after cleanup)
 const PROMPT = `
 You're the head of developer relations at a SaaS company. Write a concise, professional, and engaging changelog that prioritizes user-impacting changes and tells a story about the release.
 
@@ -504,21 +504,51 @@ async function generateChangelog(version) {
   const commits = await getCommitsBetweenLatestReleaseAndMain(latestVersionTag);
 
   console.log(`Found ${commits.length} commits between ${latestVersionTag} and main`);
-  console.log('Commits:', JSON.stringify(commits, null, 2));
+
+  // Clean up commits to reduce token usage
+  const cleanedCommits = commits.map((commit) => {
+    // For dependabot commits, truncate message at first newline to remove verbose details
+    // For other commits, keep full message
+    const message = commit.author === 'dependabot[bot]' ? commit.message.split('\n')[0] : commit.message;
+
+    // Return simplified commit object without URL (can be inferred from PR number)
+    return {
+      author: commit.author,
+      message: message,
+      pullRequest: commit.pullRequest
+        ? {
+            number: commit.pullRequest.number,
+            title: commit.pullRequest.title,
+          }
+        : null,
+    };
+  });
+
+  console.log('Cleaned commits:', JSON.stringify(cleanedCommits, null, 2));
+
+  // Estimate token count (rough approximation: 1 token ≈ 4 characters)
+  const commitDataString = JSON.stringify(cleanedCommits);
+  const estimatedInputTokens = Math.ceil((PROMPT.length + commitDataString.length) / 4);
+  console.log(`\n📏 Estimated input size: ~${estimatedInputTokens} tokens (limit: 4000 for gpt-4.1)`);
 
   try {
     const client = new OpenAI({ baseURL: ENDPOINT, apiKey: process.env.GITHUB_TOKEN });
     const response = await client.chat.completions.create({
       messages: [
         { role: 'system', content: PROMPT },
-        { role: 'user', content: JSON.stringify(commits) },
+        { role: 'user', content: JSON.stringify(cleanedCommits) },
       ],
       temperature: 0.3, // Low temperature for consistent, focused output (0.0-2.0, lower = more deterministic)
       top_p: 0.9, // High nucleus sampling to maintain quality while reducing randomness (0.0-1.0)
       model: MODEL,
     });
 
-    console.log('Generated changelog content:');
+    console.log('\n📊 Token Usage:');
+    console.log(`  Prompt tokens: ${response.usage.prompt_tokens}`);
+    console.log(`  Completion tokens: ${response.usage.completion_tokens}`);
+    console.log(`  Total tokens: ${response.usage.total_tokens}`);
+
+    console.log('\n✅ Generated changelog content:');
     console.log(response.choices[0].message.content);
 
     return [
