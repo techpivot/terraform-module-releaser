@@ -44,6 +44,7 @@ export const ACTION_INPUTS: Record<string, ActionInputMetadata> = {
   'major-keywords': requiredArray('majorKeywords'),
   'minor-keywords': requiredArray('minorKeywords'),
   'patch-keywords': requiredArray('patchKeywords'),
+  'default-semver-level': requiredString('defaultSemverLevel'),
   'default-first-tag': requiredString('defaultFirstTag'),
   'terraform-docs-version': requiredString('terraformDocsVersion'),
   'delete-legacy-tags': requiredBoolean('deleteLegacyTags'),

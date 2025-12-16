@@ -382,35 +382,52 @@ export class TerraformModule {
   public getReleaseType(): ReleaseType | null {
     // If we have commits, analyze them for release type
     if (this.hasDirectChanges()) {
-      const { majorKeywords, minorKeywords } = config;
-      let computedReleaseType: ReleaseType = RELEASE_TYPE.PATCH;
+      const { majorKeywords, minorKeywords, patchKeywords, defaultSemverLevel } = config;
+      let computedReleaseType: ReleaseType | null = null;
+      let anyKeywordMatched = false;
 
       // Analyze each commit message and determine highest release type
       for (const message of this.commitMessages) {
         const messageCleaned = message.toLowerCase().trim();
 
         // Determine release type from current message
-        let currentReleaseType: ReleaseType = RELEASE_TYPE.PATCH;
+        let currentReleaseType: ReleaseType | null = null;
         if (majorKeywords.some((keyword) => messageCleaned.includes(keyword.toLowerCase()))) {
           currentReleaseType = RELEASE_TYPE.MAJOR;
+          anyKeywordMatched = true;
         } else if (minorKeywords.some((keyword) => messageCleaned.includes(keyword.toLowerCase()))) {
           currentReleaseType = RELEASE_TYPE.MINOR;
+          anyKeywordMatched = true;
+        } else if (patchKeywords.some((keyword) => messageCleaned.includes(keyword.toLowerCase()))) {
+          currentReleaseType = RELEASE_TYPE.PATCH;
+          anyKeywordMatched = true;
         }
 
-        // Determine the next release type considering the previous release type
-        if (currentReleaseType === RELEASE_TYPE.MAJOR || computedReleaseType === RELEASE_TYPE.MAJOR) {
-          computedReleaseType = RELEASE_TYPE.MAJOR;
-        } else if (currentReleaseType === RELEASE_TYPE.MINOR || computedReleaseType === RELEASE_TYPE.MINOR) {
-          computedReleaseType = RELEASE_TYPE.MINOR;
+        // Only update computedReleaseType if a keyword was matched in this commit
+        if (currentReleaseType !== null) {
+          // Determine the next release type considering the previous release type
+          if (currentReleaseType === RELEASE_TYPE.MAJOR || computedReleaseType === RELEASE_TYPE.MAJOR) {
+            computedReleaseType = RELEASE_TYPE.MAJOR;
+          } else if (currentReleaseType === RELEASE_TYPE.MINOR || computedReleaseType === RELEASE_TYPE.MINOR) {
+            computedReleaseType = RELEASE_TYPE.MINOR;
+          } else if (computedReleaseType === null) {
+            // First keyword match, set it
+            computedReleaseType = currentReleaseType;
+          }
         }
+      }
+
+      // If no keywords matched in any commit, use the default semver level
+      if (!anyKeywordMatched) {
+        return defaultSemverLevel as ReleaseType;
       }
 
       return computedReleaseType;
     }
 
-    // If this is initial release, return patch
+    // If this is initial release, return the default semver level
     if (this.isInitialRelease()) {
-      return RELEASE_TYPE.PATCH;
+      return config.defaultSemverLevel as ReleaseType;
     }
 
     // Otherwise, return null

@@ -27,6 +27,21 @@ export interface Config {
   patchKeywords: string[];
 
   /**
+   * The default semantic version level to use when a commit does not match any configured keywords.
+   * This only applies when NO commits match major, minor, or patch keywords.
+   * If any commit matches a keyword (e.g., minor), that matched level is used instead of this default.
+   *
+   * Valid values: 'patch', 'minor', 'major'
+   * Default: 'patch'
+   *
+   * Example scenarios:
+   * - With defaultSemverLevel='major' and commits with no keywords: uses major
+   * - With defaultSemverLevel='major' and one commit with 'feat:': uses minor (matched keyword wins)
+   * - With defaultSemverLevel='major' and mixed commits (one 'feat:', one no keyword): uses minor
+   */
+  defaultSemverLevel: string;
+
+  /**
    * Default first tag for initializing repositories without existing tags.
    * This serves as the fallback tag when no tags are found in the repository. Note this may
    * be in the format of `v#.#.#` or `#.#.#` (e.g., `v1.0.0` or `1.0.0`).

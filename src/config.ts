@@ -1,5 +1,10 @@
 import type { Config } from '@/types';
-import { ALLOWED_MODULE_REF_MODES, VALID_TAG_DIRECTORY_SEPARATORS, VERSION_TAG_REGEX } from '@/utils/constants';
+import {
+  ALLOWED_MODULE_REF_MODES,
+  RELEASE_TYPE,
+  VALID_TAG_DIRECTORY_SEPARATORS,
+  VERSION_TAG_REGEX,
+} from '@/utils/constants';
 import { createConfigFromInputs } from '@/utils/metadata';
 import { endGroup, info, startGroup } from '@actions/core';
 
@@ -86,9 +91,18 @@ function initializeConfig(): Config {
       );
     }
 
+    // Validate default semver level
+    const validSemverLevels = [RELEASE_TYPE.PATCH, RELEASE_TYPE.MINOR, RELEASE_TYPE.MAJOR];
+    if (!validSemverLevels.includes(configInstance.defaultSemverLevel as never)) {
+      throw new TypeError(
+        `Invalid default-semver-level '${configInstance.defaultSemverLevel}'. Must be one of: ${validSemverLevels.join(', ')}`,
+      );
+    }
+
     info(`Major Keywords: ${configInstance.majorKeywords.join(', ')}`);
     info(`Minor Keywords: ${configInstance.minorKeywords.join(', ')}`);
     info(`Patch Keywords: ${configInstance.patchKeywords.join(', ')}`);
+    info(`Default Semver Level: ${configInstance.defaultSemverLevel}`);
     info(`Default First Tag: ${configInstance.defaultFirstTag}`);
     info(`Terraform Docs Version: ${configInstance.terraformDocsVersion}`);
     info(`Delete Legacy Tags: ${configInstance.deleteLegacyTags}`);

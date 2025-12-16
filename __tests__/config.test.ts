@@ -248,6 +248,45 @@ describe('config', () => {
       config = getConfig();
       expect(config.moduleRefMode).toBe('sha');
     });
+
+    it('should throw error for invalid default-semver-level', () => {
+      setupTestInputs({ 'default-semver-level': 'invalid' });
+      expect(() => getConfig()).toThrow(
+        new TypeError("Invalid default-semver-level 'invalid'. Must be one of: patch, minor, major"),
+      );
+
+      clearConfigForTesting();
+      vi.unstubAllEnvs();
+      setupTestInputs({ 'default-semver-level': 'MAJOR' });
+      expect(() => getConfig()).toThrow(
+        new TypeError("Invalid default-semver-level 'MAJOR'. Must be one of: patch, minor, major"),
+      );
+
+      clearConfigForTesting();
+      vi.unstubAllEnvs();
+      setupTestInputs({ 'default-semver-level': 'hotfix' });
+      expect(() => getConfig()).toThrow(
+        new TypeError("Invalid default-semver-level 'hotfix'. Must be one of: patch, minor, major"),
+      );
+    });
+
+    it('should allow valid default-semver-level values', () => {
+      setupTestInputs({ 'default-semver-level': 'patch' });
+      let config = getConfig();
+      expect(config.defaultSemverLevel).toBe('patch');
+
+      clearConfigForTesting();
+      vi.unstubAllEnvs();
+      setupTestInputs({ 'default-semver-level': 'minor' });
+      config = getConfig();
+      expect(config.defaultSemverLevel).toBe('minor');
+
+      clearConfigForTesting();
+      vi.unstubAllEnvs();
+      setupTestInputs({ 'default-semver-level': 'major' });
+      config = getConfig();
+      expect(config.defaultSemverLevel).toBe('major');
+    });
   });
 
   describe('initialization', () => {
@@ -265,6 +304,7 @@ describe('config', () => {
       expect(config.majorKeywords).toEqual(['major change', 'breaking change']);
       expect(config.minorKeywords).toEqual(['feat', 'feature']);
       expect(config.patchKeywords).toEqual(['fix', 'chore', 'docs']);
+      expect(config.defaultSemverLevel).toBe('patch');
       expect(config.defaultFirstTag).toBe('v1.0.0');
       expect(config.terraformDocsVersion).toBe('v0.20.0');
       expect(config.deleteLegacyTags).toBe(true);
@@ -287,6 +327,7 @@ describe('config', () => {
         ['Major Keywords: major change, breaking change'],
         ['Minor Keywords: feat, feature'],
         ['Patch Keywords: fix, chore, docs'],
+        ['Default Semver Level: patch'],
         ['Default First Tag: v1.0.0'],
         ['Terraform Docs Version: v0.20.0'],
         ['Delete Legacy Tags: true'],

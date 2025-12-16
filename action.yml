@@ -20,6 +20,19 @@ inputs:
       release if major or minor keywords are not found.
     required: true
     default: fix,chore,docs
+  default-semver-level:
+    description: >
+      The default semantic version level to use when a commit does not match any configured keywords
+      (major, minor, or patch). This only applies when NO commits match any keywords. If any commit 
+      matches a keyword, that matched level takes precedence over this default.
+
+      Valid values: patch, minor, major
+
+      Example: With default-semver-level set to 'major', commits without keywords will trigger a major
+      release. However, if any commit contains a minor keyword (e.g., 'feat:'), the release will be
+      minor instead.
+    required: true
+    default: patch
   default-first-tag:
     description: Specifies the default tag version. (Should be in format v#.#.#)
     required: true
