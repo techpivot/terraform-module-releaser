@@ -45,7 +45,7 @@ warning() {
 }
 
 # Ensure we're in a git repository
-if ! git rev-parse --git-dir > /dev/null 2>&1; then
+if ! git rev-parse --git-dir >/dev/null 2>&1; then
     error "Not in a git repository"
 fi
 
@@ -117,7 +117,7 @@ if git rev-parse "$MAJOR_TAG" >/dev/null 2>&1; then
         info "No action needed. Tag is already up to date."
         exit 0
     fi
-    
+
     info "Deleting existing major tag: $MAJOR_TAG (was pointing to $EXISTING_COMMIT)"
     git tag -d "$MAJOR_TAG" || error "Failed to delete local tag $MAJOR_TAG"
 else
