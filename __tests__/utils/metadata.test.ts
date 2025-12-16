@@ -10,6 +10,7 @@ describe('utils/metadata', () => {
         'major-keywords',
         'minor-keywords',
         'patch-keywords',
+        'default-semver-level',
         'default-first-tag',
         'terraform-docs-version',
         'delete-legacy-tags',
@@ -33,6 +34,7 @@ describe('utils/metadata', () => {
 
     it('should have correct metadata structure for required string inputs', () => {
       const stringInputs = [
+        'default-semver-level',
         'default-first-tag',
         'terraform-docs-version',
         'github_token',

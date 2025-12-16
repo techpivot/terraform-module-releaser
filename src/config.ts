@@ -1,5 +1,10 @@
 import type { Config } from '@/types';
-import { ALLOWED_MODULE_REF_MODES, VALID_TAG_DIRECTORY_SEPARATORS, VERSION_TAG_REGEX } from '@/utils/constants';
+import {
+  VALID_MODULE_REF_MODES,
+  VALID_SEMVER_LEVELS,
+  VALID_TAG_DIRECTORY_SEPARATORS,
+  VERSION_TAG_REGEX,
+} from '@/utils/constants';
 import { createConfigFromInputs } from '@/utils/metadata';
 import { endGroup, info, startGroup } from '@actions/core';
 
@@ -80,15 +85,23 @@ function initializeConfig(): Config {
     }
 
     // Validate module ref mode
-    if (!ALLOWED_MODULE_REF_MODES.includes(configInstance.moduleRefMode)) {
+    if (!VALID_MODULE_REF_MODES.includes(configInstance.moduleRefMode)) {
       throw new TypeError(
-        `Invalid module_ref_mode '${configInstance.moduleRefMode}'. Must be one of: ${ALLOWED_MODULE_REF_MODES.join(', ')}`,
+        `Invalid module_ref_mode '${configInstance.moduleRefMode}'. Must be one of: ${VALID_MODULE_REF_MODES.join(', ')}`,
+      );
+    }
+
+    // Validate default semver level
+    if (!VALID_SEMVER_LEVELS.includes(configInstance.defaultSemverLevel)) {
+      throw new TypeError(
+        `Invalid default-semver-level '${configInstance.defaultSemverLevel}'. Must be one of: ${VALID_SEMVER_LEVELS.join(', ')}`,
       );
     }
 
     info(`Major Keywords: ${configInstance.majorKeywords.join(', ')}`);
     info(`Minor Keywords: ${configInstance.minorKeywords.join(', ')}`);
     info(`Patch Keywords: ${configInstance.patchKeywords.join(', ')}`);
+    info(`Default Semver Level: ${configInstance.defaultSemverLevel}`);
     info(`Default First Tag: ${configInstance.defaultFirstTag}`);
     info(`Terraform Docs Version: ${configInstance.terraformDocsVersion}`);
     info(`Delete Legacy Tags: ${configInstance.deleteLegacyTags}`);

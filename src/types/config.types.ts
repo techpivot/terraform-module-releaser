@@ -2,6 +2,8 @@
  * Configuration related types
  */
 
+import type { ReleaseType } from './common.types';
+
 export type ModuleRefMode = 'tag' | 'sha';
 
 /**
@@ -25,6 +27,21 @@ export interface Config {
    * These keywords are used to trigger a patch version bump in semantic versioning.
    */
   patchKeywords: string[];
+
+  /**
+   * The default semantic version level to use when a commit does not match any configured keywords.
+   * This only applies when NO commits match major, minor, or patch keywords.
+   * If any commit matches a keyword (e.g., minor), that matched level is used instead of this default.
+   *
+   * Valid values: 'patch', 'minor', 'major'
+   * Default: 'patch'
+   *
+   * Example scenarios:
+   * - With defaultSemverLevel='major' and commits with no keywords: uses major
+   * - With defaultSemverLevel='major' and one commit with 'feat:': uses minor (matched keyword wins)
+   * - With defaultSemverLevel='major' and mixed commits (one 'feat:', one no keyword): uses minor
+   */
+  defaultSemverLevel: ReleaseType;
 
   /**
    * Default first tag for initializing repositories without existing tags.

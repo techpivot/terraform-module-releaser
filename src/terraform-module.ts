@@ -380,40 +380,73 @@ export class TerraformModule {
    * @returns {ReleaseType | null} The computed release type (major, minor, or patch), or null if no release is needed.
    */
   public getReleaseType(): ReleaseType | null {
+    // If this is initial release, return the default semver level
+    if (this.isInitialRelease()) {
+      return config.defaultSemverLevel;
+    }
+
     // If we have commits, analyze them for release type
     if (this.hasDirectChanges()) {
-      const { majorKeywords, minorKeywords } = config;
-      let computedReleaseType: ReleaseType = RELEASE_TYPE.PATCH;
+      const { majorKeywords, minorKeywords, patchKeywords, defaultSemverLevel } = config;
+      let computedReleaseType: ReleaseType | null = null;
 
       // Analyze each commit message and determine highest release type
       for (const message of this.commitMessages) {
         const messageCleaned = message.toLowerCase().trim();
 
         // Determine release type from current message
-        let currentReleaseType: ReleaseType = RELEASE_TYPE.PATCH;
-        if (majorKeywords.some((keyword) => messageCleaned.includes(keyword.toLowerCase()))) {
-          currentReleaseType = RELEASE_TYPE.MAJOR;
-        } else if (minorKeywords.some((keyword) => messageCleaned.includes(keyword.toLowerCase()))) {
-          currentReleaseType = RELEASE_TYPE.MINOR;
-        }
+        const currentReleaseType = this.detectReleaseTypeFromMessage(
+          messageCleaned,
+          majorKeywords,
+          minorKeywords,
+          patchKeywords,
+        );
 
-        // Determine the next release type considering the previous release type
-        if (currentReleaseType === RELEASE_TYPE.MAJOR || computedReleaseType === RELEASE_TYPE.MAJOR) {
-          computedReleaseType = RELEASE_TYPE.MAJOR;
-        } else if (currentReleaseType === RELEASE_TYPE.MINOR || computedReleaseType === RELEASE_TYPE.MINOR) {
-          computedReleaseType = RELEASE_TYPE.MINOR;
+        // Only update computedReleaseType if a keyword was matched in this commit
+        if (currentReleaseType !== null) {
+          // Determine the higher priority release type (MAJOR > MINOR > PATCH)
+          if (currentReleaseType === RELEASE_TYPE.MAJOR || computedReleaseType === RELEASE_TYPE.MAJOR) {
+            computedReleaseType = RELEASE_TYPE.MAJOR;
+          } else if (currentReleaseType === RELEASE_TYPE.MINOR || computedReleaseType === RELEASE_TYPE.MINOR) {
+            computedReleaseType = RELEASE_TYPE.MINOR;
+          } else {
+            computedReleaseType = RELEASE_TYPE.PATCH;
+          }
         }
       }
 
-      return computedReleaseType;
-    }
-
-    // If this is initial release, return patch
-    if (this.isInitialRelease()) {
-      return RELEASE_TYPE.PATCH;
+      // If no keywords matched in any commit, use the default semver level
+      return computedReleaseType ?? defaultSemverLevel;
     }
 
     // Otherwise, return null
+    return null;
+  }
+
+  /**
+   * Detects the release type from a commit message based on keyword matching.
+   *
+   * @param message - The cleaned commit message to analyze
+   * @param majorKeywords - Keywords that indicate a major release
+   * @param minorKeywords - Keywords that indicate a minor release
+   * @param patchKeywords - Keywords that indicate a patch release
+   * @returns The detected release type, or null if no keywords match
+   */
+  private detectReleaseTypeFromMessage(
+    message: string,
+    majorKeywords: string[],
+    minorKeywords: string[],
+    patchKeywords: string[],
+  ): ReleaseType | null {
+    if (majorKeywords.some((keyword) => message.includes(keyword.toLowerCase()))) {
+      return RELEASE_TYPE.MAJOR;
+    }
+    if (minorKeywords.some((keyword) => message.includes(keyword.toLowerCase()))) {
+      return RELEASE_TYPE.MINOR;
+    }
+    if (patchKeywords.some((keyword) => message.includes(keyword.toLowerCase()))) {
+      return RELEASE_TYPE.PATCH;
+    }
     return null;
   }
 
