@@ -404,7 +404,14 @@ export class TerraformModule {
 
         // Only update computedReleaseType if a keyword was matched in this commit
         if (currentReleaseType !== null) {
-          computedReleaseType = this.getHigherReleaseType(computedReleaseType, currentReleaseType);
+          // Determine the higher priority release type (MAJOR > MINOR > PATCH)
+          if (currentReleaseType === RELEASE_TYPE.MAJOR || computedReleaseType === RELEASE_TYPE.MAJOR) {
+            computedReleaseType = RELEASE_TYPE.MAJOR;
+          } else if (currentReleaseType === RELEASE_TYPE.MINOR || computedReleaseType === RELEASE_TYPE.MINOR) {
+            computedReleaseType = RELEASE_TYPE.MINOR;
+          } else {
+            computedReleaseType = RELEASE_TYPE.PATCH;
+          }
         }
       }
 
@@ -441,24 +448,6 @@ export class TerraformModule {
       return RELEASE_TYPE.PATCH;
     }
     return null;
-  }
-
-  /**
-   * Determines the higher priority release type between two release types.
-   * Priority order: MAJOR > MINOR > PATCH
-   *
-   * @param current - The current computed release type
-   * @param candidate - The candidate release type to compare
-   * @returns The higher priority release type
-   */
-  private getHigherReleaseType(current: ReleaseType | null, candidate: ReleaseType): ReleaseType {
-    if (current === RELEASE_TYPE.MAJOR || candidate === RELEASE_TYPE.MAJOR) {
-      return RELEASE_TYPE.MAJOR;
-    }
-    if (current === RELEASE_TYPE.MINOR || candidate === RELEASE_TYPE.MINOR) {
-      return RELEASE_TYPE.MINOR;
-    }
-    return RELEASE_TYPE.PATCH;
   }
 
   /**
