@@ -1,7 +1,7 @@
 import type { Config } from '@/types';
 import {
   ALLOWED_MODULE_REF_MODES,
-  RELEASE_TYPE,
+  ALLOWED_SEMVER_LEVELS,
   VALID_TAG_DIRECTORY_SEPARATORS,
   VERSION_TAG_REGEX,
 } from '@/utils/constants';
@@ -92,10 +92,9 @@ function initializeConfig(): Config {
     }
 
     // Validate default semver level
-    const validSemverLevels = [RELEASE_TYPE.PATCH, RELEASE_TYPE.MINOR, RELEASE_TYPE.MAJOR] as const;
-    if (!validSemverLevels.includes(configInstance.defaultSemverLevel)) {
+    if (!ALLOWED_SEMVER_LEVELS.includes(configInstance.defaultSemverLevel)) {
       throw new TypeError(
-        `Invalid default-semver-level '${configInstance.defaultSemverLevel}'. Must be one of: ${validSemverLevels.join(', ')}`,
+        `Invalid default-semver-level '${configInstance.defaultSemverLevel}'. Must be one of: ${ALLOWED_SEMVER_LEVELS.join(', ')}`,
       );
     }
 

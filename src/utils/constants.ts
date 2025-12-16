@@ -61,6 +61,11 @@ export const RELEASE_TYPE = {
 } as const;
 
 /**
+ * Allowed semantic version levels for default-semver-level configuration
+ */
+export const ALLOWED_SEMVER_LEVELS = [RELEASE_TYPE.PATCH, RELEASE_TYPE.MINOR, RELEASE_TYPE.MAJOR] as const;
+
+/**
  * Release reason constants - why a module needs a release
  */
 export const RELEASE_REASON = {
