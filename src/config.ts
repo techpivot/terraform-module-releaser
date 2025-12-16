@@ -92,8 +92,8 @@ function initializeConfig(): Config {
     }
 
     // Validate default semver level
-    const validSemverLevels = [RELEASE_TYPE.PATCH, RELEASE_TYPE.MINOR, RELEASE_TYPE.MAJOR];
-    if (!validSemverLevels.includes(configInstance.defaultSemverLevel as never)) {
+    const validSemverLevels = [RELEASE_TYPE.PATCH, RELEASE_TYPE.MINOR, RELEASE_TYPE.MAJOR] as const;
+    if (!validSemverLevels.includes(configInstance.defaultSemverLevel)) {
       throw new TypeError(
         `Invalid default-semver-level '${configInstance.defaultSemverLevel}'. Must be one of: ${validSemverLevels.join(', ')}`,
       );

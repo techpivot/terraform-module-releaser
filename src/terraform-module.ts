@@ -384,7 +384,6 @@ export class TerraformModule {
     if (this.hasDirectChanges()) {
       const { majorKeywords, minorKeywords, patchKeywords, defaultSemverLevel } = config;
       let computedReleaseType: ReleaseType | null = null;
-      let anyKeywordMatched = false;
 
       // Analyze each commit message and determine highest release type
       for (const message of this.commitMessages) {
@@ -394,13 +393,10 @@ export class TerraformModule {
         let currentReleaseType: ReleaseType | null = null;
         if (majorKeywords.some((keyword) => messageCleaned.includes(keyword.toLowerCase()))) {
           currentReleaseType = RELEASE_TYPE.MAJOR;
-          anyKeywordMatched = true;
         } else if (minorKeywords.some((keyword) => messageCleaned.includes(keyword.toLowerCase()))) {
           currentReleaseType = RELEASE_TYPE.MINOR;
-          anyKeywordMatched = true;
         } else if (patchKeywords.some((keyword) => messageCleaned.includes(keyword.toLowerCase()))) {
           currentReleaseType = RELEASE_TYPE.PATCH;
-          anyKeywordMatched = true;
         }
 
         // Only update computedReleaseType if a keyword was matched in this commit
@@ -418,8 +414,8 @@ export class TerraformModule {
       }
 
       // If no keywords matched in any commit, use the default semver level
-      if (!anyKeywordMatched) {
-        return defaultSemverLevel as ReleaseType;
+      if (computedReleaseType === null) {
+        return defaultSemverLevel;
       }
 
       return computedReleaseType;
@@ -427,7 +423,7 @@ export class TerraformModule {
 
     // If this is initial release, return the default semver level
     if (this.isInitialRelease()) {
-      return config.defaultSemverLevel as ReleaseType;
+      return config.defaultSemverLevel;
     }
 
     // Otherwise, return null

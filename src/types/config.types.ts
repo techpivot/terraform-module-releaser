@@ -2,6 +2,8 @@
  * Configuration related types
  */
 
+import type { ReleaseType } from './common.types';
+
 export type ModuleRefMode = 'tag' | 'sha';
 
 /**
@@ -39,7 +41,7 @@ export interface Config {
    * - With defaultSemverLevel='major' and one commit with 'feat:': uses minor (matched keyword wins)
    * - With defaultSemverLevel='major' and mixed commits (one 'feat:', one no keyword): uses minor
    */
-  defaultSemverLevel: string;
+  defaultSemverLevel: ReleaseType;
 
   /**
    * Default first tag for initializing repositories without existing tags.
