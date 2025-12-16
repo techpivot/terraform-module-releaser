@@ -796,6 +796,21 @@ describe('TerraformModule', () => {
         expect(module.getReleaseType()).toBe(RELEASE_TYPE.PATCH);
       });
 
+      it('should use patch as first match when no previous release type exists', () => {
+        config.set({
+          patchKeywords: ['fix', 'chore', 'docs'],
+        });
+
+        module.setTags(createMockTags(['tf-modules/test-module/v1.0.0'])); // Not initial
+        module.addCommit({
+          sha: 'abc123',
+          message: 'chore: update dependencies',
+          files: ['main.tf'],
+        });
+
+        expect(module.getReleaseType()).toBe(RELEASE_TYPE.PATCH);
+      });
+
       it('should use default minor for initial release when configured', () => {
         config.set({
           defaultSemverLevel: 'minor',
