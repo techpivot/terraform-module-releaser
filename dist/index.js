@@ -28259,6 +28259,10 @@ const RELEASE_TYPE = {
     PATCH: 'patch',
 };
 /**
+ * Valid semantic version levels for default-semver-level configuration
+ */
+const VALID_SEMVER_LEVELS = [RELEASE_TYPE.PATCH, RELEASE_TYPE.MINOR, RELEASE_TYPE.MAJOR];
+/**
  * Release reason constants - why a module needs a release
  */
 const RELEASE_REASON = {
@@ -28325,7 +28329,7 @@ const WIKI_TITLE_REPLACEMENTS = {
  */
 const MODULE_REF_MODE_TAG = 'tag';
 const MODULE_REF_MODE_SHA = 'sha';
-const ALLOWED_MODULE_REF_MODES = [MODULE_REF_MODE_TAG, MODULE_REF_MODE_SHA];
+const VALID_MODULE_REF_MODES = [MODULE_REF_MODE_TAG, MODULE_REF_MODE_SHA];
 
 // EXTERNAL MODULE: ./node_modules/@actions/core/lib/core.js
 var core = __nccwpck_require__(7484);
@@ -28369,6 +28373,7 @@ const ACTION_INPUTS = {
     'major-keywords': requiredArray('majorKeywords'),
     'minor-keywords': requiredArray('minorKeywords'),
     'patch-keywords': requiredArray('patchKeywords'),
+    'default-semver-level': requiredString('defaultSemverLevel'),
     'default-first-tag': requiredString('defaultFirstTag'),
     'terraform-docs-version': requiredString('terraformDocsVersion'),
     'delete-legacy-tags': requiredBoolean('deleteLegacyTags'),
@@ -28498,12 +28503,17 @@ function initializeConfig() {
             configInstance.defaultFirstTag = configInstance.defaultFirstTag.substring(1);
         }
         // Validate module ref mode
-        if (!ALLOWED_MODULE_REF_MODES.includes(configInstance.moduleRefMode)) {
-            throw new TypeError(`Invalid module_ref_mode '${configInstance.moduleRefMode}'. Must be one of: ${ALLOWED_MODULE_REF_MODES.join(', ')}`);
+        if (!VALID_MODULE_REF_MODES.includes(configInstance.moduleRefMode)) {
+            throw new TypeError(`Invalid module_ref_mode '${configInstance.moduleRefMode}'. Must be one of: ${VALID_MODULE_REF_MODES.join(', ')}`);
+        }
+        // Validate default semver level
+        if (!VALID_SEMVER_LEVELS.includes(configInstance.defaultSemverLevel)) {
+            throw new TypeError(`Invalid default-semver-level '${configInstance.defaultSemverLevel}'. Must be one of: ${VALID_SEMVER_LEVELS.join(', ')}`);
         }
         (0,core.info)(`Major Keywords: ${configInstance.majorKeywords.join(', ')}`);
         (0,core.info)(`Minor Keywords: ${configInstance.minorKeywords.join(', ')}`);
         (0,core.info)(`Patch Keywords: ${configInstance.patchKeywords.join(', ')}`);
+        (0,core.info)(`Default Semver Level: ${configInstance.defaultSemverLevel}`);
         (0,core.info)(`Default First Tag: ${configInstance.defaultFirstTag}`);
         (0,core.info)(`Terraform Docs Version: ${configInstance.terraformDocsVersion}`);
         (0,core.info)(`Delete Legacy Tags: ${configInstance.deleteLegacyTags}`);
@@ -32466,7 +32476,7 @@ legacyRestEndpointMethods.VERSION = dist_src_version_VERSION;
 //# sourceMappingURL=index.js.map
 
 ;// CONCATENATED MODULE: ./package.json
-const package_namespaceObject = /*#__PURE__*/JSON.parse('{"rE":"1.8.0","TB":"https://github.com/techpivot/terraform-module-releaser"}');
+const package_namespaceObject = /*#__PURE__*/JSON.parse('{"rE":"1.8.1","TB":"https://github.com/techpivot/terraform-module-releaser"}');
 ;// CONCATENATED MODULE: ./src/context.ts
 
 
@@ -33039,36 +33049,58 @@ class TerraformModule {
      * @returns {ReleaseType | null} The computed release type (major, minor, or patch), or null if no release is needed.
      */
     getReleaseType() {
+        // If this is initial release, return the default semver level
+        if (this.isInitialRelease()) {
+            return config.defaultSemverLevel;
+        }
         // If we have commits, analyze them for release type
         if (this.hasDirectChanges()) {
-            const { majorKeywords, minorKeywords } = config;
-            let computedReleaseType = RELEASE_TYPE.PATCH;
+            const { majorKeywords, minorKeywords, patchKeywords, defaultSemverLevel } = config;
+            let computedReleaseType = null;
             // Analyze each commit message and determine highest release type
             for (const message of this.commitMessages) {
                 const messageCleaned = message.toLowerCase().trim();
                 // Determine release type from current message
-                let currentReleaseType = RELEASE_TYPE.PATCH;
-                if (majorKeywords.some((keyword) => messageCleaned.includes(keyword.toLowerCase()))) {
-                    currentReleaseType = RELEASE_TYPE.MAJOR;
-                }
-                else if (minorKeywords.some((keyword) => messageCleaned.includes(keyword.toLowerCase()))) {
-                    currentReleaseType = RELEASE_TYPE.MINOR;
-                }
-                // Determine the next release type considering the previous release type
-                if (currentReleaseType === RELEASE_TYPE.MAJOR || computedReleaseType === RELEASE_TYPE.MAJOR) {
-                    computedReleaseType = RELEASE_TYPE.MAJOR;
-                }
-                else if (currentReleaseType === RELEASE_TYPE.MINOR || computedReleaseType === RELEASE_TYPE.MINOR) {
-                    computedReleaseType = RELEASE_TYPE.MINOR;
+                const currentReleaseType = this.detectReleaseTypeFromMessage(messageCleaned, majorKeywords, minorKeywords, patchKeywords);
+                // Only update computedReleaseType if a keyword was matched in this commit
+                if (currentReleaseType !== null) {
+                    // Determine the higher priority release type (MAJOR > MINOR > PATCH)
+                    if (currentReleaseType === RELEASE_TYPE.MAJOR || computedReleaseType === RELEASE_TYPE.MAJOR) {
+                        computedReleaseType = RELEASE_TYPE.MAJOR;
+                    }
+                    else if (currentReleaseType === RELEASE_TYPE.MINOR || computedReleaseType === RELEASE_TYPE.MINOR) {
+                        computedReleaseType = RELEASE_TYPE.MINOR;
+                    }
+                    else {
+                        computedReleaseType = RELEASE_TYPE.PATCH;
+                    }
                 }
             }
-            return computedReleaseType;
-        }
-        // If this is initial release, return patch
-        if (this.isInitialRelease()) {
-            return RELEASE_TYPE.PATCH;
+            // If no keywords matched in any commit, use the default semver level
+            return computedReleaseType ?? defaultSemverLevel;
         }
         // Otherwise, return null
+        return null;
+    }
+    /**
+     * Detects the release type from a commit message based on keyword matching.
+     *
+     * @param message - The cleaned commit message to analyze
+     * @param majorKeywords - Keywords that indicate a major release
+     * @param minorKeywords - Keywords that indicate a minor release
+     * @param patchKeywords - Keywords that indicate a patch release
+     * @returns The detected release type, or null if no keywords match
+     */
+    detectReleaseTypeFromMessage(message, majorKeywords, minorKeywords, patchKeywords) {
+        if (majorKeywords.some((keyword) => message.includes(keyword.toLowerCase()))) {
+            return RELEASE_TYPE.MAJOR;
+        }
+        if (minorKeywords.some((keyword) => message.includes(keyword.toLowerCase()))) {
+            return RELEASE_TYPE.MINOR;
+        }
+        if (patchKeywords.some((keyword) => message.includes(keyword.toLowerCase()))) {
+            return RELEASE_TYPE.PATCH;
+        }
         return null;
     }
     /**
