@@ -61,9 +61,9 @@ export const RELEASE_TYPE = {
 } as const;
 
 /**
- * Allowed semantic version levels for default-semver-level configuration
+ * Valid semantic version levels for default-semver-level configuration
  */
-export const ALLOWED_SEMVER_LEVELS = [RELEASE_TYPE.PATCH, RELEASE_TYPE.MINOR, RELEASE_TYPE.MAJOR] as const;
+export const VALID_SEMVER_LEVELS = [RELEASE_TYPE.PATCH, RELEASE_TYPE.MINOR, RELEASE_TYPE.MAJOR] as const;
 
 /**
  * Release reason constants - why a module needs a release
@@ -139,4 +139,4 @@ export const WIKI_TITLE_REPLACEMENTS: { [key: string]: string } = {
  */
 export const MODULE_REF_MODE_TAG = 'tag' as const;
 export const MODULE_REF_MODE_SHA = 'sha' as const;
-export const ALLOWED_MODULE_REF_MODES = [MODULE_REF_MODE_TAG, MODULE_REF_MODE_SHA] as const;
+export const VALID_MODULE_REF_MODES = [MODULE_REF_MODE_TAG, MODULE_REF_MODE_SHA] as const;
