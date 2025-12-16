@@ -2,16 +2,16 @@
 #
 # Update Major Version Tag
 #
-# This script updates the major version tag (e.g., v1, v2) to point to the latest
-# release in that major version series. It's designed for GitHub Actions to enable
-# users to reference stable major versions (e.g., uses: owner/repo@v1).
+# This script updates the major version tag (e.g., v1, v2) to point to the current
+# commit on the main branch. It's designed for GitHub Actions to enable users to
+# reference stable major versions (e.g., uses: owner/repo@v1).
 #
 # The script:
-# 1. Ensures we're on the main branch
+# 1. Ensures we're on the main branch with up-to-date commits
 # 2. Fetches the latest tags from remote
-# 3. Finds the highest major version tag
-# 4. Deletes the existing major tag (if it exists)
-# 5. Creates a new major tag pointing to the current commit
+# 3. Determines the highest major version from existing tags
+# 4. Deletes the existing major tag locally (if it exists)
+# 5. Creates a new major tag pointing to the current commit (HEAD)
 # 6. Displays the command to push the tag with force
 #
 # Usage: ./scripts/update-major-tag.sh
@@ -110,7 +110,7 @@ fi
 # Check if major tag already exists
 if git rev-parse "$MAJOR_TAG" >/dev/null 2>&1; then
     EXISTING_COMMIT=$(git rev-list -n 1 "$MAJOR_TAG")
-    
+
     if [[ "$EXISTING_COMMIT" == "$CURRENT_COMMIT" ]]; then
         success "Major tag $MAJOR_TAG already points to current commit"
         echo ""
