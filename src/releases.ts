@@ -158,6 +158,7 @@ export async function createTaggedReleases(terraformModules: TerraformModule[]):
         ['tag', releaseTag],
         ['push', 'origin', releaseTag],
       ]) {
+        console.log(`Executing git command: ${cmd.join(' ')}`);
         execFileSync(gitPath, cmd, gitOpts);
       }
 
