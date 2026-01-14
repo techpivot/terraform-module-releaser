@@ -37463,11 +37463,14 @@ async function createTaggedReleases(terraformModules) {
             for (const cmd of [
                 ['config', '--local', 'user.name', GITHUB_ACTIONS_BOT_NAME],
                 ['config', '--local', 'user.email', githubActionsBotEmail],
+                ['checkout', '-b', `_branch/${releaseTag}`],
                 ['add', '.'],
                 ['commit', '-m', commitMessage.trim()],
+                ['push', 'origin', `_branch/${releaseTag}`],
                 ['tag', releaseTag],
                 ['push', 'origin', releaseTag],
             ]) {
+                (0,core.info)(`Executing git command: ${cmd.join(' ')}`);
                 (0,external_node_child_process_namespaceObject.execFileSync)(gitPath, cmd, gitOpts);
             }
             // Store the commit SHA that the tag points to (since it's not returned from the API via create release)
