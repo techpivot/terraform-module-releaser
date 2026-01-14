@@ -37463,10 +37463,10 @@ async function createTaggedReleases(terraformModules) {
             for (const cmd of [
                 ['config', '--local', 'user.name', GITHUB_ACTIONS_BOT_NAME],
                 ['config', '--local', 'user.email', githubActionsBotEmail],
-                ['checkout', '-b', `_branch/${releaseTag}`],
+                ['checkout', '-b', `_branch/${moduleName}`],
                 ['add', '.'],
                 ['commit', '-m', commitMessage.trim()],
-                ['push', 'origin', `_branch/${releaseTag}`],
+                ['push', '-f', 'origin', `_branch/${moduleName}`],
                 ['tag', releaseTag],
                 ['push', 'origin', releaseTag],
             ]) {
