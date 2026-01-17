@@ -17,6 +17,9 @@ import {
   MODULE_REF_MODE_SHA,
   MODULE_REF_MODE_TAG,
   PROJECT_URL,
+  WIKI_CONTENT_SOURCE_README,
+  WIKI_CONTENT_SOURCE_README_WITH_TERRAFORM_DOCS,
+  WIKI_CONTENT_SOURCE_TERRAFORM_DOCS,
   WIKI_FOOTER_FILENAME,
   WIKI_HOME_FILENAME,
   WIKI_SIDEBAR_FILENAME,
@@ -25,7 +28,7 @@ import {
 } from '@/utils/constants';
 import { removeDirectoryContents } from '@/utils/file';
 import { configureGitAuthentication, getGitHubActionsBotEmail } from '@/utils/github';
-import { endGroup, info, startGroup } from '@actions/core';
+import { endGroup, info, startGroup, warning } from '@actions/core';
 import pLimit from 'p-limit';
 import which from 'which';
 
@@ -280,17 +283,40 @@ async function writeWikiFile(basename: string, content: string): Promise<string>
 }
 
 /**
- * Generates the wiki file associated with the specified Terraform module.
- * Ensures that the directory structure is created if it doesn't exist and handles overwriting
- * the existing wiki file.
+ * Reads the README.md file from a Terraform module directory if it exists.
  *
- * @param {TerraformModule} terraformModule - The Terraform module to generate the wiki file for.
- * @returns {Promise<string>} The path to the wiki file that was written.
- * @throws Will throw an error if the file cannot be written.
+ * @param {TerraformModule} terraformModule - The Terraform module to read README.md from.
+ * @returns {Promise<string | null>} The contents of README.md, or null if the file doesn't exist.
  */
-async function generateWikiTerraformModule(terraformModule: TerraformModule): Promise<string> {
-  const changelog = getTerraformModuleFullReleaseChangelog(terraformModule);
-  const tfDocs = await generateTerraformDocs(terraformModule);
+async function readModuleReadme(terraformModule: TerraformModule): Promise<string | null> {
+  const readmePath = join(terraformModule.directory, 'README.md');
+
+  if (!existsSync(readmePath)) {
+    return null;
+  }
+
+  try {
+    return await fsp.readFile(readmePath, 'utf8');
+  } catch (err) {
+    warning(`Failed to read README.md for module '${terraformModule.name}': ${err}`);
+    return null;
+  }
+}
+
+/**
+ * Generates the wiki content when using 'terraform-docs' mode (default).
+ * Creates a wiki page with Usage, Attributes (from terraform-docs), and optionally Changelog sections.
+ *
+ * @param {TerraformModule} terraformModule - The Terraform module to generate content for.
+ * @param {string} tfDocs - The generated terraform-docs output.
+ * @param {string} changelog - The changelog content for the module.
+ * @returns {Promise<string>} The generated wiki content.
+ */
+async function generateWikiContentFromTerraformDocs(
+  terraformModule: TerraformModule,
+  tfDocs: string,
+  changelog: string,
+): Promise<string> {
   const moduleSource = getModuleSource(context.repoUrl, config.useSSHSourceFormat);
   const latestTag = terraformModule.getLatestTag();
 
@@ -300,7 +326,6 @@ async function generateWikiTerraformModule(terraformModule: TerraformModule): Pr
 
   switch (config.moduleRefMode) {
     case MODULE_REF_MODE_TAG:
-      // Use the tag as the ref
       ref = latestTag ?? '';
       break;
     case MODULE_REF_MODE_SHA:
@@ -308,11 +333,9 @@ async function generateWikiTerraformModule(terraformModule: TerraformModule): Pr
       refComment = terraformModule.getLatestTagVersion() ? ` # ${terraformModule.getLatestTagVersion()}` : '';
       break;
     default:
-      // This should never happen due to validation at config load time
       throw new Error(`Invalid module_ref_mode: ${config.moduleRefMode}`);
   }
 
-  // Warn if ref is empty (could happen if latestTag is null/empty or SHA not found in SHA mode)
   if (!ref) {
     info(`Warning: No ref available for module '${terraformModule.name}' (tag: '${latestTag}')`);
   }
@@ -327,18 +350,126 @@ async function generateWikiTerraformModule(terraformModule: TerraformModule): Pr
     module_name_terraform: terraformModule.name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase(),
   });
 
-  const content = [
+  const contentParts = [
     '# Usage\n',
     usage,
     '\n# Attributes\n',
     '<!-- BEGIN_TF_DOCS -->',
     tfDocs,
     '<!-- END_TF_DOCS -->',
-    '\n# Changelog\n',
-    changelog,
-  ].join('\n');
+  ];
 
-  // Write the markdown content to the wiki file, overwriting if it exists
+  if (config.wikiIncludeChangelog && changelog) {
+    contentParts.push('\n# Changelog\n', changelog);
+  }
+
+  return contentParts.join('\n');
+}
+
+/**
+ * Generates the wiki content when using 'readme' mode.
+ * Uses the module's README.md file directly, optionally appending the changelog.
+ *
+ * @param {TerraformModule} terraformModule - The Terraform module to generate content for.
+ * @param {string} changelog - The changelog content for the module.
+ * @returns {Promise<string>} The generated wiki content.
+ */
+async function generateWikiContentFromReadme(terraformModule: TerraformModule, changelog: string): Promise<string> {
+  const readmeContent = await readModuleReadme(terraformModule);
+
+  if (readmeContent === null) {
+    warning(
+      `No README.md found for module '${terraformModule.name}'. Falling back to terraform-docs content generation.`,
+    );
+    const tfDocs = await generateTerraformDocs(terraformModule);
+    return generateWikiContentFromTerraformDocs(terraformModule, tfDocs, changelog);
+  }
+
+  const contentParts = [readmeContent];
+
+  if (config.wikiIncludeChangelog && changelog) {
+    contentParts.push('\n\n# Changelog\n', changelog);
+  }
+
+  return contentParts.join('');
+}
+
+/**
+ * Generates the wiki content when using 'readme-with-terraform-docs' mode.
+ * Injects terraform-docs output into the module's README.md at the specified marker position.
+ * If the marker is not found, appends terraform-docs at the end.
+ *
+ * @param {TerraformModule} terraformModule - The Terraform module to generate content for.
+ * @param {string} tfDocs - The generated terraform-docs output.
+ * @param {string} changelog - The changelog content for the module.
+ * @returns {Promise<string>} The generated wiki content.
+ */
+async function generateWikiContentFromReadmeWithTerraformDocs(
+  terraformModule: TerraformModule,
+  tfDocs: string,
+  changelog: string,
+): Promise<string> {
+  const readmeContent = await readModuleReadme(terraformModule);
+
+  if (readmeContent === null) {
+    warning(
+      `No README.md found for module '${terraformModule.name}'. Falling back to terraform-docs content generation.`,
+    );
+    return generateWikiContentFromTerraformDocs(terraformModule, tfDocs, changelog);
+  }
+
+  const marker = config.wikiReadmeTerraformDocsMarker;
+  const tfDocsBlock = `<!-- BEGIN_TF_DOCS -->\n${tfDocs}\n<!-- END_TF_DOCS -->`;
+
+  let content: string;
+
+  if (readmeContent.includes(marker)) {
+    // Replace the marker with terraform-docs output
+    content = readmeContent.replace(marker, tfDocsBlock);
+    info(`Injected terraform-docs at marker '${marker}' for module '${terraformModule.name}'`);
+  } else {
+    // Append terraform-docs at the end if marker not found
+    warning(
+      `Marker '${marker}' not found in README.md for module '${terraformModule.name}'. Appending terraform-docs at the end.`,
+    );
+    content = `${readmeContent}\n\n## Terraform Documentation\n\n${tfDocsBlock}`;
+  }
+
+  if (config.wikiIncludeChangelog && changelog) {
+    content += `\n\n# Changelog\n${changelog}`;
+  }
+
+  return content;
+}
+
+/**
+ * Generates the wiki file associated with the specified Terraform module.
+ * Supports multiple content source modes: terraform-docs, readme, and readme-with-terraform-docs.
+ *
+ * @param {TerraformModule} terraformModule - The Terraform module to generate the wiki file for.
+ * @returns {Promise<string>} The path to the wiki file that was written.
+ * @throws Will throw an error if the file cannot be written.
+ */
+async function generateWikiTerraformModule(terraformModule: TerraformModule): Promise<string> {
+  const changelog = getTerraformModuleFullReleaseChangelog(terraformModule);
+  let content: string;
+
+  switch (config.wikiContentSource) {
+    case WIKI_CONTENT_SOURCE_README: {
+      content = await generateWikiContentFromReadme(terraformModule, changelog);
+      break;
+    }
+    case WIKI_CONTENT_SOURCE_README_WITH_TERRAFORM_DOCS: {
+      const tfDocs = await generateTerraformDocs(terraformModule);
+      content = await generateWikiContentFromReadmeWithTerraformDocs(terraformModule, tfDocs, changelog);
+      break;
+    }
+    default: {
+      const tfDocs = await generateTerraformDocs(terraformModule);
+      content = await generateWikiContentFromTerraformDocs(terraformModule, tfDocs, changelog);
+      break;
+    }
+  }
 
   return await writeWikiFile(`${getWikiSlug(terraformModule.name)}.md`, content);
 }
@@ -392,41 +523,63 @@ async function generateWikiSidebar(terraformModules: TerraformModule[]): Promise
   const repoBaseUrl = `/${owner}/${repo}`;
   let moduleSidebarContent = '';
 
+  // Determine which sections to show based on content source
+  const showUsageSection = config.wikiContentSource === WIKI_CONTENT_SOURCE_TERRAFORM_DOCS;
+  const showAttributesSection =
+    config.wikiContentSource === WIKI_CONTENT_SOURCE_TERRAFORM_DOCS ||
+    config.wikiContentSource === WIKI_CONTENT_SOURCE_README_WITH_TERRAFORM_DOCS;
+
   for (const terraformModule of terraformModules) {
     // Get the baselink which is used throughout the sidebar
     const baselink = getWikiLink(terraformModule.name, true);
 
-    // Generate module changelog string by limiting to wikiSidebarChangelogMax
-    const changelogContent = getTerraformModuleFullReleaseChangelog(terraformModule);
+    // Build sidebar sections list
+    const sidebarSections: string[] = [];
 
-    // Regex to capture all headings starting with '## ' on a single line
-    // Note: Use ([^\n]+) Instead of (.+):
-    // The pattern [^\n]+ matches one or more characters that are not a newline. This restricts matches
-    // to a single line and reduces backtracking possibilities since it won't consume any newlines.
-    // Note: The 'g' flag is required for matchAll
-    const headingRegex = /^(?:#{2,3})\s+([^\n]+)/gm; // Matches '##' or '###' headings
-
-    const changelogEntries = [];
-
-    for (const headingMatch of changelogContent.matchAll(headingRegex)) {
-      const heading = headingMatch[1].trim();
-
-      // Convert heading into a valid ID string (keep only [a-zA-Z0-9-_]) But we need spaces to go to a '-'
-      const idString = heading.replace(/ +/g, '-').replace(/[^a-zA-Z0-9-_]/g, '');
-
-      // Append the entry to changelogEntries
-      changelogEntries.push(
-        `               <li><a href="${baselink}#${idString}">${heading.replace(/`/g, '')}</a></li>`,
-      );
+    if (showUsageSection) {
+      sidebarSections.push(`        <li><a href="${baselink}#usage">Usage</a></li>`);
     }
 
-    // Limit to the maximum number of changelog entries defined in config
-    const limitedChangelogEntries = changelogEntries.slice(0, config.wikiSidebarChangelogMax).join('\n');
+    if (showAttributesSection) {
+      sidebarSections.push(`        <li><a href="${baselink}#attributes">Attributes</a></li>`);
+    }
 
-    // Wrap changelog in <ul> if it's not empty
-    let changelog = '</li>';
-    if (limitedChangelogEntries.length > 0) {
-      changelog = `\n          <ul>\n${limitedChangelogEntries}\n          </ul>\n        </li>`;
+    // Only include changelog in sidebar if enabled
+    if (config.wikiIncludeChangelog) {
+      // Generate module changelog string by limiting to wikiSidebarChangelogMax
+      const changelogContent = getTerraformModuleFullReleaseChangelog(terraformModule);
+
+      // Regex to capture all headings starting with '## ' on a single line
+      // Note: Use ([^\n]+) Instead of (.+):
+      // The pattern [^\n]+ matches one or more characters that are not a newline. This restricts matches
+      // to a single line and reduces backtracking possibilities since it won't consume any newlines.
+      // Note: The 'g' flag is required for matchAll
+      const headingRegex = /^(?:#{2,3})\s+([^\n]+)/gm; // Matches '##' or '###' headings
+
+      const changelogEntries = [];
+
+      for (const headingMatch of changelogContent.matchAll(headingRegex)) {
+        const heading = headingMatch[1].trim();
+
+        // Convert heading into a valid ID string (keep only [a-zA-Z0-9-_]) But we need spaces to go to a '-'
+        const idString = heading.replace(/ +/g, '-').replace(/[^a-zA-Z0-9-_]/g, '');
+
+        // Append the entry to changelogEntries
+        changelogEntries.push(
+          `               <li><a href="${baselink}#${idString}">${heading.replace(/`/g, '')}</a></li>`,
+        );
+      }
+
+      // Limit to the maximum number of changelog entries defined in config
+      const limitedChangelogEntries = changelogEntries.slice(0, config.wikiSidebarChangelogMax).join('\n');
+
+      // Wrap changelog in <ul> if it's not empty
+      let changelogSection = '</li>';
+      if (limitedChangelogEntries.length > 0) {
+        changelogSection = `\n          <ul>\n${limitedChangelogEntries}\n          </ul>\n        </li>`;
+      }
+
+      sidebarSections.push(`        <li><a href="${baselink}#changelog">Changelog</a>${changelogSection}`);
     }
 
     moduleSidebarContent += [
@@ -434,9 +587,7 @@ async function generateWikiSidebar(terraformModules: TerraformModule[]): Promise
       '    <details>',
       `      <summary><a href="${baselink}"><b>${terraformModule.name}</b></a></summary>`,
       '      <ul>',
-      `        <li><a href="${baselink}#usage">Usage</a></li>`,
-      `        <li><a href="${baselink}#attributes">Attributes</a></li>`,
-      `        <li><a href="${baselink}#changelog">Changelog</a>${changelog}`,
+      sidebarSections.join('\n'),
       '      </ul>',
       '    </details>',
       '  </li>',

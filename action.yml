@@ -23,7 +23,7 @@ inputs:
   default-semver-level:
     description: >
       The default semantic version level to use when a commit does not match any configured keywords
-      (major, minor, or patch). This only applies when NO commits match any keywords. If any commit 
+      (major, minor, or patch). This only applies when NO commits match any keywords. If any commit
       matches a keyword, that matched level takes precedence over this default.
 
       Valid values: patch, minor, major
@@ -58,6 +58,35 @@ inputs:
       By default, this is set to false. Set to true to prevent wiki documentation from being generated.
     required: true
     default: "false"
+  wiki-content-source:
+    description: >
+      Controls where wiki content comes from for each Terraform module.
+
+      Valid values:
+      - "terraform-docs" (default): Auto-generates documentation using terraform-docs CLI tool.
+        Creates a wiki page with Usage, Attributes (from terraform-docs), and Changelog sections.
+      - "readme": Uses the module's README.md file directly as the wiki content.
+        Appends Changelog section if wiki-include-changelog is true.
+      - "readme-with-terraform-docs": Injects terraform-docs output into the module's README.md.
+        Looks for the marker specified by wiki-readme-terraform-docs-marker and replaces it with
+        terraform-docs output. If marker is not found, appends terraform-docs at the end.
+        Appends Changelog section if wiki-include-changelog is true.
+    required: true
+    default: "terraform-docs"
+  wiki-include-changelog:
+    description: >
+      Whether to include the changelog section in wiki pages.
+      When true (default), appends a Changelog section to each module's wiki page.
+      When false, the changelog section is omitted from wiki pages.
+    required: true
+    default: "true"
+  wiki-readme-terraform-docs-marker:
+    description: >
+      Marker string in README.md where terraform-docs output should be injected.
+      Only used when wiki-content-source is 'readme-with-terraform-docs'.
+      If the marker is not found in README.md, terraform-docs output is appended at the end.
+    required: true
+    default: "<!-- TERRAFORM_DOCS -->"
   wiki-sidebar-changelog-max:
     description: >
       An integer that specifies how many changelog entries are displayed in the sidebar per module.
@@ -89,8 +118,8 @@ inputs:
   module-path-ignore:
     description: >
       A comma-separated list of module paths to completely ignore during processing. Paths matching these patterns will
-      not be considered for versioning, releases, or documentation generation. These patterns follow glob syntax and are 
-      relative to the repository root. Use this to exclude example modules, test modules, or other paths that should not 
+      not be considered for versioning, releases, or documentation generation. These patterns follow glob syntax and are
+      relative to the repository root. Use this to exclude example modules, test modules, or other paths that should not
       be treated as releasable modules.
 
       This is a top-level filter: if a module matches any of these patterns, it is completely excluded from all release, versioning, and documentation logic. No releases will ever happen for a module that matches this filter.
@@ -117,7 +146,7 @@ inputs:
     description: >
       A comma-separated list of file patterns to exclude when bundling a Terraform module for release assets.
       These patterns follow glob syntax and are relative to each Terraform module directory, not the repository root.
-      Files matching these patterns will be excluded from the bundled release archives. Uses matchBase: true for 
+      Files matching these patterns will be excluded from the bundled release archives. Uses matchBase: true for
       pattern matching, similar to module-change-exclude-patterns.
 
       These patterns only affect what's included in release assets and do not impact versioning decisions.
@@ -130,29 +159,29 @@ inputs:
     default: "false"
   github_token:
     description: >
-      Required for retrieving pull request metadata, tags, releases, updating PR comments, wiki, and creating 
-      tags/releases. Automatically injected for convenience; no need to provide a custom token unless you have 
+      Required for retrieving pull request metadata, tags, releases, updating PR comments, wiki, and creating
+      tags/releases. Automatically injected for convenience; no need to provide a custom token unless you have
       specific requirements.
     required: true
     default: ${{ github.token }}
   tag-directory-separator:
     description: >
-      Character used to separate directory path components in Git tags. This separator is used to convert 
-      module directory paths into tag names (e.g., 'modules/aws/s3-bucket' becomes 'modules-aws-s3-bucket-v1.0.0' 
+      Character used to separate directory path components in Git tags. This separator is used to convert
+      module directory paths into tag names (e.g., 'modules/aws/s3-bucket' becomes 'modules-aws-s3-bucket-v1.0.0'
       when using '-'). Must be a single character from: /, -, _, or .
 
       Examples with different separators:
       - "/" (default): modules/aws/s3-bucket/v1.0.0
-      - "-": modules-aws-s3-bucket-v1.0.0  
+      - "-": modules-aws-s3-bucket-v1.0.0
       - "_": modules_aws_s3_bucket_v1.0.0
       - ".": modules.aws.s3.bucket.v1.0.0
     required: true
     default: /
   use-version-prefix:
     description: >
-      Whether to include the 'v' prefix on version tags (e.g., v1.2.3 vs 1.2.3). When enabled, all new version 
-      tags will include the 'v' prefix. For initial releases, this setting takes precedence over any 'v' prefix 
-      specified in the default-first-tag - if use-version-prefix is false and default-first-tag contains 'v', 
+      Whether to include the 'v' prefix on version tags (e.g., v1.2.3 vs 1.2.3). When enabled, all new version
+      tags will include the 'v' prefix. For initial releases, this setting takes precedence over any 'v' prefix
+      specified in the default-first-tag - if use-version-prefix is false and default-first-tag contains 'v',
       the 'v' will be automatically removed to ensure consistency.
     required: true
     default: "true"
@@ -160,8 +189,8 @@ inputs:
     description: >
       Controls how Terraform module usage examples reference versions in generated documentation.
       Valid values: "tag" or "sha". When "tag" (default), examples use the tag name in the ref parameter
-      (e.g., ?ref=aws/vpc-endpoint/v1.1.3). When "sha", examples use the commit SHA with the tag as a 
-      comment (e.g., ?ref=abc123def456 # aws/vpc-endpoint/v1.1.3). This allows pinning to immutable 
+      (e.g., ?ref=aws/vpc-endpoint/v1.1.3). When "sha", examples use the commit SHA with the tag as a
+      comment (e.g., ?ref=abc123def456 # aws/vpc-endpoint/v1.1.3). This allows pinning to immutable
       commit SHAs that cannot be deleted, useful with Renovate for handling module removal scenarios.
       Note: This only affects generated documentation; tag and release creation remains unchanged.
     required: true

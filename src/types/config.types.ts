@@ -7,6 +7,11 @@ import type { ReleaseType } from './common.types';
 export type ModuleRefMode = 'tag' | 'sha';
 
 /**
+ * Wiki content source mode type - controls where wiki content comes from
+ */
+export type WikiContentSource = 'terraform-docs' | 'readme' | 'readme-with-terraform-docs';
+
+/**
  * Configuration interface used for defining key GitHub Action input configuration.
  */
 export interface Config {
@@ -186,4 +191,35 @@ export interface Config {
    * Note: This only affects generated documentation. Tag and release creation remains unchanged.
    */
   moduleRefMode: ModuleRefMode;
+
+  /**
+   * Controls where wiki content comes from for each Terraform module.
+   *
+   * - `terraform-docs` (default): Auto-generates documentation using terraform-docs CLI tool.
+   *   Creates a wiki page with Usage, Attributes (from terraform-docs), and Changelog sections.
+   *
+   * - `readme`: Uses the module's README.md file directly as the wiki content.
+   *   Appends Changelog section if wikiIncludeChangelog is true.
+   *
+   * - `readme-with-terraform-docs`: Injects terraform-docs output into the module's README.md.
+   *   Looks for the marker specified by wikiReadmeTerraformDocsMarker and replaces it with
+   *   terraform-docs output. If marker is not found, appends terraform-docs at the end.
+   *   Appends Changelog section if wikiIncludeChangelog is true.
+   */
+  wikiContentSource: WikiContentSource;
+
+  /**
+   * Whether to include the changelog section in wiki pages.
+   * When true (default), appends a Changelog section to each module's wiki page.
+   * When false, the changelog section is omitted from wiki pages.
+   */
+  wikiIncludeChangelog: boolean;
+
+  /**
+   * Marker string in README.md where terraform-docs output should be injected.
+   * Only used when wikiContentSource is 'readme-with-terraform-docs'.
+   * If the marker is not found in README.md, terraform-docs output is appended at the end.
+   * Default: '<!-- TERRAFORM_DOCS -->'
+   */
+  wikiReadmeTerraformDocsMarker: string;
 }

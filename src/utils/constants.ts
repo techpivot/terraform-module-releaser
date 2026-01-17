@@ -140,3 +140,25 @@ export const WIKI_TITLE_REPLACEMENTS: { [key: string]: string } = {
 export const MODULE_REF_MODE_TAG = 'tag' as const;
 export const MODULE_REF_MODE_SHA = 'sha' as const;
 export const VALID_MODULE_REF_MODES = [MODULE_REF_MODE_TAG, MODULE_REF_MODE_SHA] as const;
+
+/**
+ * Wiki content source mode constants - controls where wiki content comes from
+ *
+ * - `terraform-docs`: Auto-generates documentation from terraform-docs (default)
+ * - `readme`: Uses the module's README.md file directly
+ * - `readme-with-terraform-docs`: Injects terraform-docs output into README.md at a marker position
+ */
+export const WIKI_CONTENT_SOURCE_TERRAFORM_DOCS = 'terraform-docs' as const;
+export const WIKI_CONTENT_SOURCE_README = 'readme' as const;
+export const WIKI_CONTENT_SOURCE_README_WITH_TERRAFORM_DOCS = 'readme-with-terraform-docs' as const;
+export const VALID_WIKI_CONTENT_SOURCES = [
+  WIKI_CONTENT_SOURCE_TERRAFORM_DOCS,
+  WIKI_CONTENT_SOURCE_README,
+  WIKI_CONTENT_SOURCE_README_WITH_TERRAFORM_DOCS,
+] as const;
+
+/**
+ * Default marker for injecting terraform-docs output into README.md
+ * Used when wiki-content-source is 'readme-with-terraform-docs'
+ */
+export const DEFAULT_WIKI_README_TERRAFORM_DOCS_MARKER = '<!-- TERRAFORM_DOCS -->';

@@ -309,6 +309,9 @@ describe('config', () => {
       expect(config.terraformDocsVersion).toBe('v0.20.0');
       expect(config.deleteLegacyTags).toBe(true);
       expect(config.disableWiki).toBe(false);
+      expect(config.wikiContentSource).toBe('terraform-docs');
+      expect(config.wikiIncludeChangelog).toBe(true);
+      expect(config.wikiReadmeTerraformDocsMarker).toBe('<!-- TERRAFORM_DOCS -->');
       expect(config.wikiSidebarChangelogMax).toBe(5);
       expect(config.disableBranding).toBe(false);
       expect(config.githubToken).toBe('ghp_test_token_2c6912E7710c838347Ae178B4');
@@ -332,6 +335,9 @@ describe('config', () => {
         ['Terraform Docs Version: v0.20.0'],
         ['Delete Legacy Tags: true'],
         ['Disable Wiki: false'],
+        ['Wiki Content Source: terraform-docs'],
+        ['Wiki Include Changelog: true'],
+        ['Wiki README Terraform Docs Marker: <!-- TERRAFORM_DOCS -->'],
         ['Wiki Sidebar Changelog Max: 5'],
         ['Module Paths to Ignore: '],
         ['Module Change Exclude Patterns: .gitignore, *.md, *.tftest.hcl, tests/**'],
