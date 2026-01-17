@@ -3,6 +3,7 @@ import {
   VALID_MODULE_REF_MODES,
   VALID_SEMVER_LEVELS,
   VALID_TAG_DIRECTORY_SEPARATORS,
+  VALID_WIKI_CONTENT_SOURCES,
   VERSION_TAG_REGEX,
 } from '@/utils/constants';
 import { createConfigFromInputs } from '@/utils/metadata';
@@ -98,6 +99,18 @@ function initializeConfig(): Config {
       );
     }
 
+    // Validate wiki content source
+    if (!VALID_WIKI_CONTENT_SOURCES.includes(configInstance.wikiContentSource)) {
+      throw new TypeError(
+        `Invalid wiki-content-source '${configInstance.wikiContentSource}'. Must be one of: ${VALID_WIKI_CONTENT_SOURCES.join(', ')}`,
+      );
+    }
+
+    // Validate wiki readme terraform-docs marker is not empty
+    if (!configInstance.wikiReadmeTerraformDocsMarker || configInstance.wikiReadmeTerraformDocsMarker.trim() === '') {
+      throw new TypeError('wiki-readme-terraform-docs-marker cannot be empty');
+    }
+
     info(`Major Keywords: ${configInstance.majorKeywords.join(', ')}`);
     info(`Minor Keywords: ${configInstance.minorKeywords.join(', ')}`);
     info(`Patch Keywords: ${configInstance.patchKeywords.join(', ')}`);
@@ -106,6 +119,9 @@ function initializeConfig(): Config {
     info(`Terraform Docs Version: ${configInstance.terraformDocsVersion}`);
     info(`Delete Legacy Tags: ${configInstance.deleteLegacyTags}`);
     info(`Disable Wiki: ${configInstance.disableWiki}`);
+    info(`Wiki Content Source: ${configInstance.wikiContentSource}`);
+    info(`Wiki Include Changelog: ${configInstance.wikiIncludeChangelog}`);
+    info(`Wiki README Terraform Docs Marker: ${configInstance.wikiReadmeTerraformDocsMarker}`);
     info(`Wiki Sidebar Changelog Max: ${configInstance.wikiSidebarChangelogMax}`);
     info(`Module Paths to Ignore: ${configInstance.modulePathIgnore.join(', ')}`);
     info(`Module Change Exclude Patterns: ${configInstance.moduleChangeExcludePatterns.join(', ')}`);
