@@ -22,7 +22,7 @@ describe('config', () => {
   });
 
   beforeEach(() => {
-    // The config is cached. To ensure each test starts with a clean slate, we implicity clear it.
+    // The config is cached. To ensure each test starts with a clean slate, we implicitly clear it.
     // We don't do this globally in setup as it's not necessary for all tests.
     clearConfigForTesting();
   });
