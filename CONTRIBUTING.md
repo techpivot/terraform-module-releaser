@@ -58,7 +58,7 @@ Before contributing, please:
 
 ### Prerequisites
 
-- **Node.js**: Version 24 or higher (see [.node-version](./.node-version) for the exact version)
+- **Node.js**: Version 25 or higher (see [.node-version](./.node-version) for the exact version)
 - **npm**: Comes with Node.js
 - **Git**: For version control
 

@@ -8,7 +8,7 @@ For detailed architecture, testing patterns, and design context, see the `docs/`
 ## Tech Stack
 
 - **TypeScript 5.9+** strict mode, ES modules (`"type": "module"` in package.json)
-- **Node.js 24+** local dev (`.node-version`); compiles to Node.js 20+ for GitHub Actions runtime (`action.yml` →
+- **Node.js 25+** local dev (`.node-version`); compiles to Node.js 20+ for GitHub Actions runtime (`action.yml` →
   `node20`)
 - **Vitest** for testing with V8 coverage
 - **Biome** for linting/formatting — NOT ESLint/Prettier (except Prettier for Markdown/YAML only)

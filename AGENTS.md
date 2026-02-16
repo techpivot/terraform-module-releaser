@@ -16,7 +16,7 @@ npm run package         # Build dist/ via ncc (auto-generated, never edit manual
 
 ## Environment
 
-- **Node.js 24+** locally (`.node-version`); compiled output targets Node.js 20+ (`action.yml` → `node20`)
+- **Node.js 25+** locally (`.node-version`); compiled output targets Node.js 20+ (`action.yml` → `node20`)
 - **GITHUB_TOKEN** required for integration tests — tests skip gracefully without it
 - Path aliases: `@/` → `src/`, `@/tests/` → `__tests__/`, `@/mocks/` → `__mocks__/`
 
