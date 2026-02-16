@@ -234,7 +234,7 @@ export async function addReleasePlanComment(
         '|--|--|--|--|--|',
       );
       for (const module of terraformModulesToRelese) {
-        // Prevent module name from wrapping on hyphens in table cells (Doesn't work reliabily)
+        // Prevent module name from wrapping on hyphens in table cells (Doesn't work reliably)
         const name = `<nobr><code>${module.name}</code></nobr>`;
         const type = module.getReleaseType();
         const latestVersion = module.getLatestTagVersion() ?? '';
@@ -404,7 +404,7 @@ export async function addPostReleaseComment(releasedTerraformModules: TerraformM
       issueNumber: issue_number,
     } = context;
 
-    // Contruct the comment body as an array of strings
+    // Construct the comment body as an array of strings
     const commentBody: string[] = [
       PR_RELEASE_MARKER,
       '\n## :rocket: Terraform Module Releases\n',

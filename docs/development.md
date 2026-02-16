@@ -44,14 +44,14 @@ npm run test            # Full test suite with coverage
 
 All commits must follow the [Conventional Commits](https://www.conventionalcommits.org/) specification:
 
-| Prefix | Purpose | Example |
-| --- | --- | --- |
-| `feat:` | New feature | `feat: add SSH source format option` |
-| `fix:` | Bugfix | `fix: handle empty module directory` |
-| `chore:` | Maintenance | `chore: update dependencies` |
-| `docs:` | Documentation | `docs: improve wiki generation guide` |
+| Prefix      | Purpose            | Example                                |
+| ----------- | ------------------ | -------------------------------------- |
+| `feat:`     | New feature        | `feat: add SSH source format option`   |
+| `fix:`      | Bugfix             | `fix: handle empty module directory`   |
+| `chore:`    | Maintenance        | `chore: update dependencies`           |
+| `docs:`     | Documentation      | `docs: improve wiki generation guide`  |
 | `refactor:` | Code restructuring | `refactor: simplify tag normalization` |
-| `test:` | Test changes | `test: add coverage for edge cases` |
+| `test:`     | Test changes       | `test: add coverage for edge cases`    |
 
 ## Tooling
 
@@ -87,20 +87,20 @@ All commits must follow the [Conventional Commits](https://www.conventionalcommi
 
 When a PR is opened or updated against `main`, these workflows run:
 
-| Workflow | File | Purpose |
-| --- | --- | --- |
-| **CI** | `ci.yml` | Builds the action (`npm run package`), runs it against the repository (`uses: ./`) |
-| **Test** | `test.yml` | Runs Vitest suite (`npm run test`), then SonarQube coverage analysis |
-| **Lint** | `lint.yml` | Biome check (`npm run check`) + GitHub Super-Linter |
-| **CodeQL** | `codeql-analysis.yml` | Security analysis for TypeScript |
+| Workflow   | File                  | Purpose                                                                            |
+| ---------- | --------------------- | ---------------------------------------------------------------------------------- |
+| **CI**     | `ci.yml`              | Builds the action (`npm run package`), runs it against the repository (`uses: ./`) |
+| **Test**   | `test.yml`            | Runs Vitest suite (`npm run test`), then SonarQube coverage analysis               |
+| **Lint**   | `lint.yml`            | Biome check (`npm run check`) + GitHub Super-Linter                                |
+| **CodeQL** | `codeql-analysis.yml` | Security analysis for TypeScript                                                   |
 
 ### Release Workflows
 
-| Workflow | File | Trigger | Purpose |
-| --- | --- | --- | --- |
-| **Release Start** | `release-start.yml` | Manual dispatch | Validates version, bumps package.json, builds, generates AI changelog, creates release PR |
-| **Check Dist** | `check-dist.yml` | Release PR | Verifies `dist/` matches `npm run package` output |
-| **Release** | `release.yml` | Release PR merged | Creates Git tag + GitHub release with notes |
+| Workflow          | File                | Trigger           | Purpose                                                                                   |
+| ----------------- | ------------------- | ----------------- | ----------------------------------------------------------------------------------------- |
+| **Release Start** | `release-start.yml` | Manual dispatch   | Validates version, bumps package.json, builds, generates AI changelog, creates release PR |
+| **Check Dist**    | `check-dist.yml`    | Release PR        | Verifies `dist/` matches `npm run package` output                                         |
+| **Release**       | `release.yml`       | Release PR merged | Creates Git tag + GitHub release with notes                                               |
 
 ### Release Process
 
@@ -131,14 +131,14 @@ directory is only committed during the automated release process.
 
 ## Key Scripts
 
-| Script | Command | Purpose |
-| --- | --- | --- |
-| `check` | `biome check . && prettier -c ...` | Lint check (no changes) |
-| `check:fix` | `biome check --write --unsafe . && prettier -w ...` | Autofix linting issues |
-| `textlint` | `textlint -c ... **/*.md` | Check Markdown prose |
-| `textlint:fix` | `textlint --fix ...` | Fix Markdown prose |
-| `typecheck` | `tsc --noEmit` | TypeScript type checking |
-| `test` | `vitest run --coverage` | Full test suite with coverage |
-| `test:watch` | `vitest` | Watch mode for development |
-| `package` | `ncc build src/index.ts -o dist` | Build distribution bundle |
-| `coverage` | `make-coverage-badge --output-path ...` | Generate coverage badge SVG |
+| Script         | Command                                             | Purpose                       |
+| -------------- | --------------------------------------------------- | ----------------------------- |
+| `check`        | `biome check . && prettier -c ...`                  | Lint check (no changes)       |
+| `check:fix`    | `biome check --write --unsafe . && prettier -w ...` | Autofix linting issues        |
+| `textlint`     | `textlint -c ... **/*.md`                           | Check Markdown prose          |
+| `textlint:fix` | `textlint --fix ...`                                | Fix Markdown prose            |
+| `typecheck`    | `tsc --noEmit`                                      | TypeScript type checking      |
+| `test`         | `vitest run --coverage`                             | Full test suite with coverage |
+| `test:watch`   | `vitest`                                            | Watch mode for development    |
+| `package`      | `ncc build src/index.ts -o dist`                    | Build distribution bundle     |
+| `coverage`     | `make-coverage-badge --output-path ...`             | Generate coverage badge SVG   |

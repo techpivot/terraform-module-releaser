@@ -80,7 +80,7 @@ export function setupTestInputs(overrides: Record<string, string> = {}) {
  * Clears a specific action input environment variable.
  *
  * Useful for testing scenarios where you need to remove a specific input. Wrapper around
- * vi.stubEnv which has an unsual syntax for clearing environment variables/
+ * vi.stubEnv which has an unusual syntax for clearing environment variables.
  *
  * @param inputName The input name to clear (e.g., 'github_token', 'module-path-ignore')
  */

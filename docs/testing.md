@@ -53,7 +53,7 @@ env vars set by `setupTestInputs()`.
 
 ```typescript
 // In a test:
-import { config } from '@/config';
+import { config } from "@/config";
 config.set({ deleteLegacyTags: false, disableWiki: true });
 // ... run test ...
 config.resetDefaults(); // restore in beforeEach/afterEach
@@ -68,8 +68,8 @@ Proxy-based mock context with helper methods:
 - **`.useRealOctokit()`** — Switch to real authenticated Octokit client (requires `GITHUB_TOKEN`)
 - **`.useMockOctokit()`** — Switch back to mock Octokit (default)
 
-Default context provides: mock repository info (`techpivot/terraform-module-releaser`), PR number 1, workspace directory, and
-a mock Octokit instance.
+Default context provides: mock repository info (`techpivot/terraform-module-releaser`), PR number 1, workspace
+directory, and a mock Octokit instance.
 
 ## Test Helpers (`__tests__/helpers/`)
 
@@ -117,20 +117,20 @@ Factory functions for test fixtures:
 ### Structure
 
 ```typescript
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { config } from '@/config';
-import { context } from '@/context';
+import { describe, it, expect, beforeEach, vi } from "vitest";
+import { config } from "@/config";
+import { context } from "@/context";
 
-describe('featureName', () => {
+describe("featureName", () => {
   beforeEach(() => {
     config.resetDefaults();
     context.reset();
   });
 
-  it('should describe expected behavior clearly', async () => {
+  it("should describe expected behavior clearly", async () => {
     // Arrange
-    config.set({ someOption: 'value' });
-    stubOctokitReturnData('repos', 'listTags', mockTags);
+    config.set({ someOption: "value" });
+    stubOctokitReturnData("repos", "listTags", mockTags);
 
     // Act
     const result = await functionUnderTest();
@@ -152,7 +152,7 @@ describe('featureName', () => {
 
 ```typescript
 const describeWithToken = process.env.GITHUB_TOKEN ? describe : describe.skip;
-describeWithToken('integration tests', () => {
+describeWithToken("integration tests", () => {
   beforeEach(() => {
     context.useRealOctokit();
   });
@@ -173,9 +173,9 @@ Handle these carefully when creating or modifying fixtures.
 
 Configured in both `tsconfig.json` and `vitest.config.ts`:
 
-| Alias | Maps to |
-| --- | --- |
-| `@/` | `src/` |
+| Alias      | Maps to      |
+| ---------- | ------------ |
+| `@/`       | `src/`       |
 | `@/tests/` | `__tests__/` |
 | `@/mocks/` | `__mocks__/` |
 

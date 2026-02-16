@@ -50,7 +50,7 @@ Key patterns:
 ## Code Conventions
 
 - Naming: `camelCase` (functions/vars), `PascalCase` (types), `UPPER_SNAKE_CASE` (constants)
-- Formatting: Biome for TS/JS/JSON; Prettier for markdown/yaml only
+- Formatting: Biome for TS/JS/JSON; Prettier for Markdown/YAML only
 - Commits: Conventional Commits (`feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `test:`)
 
 ## Rules

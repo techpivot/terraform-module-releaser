@@ -11,7 +11,7 @@ For detailed architecture, testing patterns, and design context, see the `docs/`
 - **Node.js 24+** local dev (`.node-version`); compiles to Node.js 20+ for GitHub Actions runtime (`action.yml` →
   `node20`)
 - **Vitest** for testing with V8 coverage
-- **Biome** for linting/formatting — NOT ESLint/Prettier (except Prettier for markdown/yaml only)
+- **Biome** for linting/formatting — NOT ESLint/Prettier (except Prettier for Markdown/YAML only)
 - **@actions/core** + **@octokit** for GitHub integration
 - **minimatch** for glob pattern matching, **p-limit** for concurrency control
 
@@ -84,7 +84,7 @@ docs/                       # Detailed documentation for humans and AI agents
 ## Code Standards
 
 - **Functions/variables**: `camelCase` — **Types/interfaces**: `PascalCase` — **Constants**: `UPPER_SNAKE_CASE`
-- Biome enforces all TS/JS formatting. Prettier handles markdown/yaml only.
+- Biome enforces all TS/JS formatting. Prettier handles Markdown/YAML only.
 - Use Conventional Commits: `feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `test:`
 
 ## Boundaries

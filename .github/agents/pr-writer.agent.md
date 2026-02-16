@@ -50,7 +50,7 @@ Fence placement:
 - Output `## Suggested PR Title` as a heading outside the fence
 - Then emit one fenced block containing only the title string
 - Output `## Suggested PR Description` as a heading outside the fence
-- Then emit one fenced block containing only the description markdown body
+- Then emit one fenced block containing only the description Markdown body
 
 The PR title must:
 

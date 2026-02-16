@@ -13,7 +13,8 @@ The action is triggered by `pull_request` events and has two distinct flows:
 ### Initialization Phase
 
 1. **`getConfig()`** — Reads all GitHub Action inputs via `@actions/core.getInput()`, validates them, and caches in a
-   singleton. Uses a `Proxy` wrapper so imports at module scope don't trigger initialization until first property access.
+   singleton. Uses a `Proxy` wrapper so imports at module scope don't trigger initialization until first property
+   access.
 2. **`getContext()`** — Reads GitHub environment variables (`GITHUB_REPOSITORY`, `GITHUB_EVENT_NAME`, etc.), parses the
    PR event payload, and creates an authenticated Octokit client using `config.githubToken`.
 
@@ -73,14 +74,14 @@ After parsing, the flow branches on event type:
 
 Six outputs are set via `core.setOutput()` before the merge/release operation:
 
-| Output | Type | Description |
-| --- | --- | --- |
-| `changed-module-names` | JSON array | Module names changed in the PR |
-| `changed-module-paths` | JSON array | File system paths to changed modules |
-| `changed-modules-map` | JSON object | Module names → change details (current tag, next tag, release type) |
-| `all-module-names` | JSON array | All discovered module names |
-| `all-module-paths` | JSON array | All discovered module paths |
-| `all-modules-map` | JSON object | All module names → details (path, latest tag, version) |
+| Output                 | Type        | Description                                                         |
+| ---------------------- | ----------- | ------------------------------------------------------------------- |
+| `changed-module-names` | JSON array  | Module names changed in the PR                                      |
+| `changed-module-paths` | JSON array  | File system paths to changed modules                                |
+| `changed-modules-map`  | JSON object | Module names → change details (current tag, next tag, release type) |
+| `all-module-names`     | JSON array  | All discovered module names                                         |
+| `all-module-paths`     | JSON array  | All discovered module paths                                         |
+| `all-modules-map`      | JSON object | All module names → details (path, latest tag, version)              |
 
 > **Note**: Outputs are set before `clearCommits()` is called during release, since `needsRelease()` checks commit
 > presence.

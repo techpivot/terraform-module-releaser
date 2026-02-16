@@ -10,7 +10,7 @@ This project uses TypeScript 5.9+ with strict mode and ES modules (`"type": "mod
 
 - Use ES module imports/exports exclusively (`import`/`export`, never `require`)
 - Path aliases: `@/` maps to `src/` — use `@/config`, `@/context`, etc. for internal imports
-- Re-export types through `src/types/index.ts`
+- Reexport types through `src/types/index.ts`
 
 ### Config and Context Singletons
 
@@ -30,6 +30,6 @@ This project uses TypeScript 5.9+ with strict mode and ES modules (`"type": "mod
 
 ### Formatting
 
-- **Biome** enforces all TS/JS formatting — run `npm run check:fix` to auto-format
+- **Biome** enforces all TS/JS formatting — run `npm run check:fix` to autoformat
 - 120-char line width, 2-space indent, LF line endings
 - Single quotes, trailing commas, semicolons always
