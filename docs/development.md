@@ -9,7 +9,7 @@ Releaser project.
 
 The repository includes a pre-configured devcontainer with:
 
-- **Base image**: `mcr.microsoft.com/devcontainers/typescript-node:24` (Node.js 24)
+- **Base image**: `mcr.microsoft.com/devcontainers/base:trixie` with Node.js 25 feature
 - **Named volume**: `node_modules` volume persists across container rebuilds
 - **Post-create script**: Sets Git safe directory, fixes node_modules ownership, runs `npm install`
 - **Visual Studio Code extensions**: Biome, Prettier, GitHub Actions, Markdown tools, GitHub PR extension
@@ -18,7 +18,7 @@ The repository includes a pre-configured devcontainer with:
 
 ### Manual Setup
 
-1. Install Node.js 24+ (see `.node-version`)
+1. Install Node.js 25+ (see `.node-version`)
 2. Run `npm ci --no-fund`
 3. Export `GITHUB_TOKEN` for integration tests
 

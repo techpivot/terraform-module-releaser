@@ -1,6 +1,6 @@
 {
-  "name": "typescript-node:24",
-  "image": "mcr.microsoft.com/devcontainers/typescript-node:24",
+  "name": "node:25",
+  "image": "mcr.microsoft.com/devcontainers/base:trixie",
   "mounts": [
     "source=${localWorkspaceFolderBasename}-node_modules,target=${containerWorkspaceFolder}/node_modules,type=volume"
   ],
@@ -51,6 +51,9 @@
     "GITHUB_TOKEN": "${localEnv:GITHUB_TOKEN}"
   },
   "features": {
-    "ghcr.io/devcontainers/features/github-cli:1": {}
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "25"
+    }
   }
 }
