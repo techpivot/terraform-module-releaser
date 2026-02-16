@@ -68,3 +68,17 @@ Before making significant changes, read the relevant docs:
 - `docs/architecture.md` — Execution flow, module relationships, design decisions
 - `docs/testing.md` — Test patterns, mock strategy, writing new tests
 - `docs/development.md` — Development workflow, CI/CD, release process
+
+## Built-in Chat Agents
+
+- `.github/agents/implementation-planner.agent.md` — Creates implementation plans and task breakdowns
+- `.github/agents/test-specialist.agent.md` — Focuses on test design, coverage, and mock usage
+- `.github/agents/pr-writer.agent.md` — Generates Markdown PR title/description from branch commits
+
+### PR Writer Agent Usage
+
+Use the PR writer agent when preparing pull requests, especially for branches with many commits.
+
+- Input: Ask for a PR title and description from current branch commits
+- Output: Markdown-only result with a Conventional Commit PR title and reviewer-friendly summary sections
+- Regeneration: Re-run after new commits are pushed to refresh content
