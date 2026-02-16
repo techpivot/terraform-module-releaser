@@ -59,7 +59,7 @@ jobs:
         env:
           DEFAULT_BRANCH: main
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          FILTER_REGEX_EXCLUDE: (dist/**/*)|(__tests__/fixtures/**/*)
+          FILTER_REGEX_EXCLUDE: (dist/**/*)|(__tests__/fixtures/**/*)|package-lock\.json
           FIX_TYPESCRIPT_PRETTIER: false # Using biome
           FIX_JAVASCRIPT_PRETTIER: false # Using biome
           VALIDATE_ALL_CODEBASE: true
