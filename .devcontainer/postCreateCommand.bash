@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -eux pipefail
+set -euxo pipefail
 
 git config --global --add safe.directory /workspaces/terraform-module-releaser
 sudo chown "$(id -u):$(id -g)" node_modules
