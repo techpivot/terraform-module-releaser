@@ -107,7 +107,7 @@ Key behaviors:
 
 ### Config Singleton (`src/config.ts`)
 
-- Reads 20+ GitHub Action inputs via `@actions/core.getInput()` and `getBooleanInput()`
+- Reads GitHub Action inputs via `@actions/core.getInput()` and `getBooleanInput()`
 - Validates: tag separator (must be `/`, `-`, `_`, or `.`), SemVer level, module ref mode
 - Exposes `getConfig()` for direct access and `config` (Proxy) for ergonomic module-scope imports
 - `clearForTesting()` resets the cached instance
@@ -211,5 +211,5 @@ index.ts
 
 ## Configuration
 
-All 20+ action inputs are defined in `action.yml` and mapped in `src/utils/metadata.ts`. The `ACTION_INPUTS` constant
+All action inputs are defined in `action.yml` and mapped in `src/utils/metadata.ts`. The `ACTION_INPUTS` constant
 provides type-safe metadata for each input, used by `createConfigFromInputs()` to dynamically build the config object.
