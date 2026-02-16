@@ -4,4 +4,4 @@ set -eux pipefail
 
 git config --global --add safe.directory /workspaces/terraform-module-releaser
 sudo chown "$(id -u):$(id -g)" node_modules
-npm install --no-fund
+npm ci --no-fund
