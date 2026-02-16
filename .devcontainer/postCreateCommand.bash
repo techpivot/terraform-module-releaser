@@ -1,7 +1,8 @@
 #!/bin/bash
 
-set -eux pipefail
+set -euxo pipefail
 
-git config --global --add safe.directory /workspaces/terraform-module-releaser
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+git config --global --add safe.directory "${REPO_ROOT}"
 sudo chown "$(id -u):$(id -g)" node_modules
 npm ci --no-fund
