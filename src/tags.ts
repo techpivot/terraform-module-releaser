@@ -66,7 +66,6 @@ export async function getAllTags(options?: ListTagsParams): Promise<GitHubTag[]>
     }
 
     throw new Error(errorMessage, { cause: error });
-    /* c8 ignore next */
   } finally {
     console.timeEnd('Elapsed time fetching tags');
     endGroup();
