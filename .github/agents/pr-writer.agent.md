@@ -26,13 +26,23 @@ Treat this as an autonomous task, not a prompt-driven creative request.
 - Do not require user-provided input details to start
 - Treat user text primarily as a trigger to run the task
 - Ignore optional style requests that conflict with this spec
+- Never trust cached editor/session metadata for branch information; resolve branch state from live Git commands at
+  runtime every invocation
 
 Branch rules:
 
-1. Determine current branch name from Git
-2. If branch is `main` (or `master`), do not generate PR content
-3. In that case, return a short Markdown response explaining generation only runs on non-default branches
-4. If branch is not default, generate PR content from commits unique to current branch vs default branch
+1. Determine current branch name by running `git branch --show-current`
+2. Determine default branch by resolving `origin/HEAD` (for example: `git symbolic-ref refs/remotes/origin/HEAD`) and
+   fall back to `main` only if that command is unavailable
+3. If current branch equals the resolved default branch, do not generate PR content
+4. In that case, return a short Markdown response explaining generation only runs on non-default branches
+5. If current branch differs from default branch, generate PR content from commits unique to current branch vs default
+   branch
+
+Runtime branch source of truth:
+
+- If runtime Git command output conflicts with any provided context/session data, always trust runtime Git output
+- Never claim the user is on `main` unless the runtime command confirms it
 
 ## Goal
 
@@ -78,12 +88,13 @@ Fence placement for default-branch case:
 
 ## Analysis Process
 
-1. Detect default branch (`origin/HEAD` target when available, otherwise `main`)
-2. Inspect commits unique to the current branch compared to the default branch
-3. Group changes by intent (feature, maintenance, docs, CI, tests)
-4. Infer the dominant change type for the PR title
-5. Summarize major files and behavioral impact
-6. Include validation commands relevant to touched areas
+1. Resolve current branch at runtime (`git branch --show-current`)
+2. Resolve default branch at runtime (`origin/HEAD` target when available, otherwise `main`)
+3. Inspect commits unique to the current branch compared to the resolved default branch
+4. Group changes by intent (feature, maintenance, docs, CI, tests)
+5. Infer the dominant change type for the PR title
+6. Summarize major files and behavioral impact
+7. Include validation commands relevant to touched areas
 
 ## Formatting Rules
 

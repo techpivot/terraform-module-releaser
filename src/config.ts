@@ -1,7 +1,9 @@
 import type { Config } from '@/types';
 import {
+  SEMVER_MODE,
   VALID_MODULE_REF_MODES,
   VALID_SEMVER_LEVELS,
+  VALID_SEMVER_MODES,
   VALID_TAG_DIRECTORY_SEPARATORS,
   VERSION_TAG_REGEX,
 } from '@/utils/constants';
@@ -98,9 +100,19 @@ function initializeConfig(): Config {
       );
     }
 
-    info(`Major Keywords: ${configInstance.majorKeywords.join(', ')}`);
-    info(`Minor Keywords: ${configInstance.minorKeywords.join(', ')}`);
-    info(`Patch Keywords: ${configInstance.patchKeywords.join(', ')}`);
+    // Validate semver mode
+    if (!VALID_SEMVER_MODES.includes(configInstance.semverMode)) {
+      throw new TypeError(
+        `Invalid semver-mode '${configInstance.semverMode}'. Must be one of: ${VALID_SEMVER_MODES.join(', ')}`,
+      );
+    }
+
+    info(`Semver Mode: ${configInstance.semverMode}`);
+    if (configInstance.semverMode !== SEMVER_MODE.CONVENTIONAL_COMMITS) {
+      info(`Major Keywords: ${configInstance.majorKeywords.join(', ')}`);
+      info(`Minor Keywords: ${configInstance.minorKeywords.join(', ')}`);
+      info(`Patch Keywords: ${configInstance.patchKeywords.join(', ')}`);
+    }
     info(`Default Semver Level: ${configInstance.defaultSemverLevel}`);
     info(`Default First Tag: ${configInstance.defaultFirstTag}`);
     info(`Terraform Docs Version: ${configInstance.terraformDocsVersion}`);

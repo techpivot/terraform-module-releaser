@@ -609,6 +609,7 @@ describe('TerraformModule', () => {
     let module: TerraformModule;
 
     beforeEach(() => {
+      config.set({ semverMode: 'keywords' });
       module = new TerraformModule(moduleDir);
     });
 
@@ -658,76 +659,11 @@ describe('TerraformModule', () => {
         expect(module.getReleaseType()).toBe(RELEASE_TYPE.MAJOR);
       });
 
-      it('should return minor when commit contains minor keywords', () => {
-        module.setTags(createMockTags(['tf-modules/test-module/v1.0.0'])); // Not initial
-        module.addCommit({
-          sha: 'abc123',
-          message: 'feat: add new feature',
-          files: ['main.tf'],
-        });
-
-        expect(module.getReleaseType()).toBe(RELEASE_TYPE.MINOR);
-      });
-
-      it('should return patch for regular commits', () => {
-        module.setTags(createMockTags(['tf-modules/test-module/v1.0.0'])); // Not initial
-        module.addCommit({
-          sha: 'abc123',
-          message: 'fix: bug fix',
-          files: ['main.tf'],
-        });
-
-        expect(module.getReleaseType()).toBe(RELEASE_TYPE.PATCH);
-      });
-
-      it('should return highest release type from multiple commits', () => {
-        module.setTags(createMockTags(['tf-modules/test-module/v1.0.0'])); // Not initial
-        module.addCommit({
-          sha: 'abc123',
-          message: 'fix: bug fix', // patch
-          files: ['main.tf'],
-        });
-        module.addCommit({
-          sha: 'def456',
-          message: 'feat: new feature', // minor
-          files: ['variables.tf'],
-        });
-        module.addCommit({
-          sha: 'ghi789',
-          message: 'docs: update readme', // patch
-          files: ['README.md'],
-        });
-
-        expect(module.getReleaseType()).toBe(RELEASE_TYPE.MINOR);
-      });
-
       it('should return null when no release is needed', () => {
         module.setTags(createMockTags(['tf-modules/test-module/v1.0.0'])); // Not initial
         // No commits, no dependency triggers
 
         expect(module.getReleaseType()).toBeNull();
-      });
-
-      it('should be case insensitive for keywords', () => {
-        module.setTags(createMockTags(['tf-modules/test-module/v1.0.0'])); // Not initial
-        module.addCommit({
-          sha: 'abc123',
-          message: 'breaking change: major update',
-          files: ['main.tf'],
-        });
-
-        expect(module.getReleaseType()).toBe(RELEASE_TYPE.MAJOR);
-      });
-
-      it('should handle mixed case features', () => {
-        module.setTags(createMockTags(['tf-modules/test-module/v1.0.0'])); // Not initial
-        module.addCommit({
-          sha: 'abc123',
-          message: 'FEAT: add new feature',
-          files: ['main.tf'],
-        });
-
-        expect(module.getReleaseType()).toBe(RELEASE_TYPE.MINOR);
       });
 
       it('should use default semver level when no keywords match', () => {
@@ -760,57 +696,6 @@ describe('TerraformModule', () => {
         expect(module.getReleaseType()).toBe(RELEASE_TYPE.MINOR);
       });
 
-      it('should use minor when one commit has minor keyword and another has no keyword with major default', () => {
-        config.set({
-          defaultSemverLevel: 'major',
-        });
-
-        module.setTags(createMockTags(['tf-modules/test-module/v1.0.0'])); // Not initial
-        module.addCommit({
-          sha: 'abc123',
-          message: 'feat: add new feature',
-          files: ['main.tf'],
-        });
-        module.addCommit({
-          sha: 'def456',
-          message: 'update documentation',
-          files: ['README.md'],
-        });
-
-        expect(module.getReleaseType()).toBe(RELEASE_TYPE.MINOR);
-      });
-
-      it('should use patch keyword when explicitly matched even with major default', () => {
-        config.set({
-          defaultSemverLevel: 'major',
-          patchKeywords: ['fix', 'chore', 'docs'],
-        });
-
-        module.setTags(createMockTags(['tf-modules/test-module/v1.0.0'])); // Not initial
-        module.addCommit({
-          sha: 'abc123',
-          message: 'fix: resolve bug',
-          files: ['main.tf'],
-        });
-
-        expect(module.getReleaseType()).toBe(RELEASE_TYPE.PATCH);
-      });
-
-      it('should use patch as first match when no previous release type exists', () => {
-        config.set({
-          patchKeywords: ['fix', 'chore', 'docs'],
-        });
-
-        module.setTags(createMockTags(['tf-modules/test-module/v1.0.0'])); // Not initial
-        module.addCommit({
-          sha: 'abc123',
-          message: 'chore: update dependencies',
-          files: ['main.tf'],
-        });
-
-        expect(module.getReleaseType()).toBe(RELEASE_TYPE.PATCH);
-      });
-
       it('should use default minor for initial release when configured', () => {
         config.set({
           defaultSemverLevel: 'minor',
@@ -828,30 +713,57 @@ describe('TerraformModule', () => {
         // No tags means initial release
         expect(module.getReleaseType()).toBe(RELEASE_TYPE.MAJOR);
       });
+    });
 
-      it('should handle mixed commits with major, minor and no keywords using highest matched', () => {
+    describe('getReleaseType() with conventional-commits mode', () => {
+      beforeEach(() => {
         config.set({
-          defaultSemverLevel: 'major',
+          semverMode: 'conventional-commits',
+          defaultSemverLevel: 'patch',
         });
+      });
 
-        module.setTags(createMockTags(['tf-modules/test-module/v1.0.0'])); // Not initial
+      it('should return default semver level for initial release', () => {
+        // No tags = initial release
+        expect(module.getReleaseType()).toBe(RELEASE_TYPE.PATCH);
+      });
+
+      it('should return minor for feat commit', () => {
+        module.setTags(createMockTags(['tf-modules/test-module/v1.0.0']));
         module.addCommit({
           sha: 'abc123',
-          message: 'update config',
-          files: ['config.tf'],
-        });
-        module.addCommit({
-          sha: 'def456',
-          message: 'feat: add feature',
-          files: ['feature.tf'],
-        });
-        module.addCommit({
-          sha: 'ghi789',
-          message: 'BREAKING CHANGE: major update',
+          message: 'feat: add new feature',
           files: ['main.tf'],
         });
 
-        expect(module.getReleaseType()).toBe(RELEASE_TYPE.MAJOR);
+        expect(module.getReleaseType()).toBe(RELEASE_TYPE.MINOR);
+      });
+
+      it('should use default semver level when no commits are conventional', () => {
+        config.set({
+          semverMode: 'conventional-commits',
+          defaultSemverLevel: 'minor',
+        });
+
+        module.setTags(createMockTags(['tf-modules/test-module/v1.0.0']));
+        module.addCommit({
+          sha: 'abc123',
+          message: 'update configuration',
+          files: ['main.tf'],
+        });
+
+        expect(module.getReleaseType()).toBe(RELEASE_TYPE.MINOR);
+      });
+
+      it('should return null when no release needed in CC mode', () => {
+        config.set({
+          semverMode: 'conventional-commits',
+        });
+
+        module.setTags(createMockTags(['tf-modules/test-module/v1.0.0']));
+        // No commits added
+
+        expect(module.getReleaseType()).toBeNull();
       });
     });
 

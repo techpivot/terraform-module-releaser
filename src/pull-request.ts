@@ -171,7 +171,6 @@ export async function getPullRequestCommits(): Promise<CommitDetails[]> {
       );
     }
     throw error;
-    /* c8 ignore next */
   } finally {
     console.timeEnd('Elapsed time fetching commits');
     endGroup();

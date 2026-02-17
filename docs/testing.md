@@ -64,7 +64,7 @@ config.resetDefaults(); // restore in beforeEach/afterEach
 Proxy-based mock context with helper methods:
 
 - **`.set({...})`** — Override specific context values
-- **`.reset()`** — Restore defaults
+- **`.resetDefaults()`** — Restore defaults
 - **`.useRealOctokit()`** — Switch to real authenticated Octokit client (requires `GITHUB_TOKEN`)
 - **`.useMockOctokit()`** — Switch back to mock Octokit (default)
 
@@ -77,6 +77,9 @@ directory, and a mock Octokit instance.
 
 Reads `action.yml` at test time to extract input defaults. Ensures tests always match production defaults even when
 action.yml changes.
+
+When action inputs are added, removed, or renamed in `action.yml`, update both `src/utils/metadata.ts` (`ACTION_INPUTS`)
+and `__tests__/utils/metadata.test.ts` in the same change.
 
 ### `inputs.ts`
 
@@ -124,7 +127,7 @@ import { context } from "@/context";
 describe("featureName", () => {
   beforeEach(() => {
     config.resetDefaults();
-    context.reset();
+    context.resetDefaults();
   });
 
   it("should describe expected behavior clearly", async () => {

@@ -6,31 +6,56 @@ branding:
   color: purple
 
 inputs:
+  semver-mode:
+    description: >
+      Controls how semantic version bumps are determined from commit messages.
+
+      Valid options: "conventional-commits" (default) or "keywords".
+
+      "conventional-commits" (default): Parses commit messages using the Conventional Commits
+      specification (https://www.conventionalcommits.org/). Version bumps are determined by commit
+      type and breaking change indicators:
+        - MAJOR: "BREAKING CHANGE" footer or "!" after type/scope (e.g., "feat!: drop Node 16")
+        - MINOR: "feat" type (e.g., "feat: add new endpoint")
+        - PATCH: "fix" type (e.g., "fix: resolve null pointer")
+        - Any other valid conventional commit type defaults to PATCH
+      The default-semver-level input is still respected as the fallback when a commit does not
+      conform to the Conventional Commits format (i.e., has no recognized type prefix).
+
+      "keywords": Uses major-keywords, minor-keywords, and patch-keywords for simple substring
+      matching against commit messages. This is the legacy behavior from versions prior to v1.9.0.
+      When using this mode, the keyword-based inputs control version bumps.
+    required: true
+    default: conventional-commits
   major-keywords:
-    description: Keywords in commit messages that indicate a major release.
+    description: Keywords in commit messages that indicate a major release. Only used when semver-mode is "keywords".
     required: true
     default: major change,breaking change
   minor-keywords:
-    description: Keywords in commit messages that indicate a minor release.
+    description: Keywords in commit messages that indicate a minor release. Only used when semver-mode is "keywords".
     required: true
     default: feat,feature
   patch-keywords:
     description: >
-      Keywords in commit messages that indicate a patch release. By default, everything will be a patch
-      release if major or minor keywords are not found.
+      Keywords in commit messages that indicate a patch release. Only used when semver-mode is "keywords".
+      By default, everything will be a patch release if major or minor keywords are not found.
     required: true
     default: fix,chore,docs
   default-semver-level:
     description: >
-      The default semantic version level to use when a commit does not match any configured keywords
-      (major, minor, or patch). This only applies when NO commits match any keywords. If any commit 
-      matches a keyword, that matched level takes precedence over this default.
+      The default semantic version level to use when no semver rules match in the active semver-mode.
+      In "conventional-commits" mode, this is the fallback when a commit does not conform to the
+      Conventional Commits format (i.e., has no recognized type prefix). In "keywords" mode, this
+      applies when NO commits match any configured keywords (major, minor, or patch).
+
+      If any commit triggers a version bump via the active mode's rules, that level takes precedence
+      over this default.
 
       Valid values: patch, minor, major
 
-      Example: With default-semver-level set to 'major', commits without keywords will trigger a major
-      release. However, if any commit contains a minor keyword (e.g., 'feat:'), the release will be
-      minor instead.
+      Example: With default-semver-level set to 'minor', non-matching commits will trigger a minor
+      release. However, if any commit triggers a higher bump (e.g., 'feat!' → major), the higher
+      level takes precedence.
     required: true
     default: patch
   default-first-tag:

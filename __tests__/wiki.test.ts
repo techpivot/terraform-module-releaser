@@ -354,8 +354,6 @@ describe('wiki', async () => {
     });
 
     it('should use SHA mode when moduleRefMode is set to "sha"', async () => {
-      // Reset config to defaults to clear any custom templates from previous tests
-      config.resetDefaults();
       config.set({
         moduleRefMode: 'sha',
         modulePathIgnore: [],
@@ -377,8 +375,6 @@ describe('wiki', async () => {
     });
 
     it('should handle SHA mode when no commit SHA is available', async () => {
-      // Reset config to defaults
-      config.resetDefaults();
       config.set({
         moduleRefMode: 'sha',
         modulePathIgnore: [],

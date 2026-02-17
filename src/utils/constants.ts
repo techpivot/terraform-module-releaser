@@ -140,3 +140,19 @@ export const WIKI_TITLE_REPLACEMENTS: { [key: string]: string } = {
 export const MODULE_REF_MODE_TAG = 'tag' as const;
 export const MODULE_REF_MODE_SHA = 'sha' as const;
 export const VALID_MODULE_REF_MODES = [MODULE_REF_MODE_TAG, MODULE_REF_MODE_SHA] as const;
+
+/**
+ * Semver mode constants — controls how version bumps are determined from commit messages.
+ *
+ * - `KEYWORDS`: Simple keyword substring matching against commit messages (existing behavior)
+ * - `CONVENTIONAL_COMMITS`: Structured parsing per the Conventional Commits specification
+ */
+export const SEMVER_MODE = {
+  KEYWORDS: 'keywords',
+  CONVENTIONAL_COMMITS: 'conventional-commits',
+} as const;
+
+/**
+ * Valid semver mode values for the `semver-mode` input.
+ */
+export const VALID_SEMVER_MODES = [SEMVER_MODE.KEYWORDS, SEMVER_MODE.CONVENTIONAL_COMMITS] as const;

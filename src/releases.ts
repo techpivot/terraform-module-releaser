@@ -77,7 +77,6 @@ export async function getAllReleases(
     }
 
     throw new Error(errorMessage, { cause: error });
-    /* c8 ignore next */
   } finally {
     console.timeEnd('Elapsed time fetching releases');
     endGroup();
@@ -214,14 +213,6 @@ export async function createTaggedReleases(terraformModules: TerraformModule[]):
     }
 
     throw new Error(`Failed to create tags in repository: ${errorMessage}`, { cause: error });
-
-    //
-    // There appears to be an issue with V8 coverage reporting. It shows the finally block as
-    // not being covered in test coverage. However, we do explicitly have console and endGroup() as
-    // being asserted. Thus, ignore for now.
-    //
-
-    /* c8 ignore next */
   } finally {
     console.timeEnd('Elapsed time pushing new tags & release');
     endGroup();
