@@ -16,9 +16,17 @@
 #
 # Usage: ./scripts/update-major-tag.sh
 #
+# Tag signing behavior:
+# - By default, the script creates GPG-signed annotated tags (git tag -s or -u).
+# - If signing is not available or fails, the script exits with an error unless
+#   explicit unsigned fallback is enabled via ALLOW_UNSIGNED_TAG.
+#
 # Optional environment variables:
-# - ALLOW_UNSIGNED_TAG=true : Fallback to unsigned annotated tag if signing fails
-# - SIGNING_KEY=<key-id>    : Use specific key for signing (passed to git tag -u)
+# - ALLOW_UNSIGNED_TAG=true : (literal "true" only) allow fallback to an unsigned
+#   annotated tag if signing fails; any other value (including unset) is treated
+#   as "false" and will cause the script to fail when signing is unavailable.
+# - SIGNING_KEY=<key-id>    : Use a specific key for signing (passed to git tag -u);
+#   if unset, Git's default signing key (if configured) is used.
 #
 
 set -euo pipefail
