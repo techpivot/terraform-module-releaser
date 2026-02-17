@@ -188,6 +188,12 @@ describe('commit-analyzer', () => {
         expect(result).toBeNull();
       });
 
+      it('should return null for bang with no space after colon', () => {
+        // Even with bang indicator, space after colon is required
+        const result = parseConventionalCommit('feat!:no space after bang');
+        expect(result).toBeNull();
+      });
+
       it('should handle empty scope parentheses', () => {
         const result = parseConventionalCommit('feat(): empty scope');
         expect(result).toEqual({
@@ -205,6 +211,26 @@ describe('commit-analyzer', () => {
           scope: 'my-scope_v2',
           breaking: false,
           description: 'complex scope',
+        });
+      });
+
+      it('should handle scope with slash (monorepo pattern)', () => {
+        const result = parseConventionalCommit('feat(@scope/pkg): add feature');
+        expect(result).toEqual({
+          type: 'feat',
+          scope: '@scope/pkg',
+          breaking: false,
+          description: 'add feature',
+        });
+      });
+
+      it('should handle scope with dots', () => {
+        const result = parseConventionalCommit('fix(a.b.c): fix issue');
+        expect(result).toEqual({
+          type: 'fix',
+          scope: 'a.b.c',
+          breaking: false,
+          description: 'fix issue',
         });
       });
     });
@@ -252,6 +278,16 @@ describe('commit-analyzer', () => {
 
         const result = parseConventionalCommit(message);
         expect(result?.breaking).toBe(true);
+      });
+
+      it('should detect BREAKING CHANGE footer with scope (no bang)', () => {
+        const result = parseConventionalCommit('feat(api): add endpoint\n\nBREAKING CHANGE: old endpoint removed');
+        expect(result).toEqual({
+          type: 'feat',
+          scope: 'api',
+          breaking: true,
+          description: 'add endpoint',
+        });
       });
 
       it('should not detect breaking from partial BREAKING CHANGE text in body', () => {
@@ -371,6 +407,12 @@ describe('commit-analyzer', () => {
 
       it('should return major for BREAKING-CHANGE footer', () => {
         expect(detectConventionalCommitReleaseType('fix: patch\n\nBREAKING-CHANGE: interface changed')).toBe(
+          RELEASE_TYPE.MAJOR,
+        );
+      });
+
+      it('should return major for scoped feat with BREAKING CHANGE footer', () => {
+        expect(detectConventionalCommitReleaseType('feat(api): add endpoint\n\nBREAKING CHANGE: old API removed')).toBe(
           RELEASE_TYPE.MAJOR,
         );
       });
@@ -736,6 +778,36 @@ describe('commit-analyzer', () => {
         const messages = ['update documentation', 'feat: add new feature'];
         // feat matched → minor, non-CC message → null (skipped)
         expect(computeReleaseType(messages)).toBe(RELEASE_TYPE.MINOR);
+      });
+
+      it('should return major when BREAKING CHANGE footer present in mixed commits', () => {
+        const messages = ['fix: bug fix', 'feat: new feature\n\nBREAKING CHANGE: removed old API', 'docs: update docs'];
+        expect(computeReleaseType(messages)).toBe(RELEASE_TYPE.MAJOR);
+      });
+
+      it('should skip empty string messages gracefully', () => {
+        const messages = ['', 'feat: add feature', ''];
+        expect(computeReleaseType(messages)).toBe(RELEASE_TYPE.MINOR);
+      });
+
+      it('should return null when all messages are empty strings', () => {
+        expect(computeReleaseType(['', '  ', ''])).toBeNull();
+      });
+    });
+
+    describe('keywords mode edge cases', () => {
+      beforeEach(() => {
+        config.resetDefaults();
+        config.set({ semverMode: 'keywords' });
+      });
+
+      it('should skip empty string messages gracefully', () => {
+        const messages = ['', 'feat: add feature', ''];
+        expect(computeReleaseType(messages)).toBe(RELEASE_TYPE.MINOR);
+      });
+
+      it('should return null when all messages are whitespace', () => {
+        expect(computeReleaseType(['', '   ', ''])).toBeNull();
       });
     });
   });
