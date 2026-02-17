@@ -31,7 +31,7 @@ Tests use **Vitest** with V8 coverage. Test files mirror `src/` structure in `__
 ### Writing Tests
 
 - Always use `describe`/`it` blocks with descriptive names explaining expected behavior
-- Reset mocks in `beforeEach` — use `config.resetDefaults()` and `context.reset()` when needed
+- Reset mocks in `beforeEach` — use `config.resetDefaults()` and `context.resetDefaults()` when needed
 - Use `stubOctokitReturnData()` for simple mock return values
 - Use `stubOctokitImplementation()` for complex mock behavior
 - For integration tests needing real GitHub API, use `context.useRealOctokit()` (requires `GITHUB_TOKEN`)

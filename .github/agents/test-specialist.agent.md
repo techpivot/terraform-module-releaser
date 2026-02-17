@@ -34,7 +34,7 @@ Before writing or modifying tests, read `docs/testing.md` for the full mock arch
 - Analyze existing tests and identify coverage gaps
 - Write unit and integration tests following existing patterns
 - Use `describe`/`it` blocks with descriptive names explaining expected behavior
-- Reset config/context in `beforeEach` using `.resetDefaults()` and `.reset()`
+- Reset config/context in `beforeEach` using `.resetDefaults()`
 - Use factory functions from helpers (never manually construct complex test objects)
 - Gate integration tests behind `GITHUB_TOKEN` availability checks
 - Ensure tests are isolated, deterministic, and well-documented

@@ -62,7 +62,7 @@ __tests__/                  # Tests mirror src/ structure
 └── utils/                  # Utility function tests
 __mocks__/                  # Vitest module mocks
 ├── config.ts               # Proxy-based mock config with .set()/.resetDefaults()
-├── context.ts              # Proxy-based mock context with .set()/.reset()
+├── context.ts              # Proxy-based mock context with .set()/.resetDefaults()
 └── @actions/core.ts        # Silenced logging, real getInput/getBooleanInput
 tf-modules/                 # Example Terraform modules for integration tests
 dist/                       # Compiled output (auto-generated, never edit manually)

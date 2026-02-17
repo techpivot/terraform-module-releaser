@@ -15,7 +15,7 @@ const defaultRepo: Repo = {
  */
 export interface ContextWithMethods extends Context {
   set: (overrides?: Partial<Context>) => void;
-  reset: () => void;
+  resetDefaults: () => void;
   useRealOctokit: () => Promise<void>;
   useMockOctokit: () => OctokitRestApi;
 }
@@ -84,7 +84,7 @@ const contextProxyHandler: ProxyHandler<ContextWithMethods> = {
           currentContext = { ...currentContext, ...overrides } as Context;
         };
       }
-      if (prop === 'reset') {
+      if (prop === 'resetDefaults') {
         return () => {
           currentContext = {
             ...defaultContext,

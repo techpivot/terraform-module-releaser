@@ -916,6 +916,21 @@ describe('pull-request', () => {
       );
     });
 
+    it('should exclude branding when disabled', async () => {
+      config.set({ disableBranding: true });
+      stubOctokitReturnData('issues.createComment', {
+        data: { id: 1, html_url: 'https://github.com/org/repo/pull/1#issuecomment-1' },
+      });
+
+      await addPostReleaseComment(releasedModules);
+
+      expect(context.octokit.rest.issues.createComment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: expect.not.stringContaining(BRANDING_COMMENT),
+        }),
+      );
+    });
+
     it('should include branding when not disabled', async () => {
       config.set({ disableBranding: false });
       stubOctokitReturnData('issues.createComment', {

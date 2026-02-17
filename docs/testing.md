@@ -127,7 +127,7 @@ import { context } from "@/context";
 describe("featureName", () => {
   beforeEach(() => {
     config.resetDefaults();
-    context.reset();
+    context.resetDefaults();
   });
 
   it("should describe expected behavior clearly", async () => {

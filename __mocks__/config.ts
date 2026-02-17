@@ -4,9 +4,9 @@ import type { ActionInputMetadata } from '@/types';
 import { ACTION_INPUTS, createConfigFromInputs } from '@/utils/metadata';
 
 /**
- * Configuration interface with added utility methods
+ * Configuration interface with added utility methods.
  */
-interface ConfigWithMethods extends Config {
+export interface ConfigWithMethods extends Config {
   set: (overrides: Partial<Config>) => void;
   resetDefaults: () => void;
 }

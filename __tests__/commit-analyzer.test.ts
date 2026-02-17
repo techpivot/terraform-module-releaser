@@ -797,7 +797,6 @@ describe('commit-analyzer', () => {
 
     describe('keywords mode edge cases', () => {
       beforeEach(() => {
-        config.resetDefaults();
         config.set({ semverMode: 'keywords' });
       });
 
