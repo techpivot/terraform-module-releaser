@@ -1,31 +1,52 @@
 import { CommitParser } from 'conventional-commits-parser';
 import { config } from '@/config';
-import type { ConventionalCommitResult, ConventionalCommitsPreset, ReleaseType } from '@/types';
+import type { ConventionalCommitResult, ReleaseType } from '@/types';
 import { RELEASE_TYPE, SEMVER_MODE } from '@/utils/constants';
 
 /**
- * Pre-configured conventional commit parser instance.
+ * Pre-configured conventional commit parser using options taken verbatim from the
+ * `conventional-changelog-conventionalcommits` preset's `createParserOpts()`:
  *
- * Uses a custom `headerPattern` that mirrors the Conventional Commits v1.0.0 spec
- * (`<type>[(<scope>)][!]: <description>`) but intentionally omits the `!` breaking
- * indicator from the capture groups. The library's `headerCorrespondence` mapping
- * does not handle optional capture groups correctly, so the `!` is detected
- * separately via {@link BREAKING_BANG_REGEX}.
+ * @see https://github.com/conventional-changelog/conventional-changelog/blob/master/packages/conventional-changelog-conventionalcommits/src/parser.js
  *
- * `noteKeywords` enables detection of `BREAKING CHANGE:` and `BREAKING-CHANGE:`
- * footer tokens in the commit body per the spec.
+ * We inline these options rather than depending on the preset package because
+ * that package pulls in changelog writer, whatBump, and other utilities we don't
+ * need. The patterns themselves are stable — they encode the Conventional Commits
+ * v1.0.0 header grammar and are unlikely to change.
+ *
+ * Key options and why they matter:
+ *
+ * - `headerPattern` — Matches `<type>[(<scope>)][!]: <description>`. The `!?`
+ *   makes the breaking-change indicator optional so both `feat: x` and `feat!: x`
+ *   parse correctly. The library's default pattern omits `!?`, causing commits
+ *   like `feat!: drop old API` to fail matching entirely.
+ *
+ * - `breakingHeaderPattern` — Same as above but with `!` required. When this
+ *   pattern matches, the library's `parseBreakingHeader()` method automatically
+ *   pushes a BREAKING CHANGE entry into the `notes` array, letting us detect
+ *   `!`-style breaking changes via `notes.length > 0`.
+ *
+ * - `headerCorrespondence` — Maps the three capture groups in `headerPattern`
+ *   to `type`, `scope`, and `subject` on the parsed result object.
+ *
+ * - `noteKeywords` — Tokens scanned in the commit body/footer to detect
+ *   breaking changes: `BREAKING CHANGE` and `BREAKING-CHANGE` per the spec.
+ *
+ * - `revertPattern` / `revertCorrespondence` — Matches GitHub-style revert
+ *   commits (`Revert "<header>" / This reverts commit <hash>.`), extracting the
+ *   original header and commit hash.
+ *
+ * - `issuePrefixes` — Characters that prefix issue references (e.g. `#123`).
  */
 const commitParser = new CommitParser({
-  headerPattern: /^(\w+)(?:\(([^)]*)\))?!? *: *(.+)$/,
+  headerPattern: /^(\w*)(?:\((.*)\))?!?: (.*)$/,
+  breakingHeaderPattern: /^(\w*)(?:\((.*)\))?!: (.*)$/,
   headerCorrespondence: ['type', 'scope', 'subject'],
   noteKeywords: ['BREAKING CHANGE', 'BREAKING-CHANGE'],
+  revertPattern: /^(?:Revert|revert:)\s"?([\s\S]+?)"?\s*This reverts commit (\w*)\./i,
+  revertCorrespondence: ['header', 'hash'],
+  issuePrefixes: ['#'],
 });
-
-/**
- * Detects the `!` breaking change indicator in the commit header.
- * Matches `type[scope]!:` — the `!` must immediately precede the colon.
- */
-const BREAKING_BANG_REGEX = /^\w+(?:\([^)]*\))?!:/;
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Single-message detection
@@ -40,7 +61,8 @@ const BREAKING_BANG_REGEX = /^\w+(?:\([^)]*\))?!:/;
  * The parser handles multi-line messages, extracting the header (first line) and
  * scanning the full message body for `BREAKING CHANGE:` or `BREAKING-CHANGE:`
  * footer tokens per the spec. The `!` breaking indicator in the header is detected
- * separately since the library does not natively support it.
+ * by the library's `breakingHeaderPattern` option, which adds a `BREAKING CHANGE`
+ * entry to the `notes` array when the `!` is present.
  *
  * @param message - The full commit message string
  * @returns The parsed result, or `null` if the message doesn't match the conventional format
@@ -69,16 +91,11 @@ export function parseConventionalCommit(message: string): ConventionalCommitResu
     return null;
   }
 
-  const firstLine = trimmed.split('\n')[0].trim();
-  const hasBreakingBang = BREAKING_BANG_REGEX.test(firstLine);
-  const hasBreakingNote = parsed.notes.length > 0;
-  const description = firstLine.replace(/^\w+(?:\([^)]*\))?!? *: */, '').trim();
-
   return {
     type: parsed.type.toLowerCase(),
     scope: parsed.scope ?? null,
-    breaking: hasBreakingBang || hasBreakingNote,
-    description,
+    breaking: parsed.notes.length > 0,
+    description: parsed.subject ?? '',
   };
 }
 
@@ -86,48 +103,36 @@ export function parseConventionalCommit(message: string): ConventionalCommitResu
  * Determines the semantic version release type from a single commit message using
  * the Conventional Commits specification.
  *
- * The mapping from commit type to release level depends on the chosen preset:
- *
- * **`conventionalcommits`** preset (Conventional Commits v1.0.0 spec):
+ * The mapping from commit type to release level follows the Conventional Commits v1.0.0 spec:
  * - Breaking change (`!` or `BREAKING CHANGE` footer) → MAJOR
  * - `feat` → MINOR
  * - `fix` → PATCH
- * - Any other valid type (e.g. `docs`, `chore`, `refactor`) → PATCH
- *
- * **`angular`** preset (Angular commit convention):
- * - Breaking change (`!` or `BREAKING CHANGE` footer) → MAJOR
- * - `feat` → MINOR
- * - `fix` or `perf` → PATCH
- * - Any other valid type (e.g. `docs`, `chore`, `refactor`) → PATCH
+ * - Any other valid type (e.g. `docs`, `chore`, `refactor`, `perf`) → PATCH
  *
  * The Conventional Commits spec intentionally does not constrain the set of valid
  * types, so any message matching the `<type>[(<scope>)][!]: <description>` format
- * is considered a conventional commit. Types beyond `feat` and `fix` (or `perf` in
- * Angular) all map to PATCH since the action always performs a minimum version bump.
+ * is considered a conventional commit. Types beyond `feat` and `fix` all map to
+ * PATCH since the action always performs a minimum version bump.
  *
  * Non-conventional commit messages (those that don't match the format at all) return `null`,
  * allowing the caller to fall back to `defaultSemverLevel`.
  *
  * @param message - The full commit message string
- * @param preset - The conventional commits preset to use for type-to-level mapping
  * @returns The computed release type, or `null` if the message is not a recognized conventional commit
  *
  * @example
  * ```typescript
- * detectConventionalCommitReleaseType('feat: add login', 'conventionalcommits')
+ * detectConventionalCommitReleaseType('feat: add login')
  * // → 'minor'
  *
- * detectConventionalCommitReleaseType('fix!: security patch', 'angular')
+ * detectConventionalCommitReleaseType('fix!: security patch')
  * // → 'major'
  *
- * detectConventionalCommitReleaseType('update readme', 'conventionalcommits')
+ * detectConventionalCommitReleaseType('update readme')
  * // → null (not a conventional commit)
  * ```
  */
-export function detectConventionalCommitReleaseType(
-  message: string,
-  preset: ConventionalCommitsPreset,
-): ReleaseType | null {
+export function detectConventionalCommitReleaseType(message: string): ReleaseType | null {
   const parsed = parseConventionalCommit(message);
 
   if (!parsed) {
@@ -149,12 +154,7 @@ export function detectConventionalCommitReleaseType(
     return RELEASE_TYPE.PATCH;
   }
 
-  // Angular preset: `perf` maps to PATCH
-  if (preset === 'angular' && parsed.type === 'perf') {
-    return RELEASE_TYPE.PATCH;
-  }
-
-  // Any other valid conventional commit type (docs, chore, refactor, ci, etc.) → PATCH
+  // Any other valid conventional commit type (docs, chore, refactor, perf, ci, etc.) → PATCH
   return RELEASE_TYPE.PATCH;
 }
 
@@ -265,7 +265,7 @@ export function higherPriorityReleaseType(current: ReleaseType | null, candidate
 export function computeReleaseType(messages: ReadonlyArray<string>): ReleaseType | null {
   const detectFn =
     config.semverMode === SEMVER_MODE.CONVENTIONAL_COMMITS
-      ? (message: string) => detectConventionalCommitReleaseType(message, config.conventionalCommitsPreset)
+      ? (message: string) => detectConventionalCommitReleaseType(message)
       : (message: string) =>
           detectKeywordReleaseType(message, config.majorKeywords, config.minorKeywords, config.patchKeywords);
 

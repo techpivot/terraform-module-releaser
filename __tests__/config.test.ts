@@ -313,32 +313,6 @@ describe('config', () => {
       config = getConfig();
       expect(config.semverMode).toBe('conventional-commits');
     });
-
-    it('should throw error for invalid conventional-commits-preset', () => {
-      setupTestInputs({ 'conventional-commits-preset': 'invalid' });
-      expect(() => getConfig()).toThrow(
-        new TypeError("Invalid conventional-commits-preset 'invalid'. Must be one of: conventionalcommits, angular"),
-      );
-
-      clearConfigForTesting();
-      vi.unstubAllEnvs();
-      setupTestInputs({ 'conventional-commits-preset': 'ANGULAR' });
-      expect(() => getConfig()).toThrow(
-        new TypeError("Invalid conventional-commits-preset 'ANGULAR'. Must be one of: conventionalcommits, angular"),
-      );
-    });
-
-    it('should allow valid conventional-commits-preset values', () => {
-      setupTestInputs({ 'conventional-commits-preset': 'conventionalcommits' });
-      let config = getConfig();
-      expect(config.conventionalCommitsPreset).toBe('conventionalcommits');
-
-      clearConfigForTesting();
-      vi.unstubAllEnvs();
-      setupTestInputs({ 'conventional-commits-preset': 'angular' });
-      config = getConfig();
-      expect(config.conventionalCommitsPreset).toBe('angular');
-    });
   });
 
   describe('initialization', () => {
@@ -354,7 +328,6 @@ describe('config', () => {
       const config = getConfig();
 
       expect(config.semverMode).toBe('conventional-commits');
-      expect(config.conventionalCommitsPreset).toBe('conventionalcommits');
       expect(config.majorKeywords).toEqual(['major change', 'breaking change']);
       expect(config.minorKeywords).toEqual(['feat', 'feature']);
       expect(config.patchKeywords).toEqual(['fix', 'chore', 'docs']);
@@ -379,7 +352,6 @@ describe('config', () => {
       expect(endGroup).toHaveBeenCalledTimes(1);
       expect(vi.mocked(info).mock.calls).toEqual([
         ['Semver Mode: conventional-commits'],
-        ['Conventional Commits Preset: conventionalcommits'],
         ['Default Semver Level: patch'],
         ['Default First Tag: v1.0.0'],
         ['Terraform Docs Version: v0.20.0'],

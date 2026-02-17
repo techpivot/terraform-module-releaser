@@ -2,7 +2,7 @@
  * Configuration related types
  */
 
-import type { ConventionalCommitsPreset, ReleaseType, SemverMode } from './common.types';
+import type { ReleaseType, SemverMode } from './common.types';
 
 export type ModuleRefMode = 'tag' | 'sha';
 
@@ -22,17 +22,6 @@ export interface Config {
    */
   semverMode: SemverMode;
 
-  /**
-   * The Conventional Commits preset to use when `semverMode` is `'conventional-commits'`.
-   *
-   * - `'conventionalcommits'` (default): Follows the Conventional Commits v1.0.0 spec.
-   *   MAJOR: `BREAKING CHANGE` footer or `!` after type/scope. MINOR: `feat`. PATCH: `fix`.
-   * - `'angular'`: Follows Angular's commit convention.
-   *   MAJOR: `BREAKING CHANGE` footer or `!` after type/scope. MINOR: `feat`. PATCH: `fix` or `perf`.
-   *
-   * Ignored when `semverMode` is `'keywords'`.
-   */
-  conventionalCommitsPreset: ConventionalCommitsPreset;
   /**
    * List of keywords to identify major changes (e.g., breaking changes).
    * These keywords are used to trigger a major version bump in semantic versioning.

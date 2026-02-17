@@ -156,13 +156,3 @@ export const SEMVER_MODE = {
  * Valid semver mode values for the `semver-mode` input.
  */
 export const VALID_SEMVER_MODES = [SEMVER_MODE.KEYWORDS, SEMVER_MODE.CONVENTIONAL_COMMITS] as const;
-
-/**
- * Valid conventional commits preset values for the `conventional-commits-preset` input.
- *
- * - `conventionalcommits`: Follows the Conventional Commits v1.0.0 specification.
- *   MAJOR: `BREAKING CHANGE` footer or `!` after type/scope. MINOR: `feat`. PATCH: `fix`.
- * - `angular`: Follows Angular's commit convention.
- *   MAJOR: `BREAKING CHANGE` footer or `!` after type/scope. MINOR: `feat`. PATCH: `fix` or `perf`.
- */
-export const VALID_CC_PRESETS = ['conventionalcommits', 'angular'] as const;

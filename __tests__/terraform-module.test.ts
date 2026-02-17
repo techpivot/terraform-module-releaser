@@ -719,7 +719,6 @@ describe('TerraformModule', () => {
       beforeEach(() => {
         config.set({
           semverMode: 'conventional-commits',
-          conventionalCommitsPreset: 'conventionalcommits',
           defaultSemverLevel: 'patch',
         });
       });

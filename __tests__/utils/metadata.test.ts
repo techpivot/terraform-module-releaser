@@ -8,7 +8,6 @@ describe('utils/metadata', () => {
     it('should contain all expected input configurations', () => {
       const expectedInputs = [
         'semver-mode',
-        'conventional-commits-preset',
         'major-keywords',
         'minor-keywords',
         'patch-keywords',
@@ -37,7 +36,6 @@ describe('utils/metadata', () => {
     it('should have correct metadata structure for required string inputs', () => {
       const stringInputs = [
         'semver-mode',
-        'conventional-commits-preset',
         'default-semver-level',
         'default-first-tag',
         'terraform-docs-version',
@@ -121,7 +119,6 @@ describe('utils/metadata', () => {
     it('should have proper configKey mappings', () => {
       const expectedMappings: Record<string, string> = {
         'semver-mode': 'semverMode',
-        'conventional-commits-preset': 'conventionalCommitsPreset',
         'major-keywords': 'majorKeywords',
         'minor-keywords': 'minorKeywords',
         'patch-keywords': 'patchKeywords',
