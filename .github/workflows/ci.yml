@@ -45,7 +45,6 @@ jobs:
         uses: ./
         with:
           semver-mode: conventional-commits
-          conventional-commits-preset: conventionalcommits
           default-first-tag: v1.0.0
           disable-wiki: false
           wiki-sidebar-changelog-max: 10

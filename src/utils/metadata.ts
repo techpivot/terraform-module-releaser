@@ -42,7 +42,6 @@ const optionalArray = (configKey: keyof Config): ActionInputMetadata => ({
  */
 export const ACTION_INPUTS: Record<string, ActionInputMetadata> = {
   'semver-mode': requiredString('semverMode'),
-  'conventional-commits-preset': requiredString('conventionalCommitsPreset'),
   'major-keywords': requiredArray('majorKeywords'),
   'minor-keywords': requiredArray('minorKeywords'),
   'patch-keywords': requiredArray('patchKeywords'),

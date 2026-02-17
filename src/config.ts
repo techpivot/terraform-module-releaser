@@ -1,7 +1,6 @@
 import type { Config } from '@/types';
 import {
   SEMVER_MODE,
-  VALID_CC_PRESETS,
   VALID_MODULE_REF_MODES,
   VALID_SEMVER_LEVELS,
   VALID_SEMVER_MODES,
@@ -108,17 +107,8 @@ function initializeConfig(): Config {
       );
     }
 
-    // Validate conventional commits preset
-    if (!VALID_CC_PRESETS.includes(configInstance.conventionalCommitsPreset)) {
-      throw new TypeError(
-        `Invalid conventional-commits-preset '${configInstance.conventionalCommitsPreset}'. Must be one of: ${VALID_CC_PRESETS.join(', ')}`,
-      );
-    }
-
     info(`Semver Mode: ${configInstance.semverMode}`);
-    if (configInstance.semverMode === SEMVER_MODE.CONVENTIONAL_COMMITS) {
-      info(`Conventional Commits Preset: ${configInstance.conventionalCommitsPreset}`);
-    } else {
+    if (configInstance.semverMode !== SEMVER_MODE.CONVENTIONAL_COMMITS) {
       info(`Major Keywords: ${configInstance.majorKeywords.join(', ')}`);
       info(`Minor Keywords: ${configInstance.minorKeywords.join(', ')}`);
       info(`Patch Keywords: ${configInstance.patchKeywords.join(', ')}`);

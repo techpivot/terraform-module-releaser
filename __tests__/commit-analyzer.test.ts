@@ -176,24 +176,16 @@ describe('commit-analyzer', () => {
         });
       });
 
-      it('should handle extra spaces around colon', () => {
+      it('should return null for extra spaces around colon (not valid CC format)', () => {
+        // Conventional Commits spec requires type immediately followed by colon
         const result = parseConventionalCommit('feat : extra space before colon');
-        expect(result).toEqual({
-          type: 'feat',
-          scope: null,
-          breaking: false,
-          description: 'extra space before colon',
-        });
+        expect(result).toBeNull();
       });
 
-      it('should handle no space after colon', () => {
+      it('should return null for no space after colon (not valid CC format)', () => {
+        // Conventional Commits spec requires a space after the colon
         const result = parseConventionalCommit('feat:no space');
-        expect(result).toEqual({
-          type: 'feat',
-          scope: null,
-          breaking: false,
-          description: 'no space',
-        });
+        expect(result).toBeNull();
       });
 
       it('should handle empty scope parentheses', () => {
@@ -263,8 +255,8 @@ describe('commit-analyzer', () => {
       });
 
       it('should not detect breaking from partial BREAKING CHANGE text in body', () => {
-        // "NOT A BREAKING CHANGE" should still match because BREAKING CHANGE: is on its own line
-        // Actually, the regex /^BREAKING[ -]CHANGE\s*:/m only matches at the start of a line
+        // This contains "NOT A BREAKING CHANGE" in the body, but not a proper "BREAKING CHANGE:" footer
+        // The regex /^BREAKING[ -]CHANGE\s*:/m only matches when the footer starts at the beginning of a line
         const result = parseConventionalCommit('feat: feature\n\nThis is NOT A BREAKING CHANGE in text');
         expect(result?.breaking).toBe(false);
       });
@@ -336,6 +328,16 @@ describe('commit-analyzer', () => {
           description: 'new version',
         });
       });
+
+      it('should handle empty description with body text', () => {
+        const result = parseConventionalCommit('feat: \n\nsome body text');
+        expect(result).toEqual({
+          type: 'feat',
+          scope: null,
+          breaking: false,
+          description: '',
+        });
+      });
     });
   });
 
@@ -344,183 +346,117 @@ describe('commit-analyzer', () => {
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
   describe('detectConventionalCommitReleaseType()', () => {
-    describe('conventionalcommits preset', () => {
-      const preset = 'conventionalcommits' as const;
-
-      describe('MAJOR releases', () => {
-        it('should return major for feat with bang', () => {
-          expect(detectConventionalCommitReleaseType('feat!: breaking feature', preset)).toBe(RELEASE_TYPE.MAJOR);
-        });
-
-        it('should return major for fix with bang', () => {
-          expect(detectConventionalCommitReleaseType('fix!: breaking fix', preset)).toBe(RELEASE_TYPE.MAJOR);
-        });
-
-        it('should return major for any type with bang', () => {
-          expect(detectConventionalCommitReleaseType('chore!: breaking chore', preset)).toBe(RELEASE_TYPE.MAJOR);
-        });
-
-        it('should return major for scoped type with bang', () => {
-          expect(detectConventionalCommitReleaseType('feat(api)!: remove endpoint', preset)).toBe(RELEASE_TYPE.MAJOR);
-        });
-
-        it('should return major for BREAKING CHANGE footer', () => {
-          expect(detectConventionalCommitReleaseType('feat: feature\n\nBREAKING CHANGE: removed old API', preset)).toBe(
-            RELEASE_TYPE.MAJOR,
-          );
-        });
-
-        it('should return major for BREAKING-CHANGE footer', () => {
-          expect(detectConventionalCommitReleaseType('fix: patch\n\nBREAKING-CHANGE: interface changed', preset)).toBe(
-            RELEASE_TYPE.MAJOR,
-          );
-        });
+    describe('MAJOR releases', () => {
+      it('should return major for feat with bang', () => {
+        expect(detectConventionalCommitReleaseType('feat!: breaking feature')).toBe(RELEASE_TYPE.MAJOR);
       });
 
-      describe('MINOR releases', () => {
-        it('should return minor for feat type', () => {
-          expect(detectConventionalCommitReleaseType('feat: add new feature', preset)).toBe(RELEASE_TYPE.MINOR);
-        });
-
-        it('should return minor for feat with scope', () => {
-          expect(detectConventionalCommitReleaseType('feat(auth): add OAuth support', preset)).toBe(RELEASE_TYPE.MINOR);
-        });
+      it('should return major for fix with bang', () => {
+        expect(detectConventionalCommitReleaseType('fix!: breaking fix')).toBe(RELEASE_TYPE.MAJOR);
       });
 
-      describe('PATCH releases', () => {
-        it('should return patch for fix type', () => {
-          expect(detectConventionalCommitReleaseType('fix: resolve null pointer', preset)).toBe(RELEASE_TYPE.PATCH);
-        });
-
-        it('should return patch for fix with scope', () => {
-          expect(detectConventionalCommitReleaseType('fix(parser): handle empty input', preset)).toBe(
-            RELEASE_TYPE.PATCH,
-          );
-        });
-
-        it('should return patch for chore type', () => {
-          expect(detectConventionalCommitReleaseType('chore: update dependencies', preset)).toBe(RELEASE_TYPE.PATCH);
-        });
-
-        it('should return patch for docs type', () => {
-          expect(detectConventionalCommitReleaseType('docs: update README', preset)).toBe(RELEASE_TYPE.PATCH);
-        });
-
-        it('should return patch for refactor type', () => {
-          expect(detectConventionalCommitReleaseType('refactor: simplify logic', preset)).toBe(RELEASE_TYPE.PATCH);
-        });
-
-        it('should return patch for style type', () => {
-          expect(detectConventionalCommitReleaseType('style: fix formatting', preset)).toBe(RELEASE_TYPE.PATCH);
-        });
-
-        it('should return patch for test type', () => {
-          expect(detectConventionalCommitReleaseType('test: add unit tests', preset)).toBe(RELEASE_TYPE.PATCH);
-        });
-
-        it('should return patch for build type', () => {
-          expect(detectConventionalCommitReleaseType('build: update ncc config', preset)).toBe(RELEASE_TYPE.PATCH);
-        });
-
-        it('should return patch for ci type', () => {
-          expect(detectConventionalCommitReleaseType('ci: add workflow', preset)).toBe(RELEASE_TYPE.PATCH);
-        });
-
-        it('should return patch for perf type (no special treatment in CC preset)', () => {
-          expect(detectConventionalCommitReleaseType('perf: optimize queries', preset)).toBe(RELEASE_TYPE.PATCH);
-        });
-
-        it('should return patch for revert type', () => {
-          expect(detectConventionalCommitReleaseType('revert: undo change', preset)).toBe(RELEASE_TYPE.PATCH);
-        });
-
-        it('should return patch for unrecognized but valid CC types', () => {
-          expect(detectConventionalCommitReleaseType('improvement: better logging', preset)).toBe(RELEASE_TYPE.PATCH);
-        });
+      it('should return major for any type with bang', () => {
+        expect(detectConventionalCommitReleaseType('chore!: breaking chore')).toBe(RELEASE_TYPE.MAJOR);
       });
 
-      describe('non-conventional messages', () => {
-        it('should return null for plain text message', () => {
-          expect(detectConventionalCommitReleaseType('update readme', preset)).toBeNull();
-        });
+      it('should return major for scoped type with bang', () => {
+        expect(detectConventionalCommitReleaseType('feat(api)!: remove endpoint')).toBe(RELEASE_TYPE.MAJOR);
+      });
 
-        it('should return null for merge commit', () => {
-          expect(detectConventionalCommitReleaseType("Merge branch 'feature' into main", preset)).toBeNull();
-        });
+      it('should return major for BREAKING CHANGE footer', () => {
+        expect(detectConventionalCommitReleaseType('feat: feature\n\nBREAKING CHANGE: removed old API')).toBe(
+          RELEASE_TYPE.MAJOR,
+        );
+      });
 
-        it('should return null for empty string', () => {
-          expect(detectConventionalCommitReleaseType('', preset)).toBeNull();
-        });
+      it('should return major for BREAKING-CHANGE footer', () => {
+        expect(detectConventionalCommitReleaseType('fix: patch\n\nBREAKING-CHANGE: interface changed')).toBe(
+          RELEASE_TYPE.MAJOR,
+        );
       });
     });
 
-    describe('angular preset', () => {
-      const preset = 'angular' as const;
-
-      describe('MAJOR releases', () => {
-        it('should return major for feat with bang', () => {
-          expect(detectConventionalCommitReleaseType('feat!: breaking feature', preset)).toBe(RELEASE_TYPE.MAJOR);
-        });
-
-        it('should return major for BREAKING CHANGE footer', () => {
-          expect(detectConventionalCommitReleaseType('feat: feature\n\nBREAKING CHANGE: removed API', preset)).toBe(
-            RELEASE_TYPE.MAJOR,
-          );
-        });
+    describe('MINOR releases', () => {
+      it('should return minor for feat type', () => {
+        expect(detectConventionalCommitReleaseType('feat: add new feature')).toBe(RELEASE_TYPE.MINOR);
       });
 
-      describe('MINOR releases', () => {
-        it('should return minor for feat type', () => {
-          expect(detectConventionalCommitReleaseType('feat: add new feature', preset)).toBe(RELEASE_TYPE.MINOR);
-        });
-      });
-
-      describe('PATCH releases', () => {
-        it('should return patch for fix type', () => {
-          expect(detectConventionalCommitReleaseType('fix: resolve bug', preset)).toBe(RELEASE_TYPE.PATCH);
-        });
-
-        it('should return patch for perf type (Angular-specific)', () => {
-          expect(detectConventionalCommitReleaseType('perf: optimize queries', preset)).toBe(RELEASE_TYPE.PATCH);
-        });
-
-        it('should return patch for docs type', () => {
-          expect(detectConventionalCommitReleaseType('docs: update README', preset)).toBe(RELEASE_TYPE.PATCH);
-        });
-
-        it('should return patch for chore type', () => {
-          expect(detectConventionalCommitReleaseType('chore: update deps', preset)).toBe(RELEASE_TYPE.PATCH);
-        });
-
-        it('should return patch for refactor type', () => {
-          expect(detectConventionalCommitReleaseType('refactor: simplify', preset)).toBe(RELEASE_TYPE.PATCH);
-        });
-      });
-
-      describe('non-conventional messages', () => {
-        it('should return null for plain text message', () => {
-          expect(detectConventionalCommitReleaseType('update readme', preset)).toBeNull();
-        });
+      it('should return minor for feat with scope', () => {
+        expect(detectConventionalCommitReleaseType('feat(auth): add OAuth support')).toBe(RELEASE_TYPE.MINOR);
       });
     });
 
-    describe('preset comparison — perf type difference', () => {
-      it('should return patch for perf in both presets (both return patch)', () => {
-        // In conventionalcommits: perf is a recognized type → PATCH
-        // In angular: perf is explicitly mapped → PATCH
-        // Both return PATCH, but the code path differs
-        expect(detectConventionalCommitReleaseType('perf: optimize', 'conventionalcommits')).toBe(RELEASE_TYPE.PATCH);
-        expect(detectConventionalCommitReleaseType('perf: optimize', 'angular')).toBe(RELEASE_TYPE.PATCH);
+    describe('PATCH releases', () => {
+      it('should return patch for fix type', () => {
+        expect(detectConventionalCommitReleaseType('fix: resolve null pointer')).toBe(RELEASE_TYPE.PATCH);
+      });
+
+      it('should return patch for fix with scope', () => {
+        expect(detectConventionalCommitReleaseType('fix(parser): handle empty input')).toBe(RELEASE_TYPE.PATCH);
+      });
+
+      it('should return patch for chore type', () => {
+        expect(detectConventionalCommitReleaseType('chore: update dependencies')).toBe(RELEASE_TYPE.PATCH);
+      });
+
+      it('should return patch for docs type', () => {
+        expect(detectConventionalCommitReleaseType('docs: update README')).toBe(RELEASE_TYPE.PATCH);
+      });
+
+      it('should return patch for refactor type', () => {
+        expect(detectConventionalCommitReleaseType('refactor: simplify logic')).toBe(RELEASE_TYPE.PATCH);
+      });
+
+      it('should return patch for style type', () => {
+        expect(detectConventionalCommitReleaseType('style: fix formatting')).toBe(RELEASE_TYPE.PATCH);
+      });
+
+      it('should return patch for test type', () => {
+        expect(detectConventionalCommitReleaseType('test: add unit tests')).toBe(RELEASE_TYPE.PATCH);
+      });
+
+      it('should return patch for build type', () => {
+        expect(detectConventionalCommitReleaseType('build: update ncc config')).toBe(RELEASE_TYPE.PATCH);
+      });
+
+      it('should return patch for ci type', () => {
+        expect(detectConventionalCommitReleaseType('ci: add workflow')).toBe(RELEASE_TYPE.PATCH);
+      });
+
+      it('should return patch for perf type', () => {
+        expect(detectConventionalCommitReleaseType('perf: optimize queries')).toBe(RELEASE_TYPE.PATCH);
+      });
+
+      it('should return patch for revert type', () => {
+        expect(detectConventionalCommitReleaseType('revert: undo change')).toBe(RELEASE_TYPE.PATCH);
+      });
+
+      it('should return patch for unrecognized but valid CC types', () => {
+        expect(detectConventionalCommitReleaseType('improvement: better logging')).toBe(RELEASE_TYPE.PATCH);
+      });
+    });
+
+    describe('non-conventional messages', () => {
+      it('should return null for plain text message', () => {
+        expect(detectConventionalCommitReleaseType('update readme')).toBeNull();
+      });
+
+      it('should return null for merge commit', () => {
+        expect(detectConventionalCommitReleaseType("Merge branch 'feature' into main")).toBeNull();
+      });
+
+      it('should return null for empty string', () => {
+        expect(detectConventionalCommitReleaseType('')).toBeNull();
       });
     });
 
     describe('case sensitivity', () => {
       it('should handle uppercase type', () => {
-        expect(detectConventionalCommitReleaseType('FEAT: uppercase', 'conventionalcommits')).toBe(RELEASE_TYPE.MINOR);
+        expect(detectConventionalCommitReleaseType('FEAT: uppercase')).toBe(RELEASE_TYPE.MINOR);
       });
 
       it('should handle mixed case type', () => {
-        expect(detectConventionalCommitReleaseType('Fix: mixed case', 'conventionalcommits')).toBe(RELEASE_TYPE.PATCH);
+        expect(detectConventionalCommitReleaseType('Fix: mixed case')).toBe(RELEASE_TYPE.PATCH);
       });
     });
   });
@@ -742,7 +678,6 @@ describe('commit-analyzer', () => {
       beforeEach(() => {
         config.set({
           semverMode: 'conventional-commits',
-          conventionalCommitsPreset: 'conventionalcommits',
         });
       });
 
@@ -801,27 +736,6 @@ describe('commit-analyzer', () => {
         const messages = ['update documentation', 'feat: add new feature'];
         // feat matched → minor, non-CC message → null (skipped)
         expect(computeReleaseType(messages)).toBe(RELEASE_TYPE.MINOR);
-      });
-
-      describe('angular preset', () => {
-        beforeEach(() => {
-          config.set({
-            semverMode: 'conventional-commits',
-            conventionalCommitsPreset: 'angular',
-          });
-        });
-
-        it('should return patch for perf commit (Angular-specific)', () => {
-          expect(computeReleaseType(['perf: optimize query execution'])).toBe(RELEASE_TYPE.PATCH);
-        });
-
-        it('should return minor for feat in angular preset', () => {
-          expect(computeReleaseType(['feat: add new feature'])).toBe(RELEASE_TYPE.MINOR);
-        });
-
-        it('should return major for breaking change in angular preset', () => {
-          expect(computeReleaseType(['refactor(core)!: complete rewrite'])).toBe(RELEASE_TYPE.MAJOR);
-        });
       });
     });
   });

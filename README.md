@@ -187,7 +187,6 @@ configuring the following optional input parameters as needed.
 | Input                            | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Default                                                                                               |
 | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
 | `semver-mode`                    | Controls how version bumps are determined from commits. Valid options: `conventional-commits` (default) or `keywords`. `conventional-commits` parses structured commit messages per the [Conventional Commits](https://www.conventionalcommits.org/) spec — powered by [`conventional-commits-parser`](https://www.npmjs.com/package/conventional-commits-parser). `keywords` uses keyword substring matching (legacy behavior). When set to `conventional-commits`, keyword inputs are ignored.<br><sub>[Read more here](#conventional-commits-mode)</sub> | `conventional-commits`                                                                                |
-| `conventional-commits-preset`    | The preset used only when `semver-mode` is `conventional-commits`. Valid options: `conventionalcommits` (default) or `angular`. `conventionalcommits` follows CC v1.0.0 (`feat` → minor, `fix` → patch). `angular` follows Angular semantics (`feat` → minor, `fix`/`perf` → patch). In both presets, breaking changes (`!` or `BREAKING CHANGE`) map to major and other valid types map to patch.<br><sub>[Read more here](#conventional-commits-mode)</sub>                                                                                               | `conventionalcommits`                                                                                 |
 | `major-keywords`                 | Keywords in commit messages that indicate a major release. Only used when `semver-mode` is `keywords`.                                                                                                                                                                                                                                                                                                                                                                                                                                                      | `major change,breaking change`                                                                        |
 | `minor-keywords`                 | Keywords in commit messages that indicate a minor release. Only used when `semver-mode` is `keywords`.                                                                                                                                                                                                                                                                                                                                                                                                                                                      | `feat,feature`                                                                                        |
 | `patch-keywords`                 | Keywords in commit messages that indicate a patch release. Only used when `semver-mode` is `keywords`.                                                                                                                                                                                                                                                                                                                                                                                                                                                      | `fix,chore,docs`                                                                                      |
@@ -218,14 +217,11 @@ following the [Conventional Commits specification](https://www.conventionalcommi
 - `semver-mode`
   - `conventional-commits` (default): Uses structured commit parsing.
   - `keywords`: Uses `major-keywords`, `minor-keywords`, and `patch-keywords` substring matching.
-- `conventional-commits-preset` (only when `semver-mode: conventional-commits`)
-  - `conventionalcommits` (default): `feat` → MINOR, `fix` → PATCH.
-  - `angular`: `feat` → MINOR, `fix`/`perf` → PATCH.
-- In both presets, breaking changes (`!` or `BREAKING CHANGE`) → MAJOR, and other valid conventional types → PATCH.
+- Breaking changes (`!` or `BREAKING CHANGE`) → MAJOR, and other valid conventional types → PATCH.
 
 **Commit format:** `<type>[(scope)][!]: <description>`
 
-#### Preset: `conventionalcommits` (default)
+#### Type-to-Release Mapping
 
 | Commit Pattern                                      | Release Type | Example                                                 |
 | --------------------------------------------------- | ------------ | ------------------------------------------------------- |
@@ -234,9 +230,16 @@ following the [Conventional Commits specification](https://www.conventionalcommi
 | `fix` type                                          | **PATCH**    | `fix: resolve null pointer`, `fix(auth): token expiry`  |
 | Any other valid type (`chore`, `docs`, `refactor`…) | **PATCH**    | `chore: update deps`, `docs: update README`             |
 
-#### Preset: `angular`
+#### Breaking Change Notation
 
-Same as `conventionalcommits` except `perf` is explicitly mapped to PATCH in the Angular preset.
+Breaking changes can be indicated in two ways per the Conventional Commits v1.0.0 specification:
+
+- **Exclamation mark (`!`)** after the type/scope in the header (e.g., `feat(api)!: drop old endpoints`). This is the
+  preferred and most concise method.
+- **`BREAKING CHANGE:` footer** in the commit body (e.g., `BREAKING CHANGE: The API structure has changed`). The
+  `BREAKING-CHANGE:` variant (with hyphen) is also supported.
+
+Both methods are always detected regardless of commit type.
 
 #### Behavior Notes
 
@@ -260,14 +263,13 @@ Since `conventional-commits` is the default, no additional configuration is need
   uses: techpivot/terraform-module-releaser@v1
 ```
 
-To customize the preset or fallback level:
+To customize the fallback level:
 
 ```yml
 - name: Terraform Module Releaser
   uses: techpivot/terraform-module-releaser@v1
   with:
-    conventional-commits-preset: angular
-    default-semver-level: patch
+    default-semver-level: minor
 ```
 
 To revert to legacy keyword-based matching:
@@ -401,7 +403,6 @@ jobs:
         uses: techpivot/terraform-module-releaser@v1
         with:
           semver-mode: conventional-commits
-          conventional-commits-preset: conventionalcommits
           default-semver-level: patch
           default-first-tag: v1.0.0
           terraform-docs-version: v0.20.0

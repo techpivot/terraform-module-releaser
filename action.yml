@@ -19,36 +19,14 @@ inputs:
         - MINOR: "feat" type (e.g., "feat: add new endpoint")
         - PATCH: "fix" type (e.g., "fix: resolve null pointer")
         - Any other valid conventional commit type defaults to PATCH
-      The specific type-to-level mappings are controlled by the conventional-commits-preset input.
       The default-semver-level input is still respected as the fallback when a commit does not
       conform to the Conventional Commits format (i.e., has no recognized type prefix).
 
       "keywords": Uses major-keywords, minor-keywords, and patch-keywords for simple substring
       matching against commit messages. This is the legacy behavior from versions prior to v1.9.0.
-      When using this mode, the keyword-based inputs control version bumps and the
-      conventional-commits-preset input is ignored.
+      When using this mode, the keyword-based inputs control version bumps.
     required: true
     default: conventional-commits
-  conventional-commits-preset:
-    description: >
-      The Conventional Commits preset to use when semver-mode is "conventional-commits".
-      Ignored when semver-mode is "keywords".
-
-      Valid options: "conventionalcommits" (default) or "angular".
-
-      "conventionalcommits" (default): Follows the Conventional Commits v1.0.0 specification.
-        - MAJOR: "BREAKING CHANGE" footer or "!" after type/scope
-        - MINOR: "feat" type
-        - PATCH: "fix" type
-        - Any other valid conventional commit type → PATCH
-
-      "angular": Follows Angular's commit convention.
-        - MAJOR: "BREAKING CHANGE" footer or "!" after type/scope
-        - MINOR: "feat" type
-        - PATCH: "fix" or "perf" type
-        - Any other valid conventional commit type → PATCH
-    required: true
-    default: conventionalcommits
   major-keywords:
     description: Keywords in commit messages that indicate a major release. Only used when semver-mode is "keywords".
     required: true
