@@ -1,7 +1,10 @@
 import type { Config } from '@/types';
 import {
+  SEMVER_MODE,
+  VALID_CC_PRESETS,
   VALID_MODULE_REF_MODES,
   VALID_SEMVER_LEVELS,
+  VALID_SEMVER_MODES,
   VALID_TAG_DIRECTORY_SEPARATORS,
   VERSION_TAG_REGEX,
 } from '@/utils/constants';
@@ -98,9 +101,28 @@ function initializeConfig(): Config {
       );
     }
 
-    info(`Major Keywords: ${configInstance.majorKeywords.join(', ')}`);
-    info(`Minor Keywords: ${configInstance.minorKeywords.join(', ')}`);
-    info(`Patch Keywords: ${configInstance.patchKeywords.join(', ')}`);
+    // Validate semver mode
+    if (!VALID_SEMVER_MODES.includes(configInstance.semverMode)) {
+      throw new TypeError(
+        `Invalid semver-mode '${configInstance.semverMode}'. Must be one of: ${VALID_SEMVER_MODES.join(', ')}`,
+      );
+    }
+
+    // Validate conventional commits preset
+    if (!VALID_CC_PRESETS.includes(configInstance.conventionalCommitsPreset)) {
+      throw new TypeError(
+        `Invalid conventional-commits-preset '${configInstance.conventionalCommitsPreset}'. Must be one of: ${VALID_CC_PRESETS.join(', ')}`,
+      );
+    }
+
+    info(`Semver Mode: ${configInstance.semverMode}`);
+    if (configInstance.semverMode === SEMVER_MODE.CONVENTIONAL_COMMITS) {
+      info(`Conventional Commits Preset: ${configInstance.conventionalCommitsPreset}`);
+    } else {
+      info(`Major Keywords: ${configInstance.majorKeywords.join(', ')}`);
+      info(`Minor Keywords: ${configInstance.minorKeywords.join(', ')}`);
+      info(`Patch Keywords: ${configInstance.patchKeywords.join(', ')}`);
+    }
     info(`Default Semver Level: ${configInstance.defaultSemverLevel}`);
     info(`Default First Tag: ${configInstance.defaultFirstTag}`);
     info(`Terraform Docs Version: ${configInstance.terraformDocsVersion}`);

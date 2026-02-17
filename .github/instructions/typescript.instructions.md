@@ -22,6 +22,7 @@ This project uses TypeScript 5.9+ with strict mode and ES modules (`"type": "mod
 ### Coding Standards
 
 - Functions/variables: `camelCase` — Types/interfaces: `PascalCase` — Constants: `UPPER_SNAKE_CASE`
+- All types and interfaces live in `src/types/` — define in a `*.types.ts` file and re-export via `src/types/index.ts`
 - All constants live in `src/utils/constants.ts`
 - Use `@actions/core` for logging (`core.info()`, `core.debug()`, `core.warning()`)
 - Use `@actions/core` for action outputs (`core.setOutput()`) and failure (`core.setFailed()`)

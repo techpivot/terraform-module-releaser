@@ -7,6 +7,8 @@ describe('utils/metadata', () => {
   describe('ACTION_INPUTS', () => {
     it('should contain all expected input configurations', () => {
       const expectedInputs = [
+        'semver-mode',
+        'conventional-commits-preset',
         'major-keywords',
         'minor-keywords',
         'patch-keywords',
@@ -34,6 +36,8 @@ describe('utils/metadata', () => {
 
     it('should have correct metadata structure for required string inputs', () => {
       const stringInputs = [
+        'semver-mode',
+        'conventional-commits-preset',
         'default-semver-level',
         'default-first-tag',
         'terraform-docs-version',
@@ -116,14 +120,18 @@ describe('utils/metadata', () => {
 
     it('should have proper configKey mappings', () => {
       const expectedMappings: Record<string, string> = {
+        'semver-mode': 'semverMode',
+        'conventional-commits-preset': 'conventionalCommitsPreset',
         'major-keywords': 'majorKeywords',
         'minor-keywords': 'minorKeywords',
         'patch-keywords': 'patchKeywords',
+        'default-semver-level': 'defaultSemverLevel',
         'default-first-tag': 'defaultFirstTag',
         'terraform-docs-version': 'terraformDocsVersion',
         'delete-legacy-tags': 'deleteLegacyTags',
         'disable-wiki': 'disableWiki',
         'wiki-sidebar-changelog-max': 'wikiSidebarChangelogMax',
+        'wiki-usage-template': 'wikiUsageTemplate',
         'disable-branding': 'disableBranding',
         'module-path-ignore': 'modulePathIgnore',
         'module-change-exclude-patterns': 'moduleChangeExcludePatterns',
@@ -134,6 +142,8 @@ describe('utils/metadata', () => {
         'use-version-prefix': 'useVersionPrefix',
         'module-ref-mode': 'moduleRefMode',
       };
+
+      expect(Object.keys(expectedMappings)).toHaveLength(Object.keys(ACTION_INPUTS).length);
 
       for (const [inputName, expectedConfigKey] of Object.entries(expectedMappings)) {
         expect(ACTION_INPUTS[inputName].configKey).toBe(expectedConfigKey);
@@ -165,7 +175,7 @@ describe('utils/metadata', () => {
         throw new Error(errorMessage);
       });
 
-      expect(() => createConfigFromInputs()).toThrow(`Failed to process input 'major-keywords': ${errorMessage}`);
+      expect(() => createConfigFromInputs()).toThrow(`Failed to process input 'semver-mode': ${errorMessage}`);
     });
 
     it('should handle non-Error objects thrown during input processing', () => {
@@ -174,9 +184,7 @@ describe('utils/metadata', () => {
         throw errorObject;
       });
 
-      expect(() => createConfigFromInputs()).toThrow(
-        `Failed to process input 'major-keywords': ${String(errorObject)}`,
-      );
+      expect(() => createConfigFromInputs()).toThrow(`Failed to process input 'semver-mode': ${String(errorObject)}`);
     });
   });
 });

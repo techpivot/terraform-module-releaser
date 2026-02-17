@@ -78,6 +78,9 @@ directory, and a mock Octokit instance.
 Reads `action.yml` at test time to extract input defaults. Ensures tests always match production defaults even when
 action.yml changes.
 
+When action inputs are added, removed, or renamed in `action.yml`, update both `src/utils/metadata.ts`
+(`ACTION_INPUTS`) and `__tests__/utils/metadata.test.ts` in the same change.
+
 ### `inputs.ts`
 
 - **`setupTestInputs(overrides?)`** — Sets `INPUT_*` env vars from action.yml defaults, with optional overrides

@@ -36,6 +36,8 @@ Tests use **Vitest** with V8 coverage. Test files mirror `src/` structure in `__
 - Use `stubOctokitImplementation()` for complex mock behavior
 - For integration tests needing real GitHub API, use `context.useRealOctokit()` (requires `GITHUB_TOKEN`)
 - Wiki test fixtures in `__tests__/fixtures/` use Unicode chars in filenames (U+2215, U+2012) — handle carefully
+- When adding/removing/changing inputs in `action.yml`, also update `src/utils/metadata.ts` (`ACTION_INPUTS`) and
+  `__tests__/utils/metadata.test.ts` in the same change
 
 ### Coverage
 

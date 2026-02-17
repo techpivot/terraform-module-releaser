@@ -44,9 +44,8 @@ jobs:
         id: test-action
         uses: ./
         with:
-          major-keywords: major change,breaking change
-          minor-keywords: feat,feature
-          patch-keywords: fix,chore,docs
+          semver-mode: conventional-commits
+          conventional-commits-preset: conventionalcommits
           default-first-tag: v1.0.0
           disable-wiki: false
           wiki-sidebar-changelog-max: 10

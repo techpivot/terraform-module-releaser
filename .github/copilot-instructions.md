@@ -46,6 +46,7 @@ src/                        # TypeScript source (ES modules)
 ├── context.ts              # Singleton context (repo, PR, Octokit via Proxy)
 ├── parser.ts               # Discovers Terraform modules, maps commits → modules
 ├── terraform-module.ts     # Central domain model (TerraformModule class)
+├── commit-analyzer.ts      # Commit message analysis (keywords & conventional commits)
 ├── tags.ts                 # Git tag CRUD operations
 ├── releases.ts             # GitHub release creation, tag pushing
 ├── pull-request.ts         # PR comment management, commit fetching
@@ -84,6 +85,8 @@ docs/                       # Detailed documentation for humans and AI agents
 ## Code Standards
 
 - **Functions/variables**: `camelCase` — **Types/interfaces**: `PascalCase` — **Constants**: `UPPER_SNAKE_CASE`
+- All types/interfaces live in `src/types/` — define in `*.types.ts` files, re-export via `src/types/index.ts`
+- All constants live in `src/utils/constants.ts`
 - Biome enforces all TS/JS formatting. Prettier handles Markdown/YAML only.
 - Use Conventional Commits: `feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `test:`
 
@@ -91,6 +94,9 @@ docs/                       # Detailed documentation for humans and AI agents
 
 **Always**: Run `npm run check:fix` before committing. Add/update tests for all code changes. Follow TypeScript strict
 mode. Use existing patterns.
+
+**Always**: When adding/removing/changing inputs in `action.yml`, update `src/utils/metadata.ts` (`ACTION_INPUTS`) and
+`__tests__/utils/metadata.test.ts` in the same change.
 
 **Ask first**: Adding new dependencies. Changing build config. Modifying GitHub Actions workflows.
 

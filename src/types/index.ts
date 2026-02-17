@@ -1,6 +1,9 @@
 // Action metadata types
 export * from './metadata.types';
 
+// Commit analyzer types
+export * from './commit-analyzer.types';
+
 // Common types
 export * from './common.types';
 

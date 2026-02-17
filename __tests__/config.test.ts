@@ -287,6 +287,58 @@ describe('config', () => {
       config = getConfig();
       expect(config.defaultSemverLevel).toBe('major');
     });
+
+    it('should throw error for invalid semver-mode', () => {
+      setupTestInputs({ 'semver-mode': 'invalid' });
+      expect(() => getConfig()).toThrow(
+        new TypeError("Invalid semver-mode 'invalid'. Must be one of: keywords, conventional-commits"),
+      );
+
+      clearConfigForTesting();
+      vi.unstubAllEnvs();
+      setupTestInputs({ 'semver-mode': 'KEYWORDS' });
+      expect(() => getConfig()).toThrow(
+        new TypeError("Invalid semver-mode 'KEYWORDS'. Must be one of: keywords, conventional-commits"),
+      );
+    });
+
+    it('should allow valid semver-mode values', () => {
+      setupTestInputs({ 'semver-mode': 'keywords' });
+      let config = getConfig();
+      expect(config.semverMode).toBe('keywords');
+
+      clearConfigForTesting();
+      vi.unstubAllEnvs();
+      setupTestInputs({ 'semver-mode': 'conventional-commits' });
+      config = getConfig();
+      expect(config.semverMode).toBe('conventional-commits');
+    });
+
+    it('should throw error for invalid conventional-commits-preset', () => {
+      setupTestInputs({ 'conventional-commits-preset': 'invalid' });
+      expect(() => getConfig()).toThrow(
+        new TypeError("Invalid conventional-commits-preset 'invalid'. Must be one of: conventionalcommits, angular"),
+      );
+
+      clearConfigForTesting();
+      vi.unstubAllEnvs();
+      setupTestInputs({ 'conventional-commits-preset': 'ANGULAR' });
+      expect(() => getConfig()).toThrow(
+        new TypeError("Invalid conventional-commits-preset 'ANGULAR'. Must be one of: conventionalcommits, angular"),
+      );
+    });
+
+    it('should allow valid conventional-commits-preset values', () => {
+      setupTestInputs({ 'conventional-commits-preset': 'conventionalcommits' });
+      let config = getConfig();
+      expect(config.conventionalCommitsPreset).toBe('conventionalcommits');
+
+      clearConfigForTesting();
+      vi.unstubAllEnvs();
+      setupTestInputs({ 'conventional-commits-preset': 'angular' });
+      config = getConfig();
+      expect(config.conventionalCommitsPreset).toBe('angular');
+    });
   });
 
   describe('initialization', () => {
@@ -301,6 +353,8 @@ describe('config', () => {
     it('should initialize with valid default inputs', () => {
       const config = getConfig();
 
+      expect(config.semverMode).toBe('conventional-commits');
+      expect(config.conventionalCommitsPreset).toBe('conventionalcommits');
       expect(config.majorKeywords).toEqual(['major change', 'breaking change']);
       expect(config.minorKeywords).toEqual(['feat', 'feature']);
       expect(config.patchKeywords).toEqual(['fix', 'chore', 'docs']);
@@ -324,9 +378,8 @@ describe('config', () => {
       expect(startGroup).toHaveBeenCalledTimes(1);
       expect(endGroup).toHaveBeenCalledTimes(1);
       expect(vi.mocked(info).mock.calls).toEqual([
-        ['Major Keywords: major change, breaking change'],
-        ['Minor Keywords: feat, feature'],
-        ['Patch Keywords: fix, chore, docs'],
+        ['Semver Mode: conventional-commits'],
+        ['Conventional Commits Preset: conventionalcommits'],
         ['Default Semver Level: patch'],
         ['Default First Tag: v1.0.0'],
         ['Terraform Docs Version: v0.20.0'],

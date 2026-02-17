@@ -2,7 +2,7 @@
  * Configuration related types
  */
 
-import type { ReleaseType } from './common.types';
+import type { ConventionalCommitsPreset, ReleaseType, SemverMode } from './common.types';
 
 export type ModuleRefMode = 'tag' | 'sha';
 
@@ -10,6 +10,29 @@ export type ModuleRefMode = 'tag' | 'sha';
  * Configuration interface used for defining key GitHub Action input configuration.
  */
 export interface Config {
+  /**
+   * Controls how semantic version bumps are determined from commit messages.
+   *
+   * - `'conventional-commits'` (default): Parses commit messages using the Conventional
+   *   Commits specification. Version bumps are determined by commit type (e.g., `feat:` → minor,
+   *   `fix:` → patch) and breaking change indicators (`!` suffix or `BREAKING CHANGE` footer).
+   *   The keyword-based inputs are ignored in this mode.
+   * - `'keywords'`: Uses `majorKeywords`, `minorKeywords`, and `patchKeywords` for simple
+   *   substring matching against commit messages. This is the legacy behavior.
+   */
+  semverMode: SemverMode;
+
+  /**
+   * The Conventional Commits preset to use when `semverMode` is `'conventional-commits'`.
+   *
+   * - `'conventionalcommits'` (default): Follows the Conventional Commits v1.0.0 spec.
+   *   MAJOR: `BREAKING CHANGE` footer or `!` after type/scope. MINOR: `feat`. PATCH: `fix`.
+   * - `'angular'`: Follows Angular's commit convention.
+   *   MAJOR: `BREAKING CHANGE` footer or `!` after type/scope. MINOR: `feat`. PATCH: `fix` or `perf`.
+   *
+   * Ignored when `semverMode` is `'keywords'`.
+   */
+  conventionalCommitsPreset: ConventionalCommitsPreset;
   /**
    * List of keywords to identify major changes (e.g., breaking changes).
    * These keywords are used to trigger a major version bump in semantic versioning.

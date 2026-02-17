@@ -50,6 +50,8 @@ Key patterns:
 ## Code Conventions
 
 - Naming: `camelCase` (functions/vars), `PascalCase` (types), `UPPER_SNAKE_CASE` (constants)
+- All types/interfaces live in `src/types/` — define in `*.types.ts` files, re-export via `src/types/index.ts`
+- All constants live in `src/utils/constants.ts`
 - Formatting: Biome for TS/JS/JSON; Prettier for Markdown/YAML only
 - Commits: Conventional Commits (`feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `test:`)
 

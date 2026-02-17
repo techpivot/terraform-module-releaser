@@ -59,6 +59,7 @@
     "@octokit/plugin-paginate-rest": "^14.0.0",
     "@octokit/plugin-rest-endpoint-methods": "^17.0.0",
     "@octokit/request-error": "^7.1.0",
+    "conventional-commits-parser": "^6.2.1",
     "minimatch": "^10.2.0",
     "p-limit": "^7.3.0",
     "which": "^6.0.1"
@@ -67,6 +68,7 @@
     "@biomejs/biome": "^2.4.1",
     "@octokit/types": "^16.0.0",
     "@octokit/webhooks-types": "^7.6.1",
+    "@types/conventional-commits-parser": "^5.0.2",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^25.2.3",
     "@types/which": "^3.0.4",
