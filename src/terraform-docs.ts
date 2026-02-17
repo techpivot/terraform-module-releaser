@@ -129,7 +129,7 @@ function validateTerraformDocsVersion(version: string): void {
   const versionPattern = /^v\d+\.\d+\.\d+$/;
   if (!versionPattern.test(version)) {
     throw new Error(
-      `Invalid terraform-docs version format: ${version}. Version must match the format v#.#.# (e.g., v0.19.0)`,
+      `Invalid terraform-docs version format: ${version}. Version must match the format v#.#.# (e.g., v0.21.0)`,
     );
   }
 }
@@ -186,7 +186,7 @@ export function installTerraformDocs(terraformDocsVersion: string): void {
         `Move-Item -Path "./terraform-docs/terraform-docs.exe" -Destination "${systemDir}\\terraform-docs.exe"`,
       ]);
 
-      // terraform-docs version v0.19.0 af31cc6 windows/amd64
+      // terraform-docs version v0.21.0 af31cc6 windows/amd64
       execFileSync(`${systemDir}\\terraform-docs.exe`, ['--version'], { stdio: 'inherit' });
     } else {
       const commands = ['curl', 'tar', 'chmod', 'sudo'];
@@ -202,7 +202,7 @@ export function installTerraformDocs(terraformDocsVersion: string): void {
       execFileSync(paths.chmod, ['+x', 'terraform-docs']);
       execFileSync(paths.sudo, ['mv', 'terraform-docs', '/usr/local/bin/terraform-docs']);
 
-      // terraform-docs version v0.19.0 af31cc6 linux/amd64
+      // terraform-docs version v0.21.0 af31cc6 linux/amd64
       execFileSync('/usr/local/bin/terraform-docs', ['--version'], { stdio: 'inherit' });
     }
   } finally {

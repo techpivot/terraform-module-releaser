@@ -68,7 +68,7 @@ inputs:
 
       See: https://github.com/terraform-docs/terraform-docs/releases
     required: true
-    default: v0.20.0
+    default: v0.21.0
   delete-legacy-tags:
     description: >
       Specifies a boolean that determines whether tags from Terraform modules that have been deleted

@@ -41,7 +41,7 @@ vi.mock('node:util', () => ({
 }));
 
 describe('terraform-docs', async () => {
-  const terraformDocsVersion = 'v0.20.0';
+  const terraformDocsVersion = 'v0.21.0';
   const mockExecFileSync = vi.mocked(execFileSync);
   const mockWhichSync = vi.mocked(which.sync);
   const fsExistsSyncMock = vi.mocked(existsSync);
@@ -192,16 +192,16 @@ describe('terraform-docs', async () => {
 
   describe('terraform-docs version validation', () => {
     it('should accept valid version format', () => {
-      expect(() => installTerraformDocs('v0.19.0')).not.toThrow();
+      expect(() => installTerraformDocs('v0.21.0')).not.toThrow();
     });
 
     it.each([
-      ['0.19.0', 'missing v prefix'],
-      ['v0.19', 'incomplete version'],
-      ['v0.19.0.0', 'too many segments'],
+      ['0.21.0', 'missing v prefix'],
+      ['v0.21', 'incomplete version'],
+      ['v0.21.0.0', 'too many segments'],
       ['vabc.19.0', 'invalid major version'],
       ['v0.abc.0', 'invalid minor version'],
-      ['v0.19.abc', 'invalid patch version'],
+      ['v0.21.abc', 'invalid patch version'],
       ['', 'empty string'],
       ['v', 'only prefix'],
       ['v.0.0', 'missing major version'],
@@ -209,7 +209,7 @@ describe('terraform-docs', async () => {
       ['v0.0.', 'missing patch version'],
     ])('should throw error for invalid version format: %s (%s)', (version, _description) => {
       expect(() => installTerraformDocs(version)).toThrow(
-        `Invalid terraform-docs version format: ${version}. Version must match the format v#.#.# (e.g., v0.19.0)`,
+        `Invalid terraform-docs version format: ${version}. Version must match the format v#.#.# (e.g., v0.21.0)`,
       );
     });
   });
