@@ -26,7 +26,7 @@ async function main() {
   process.env['INPUT_MINOR-KEYWORDS'] = 'feat,feature';
   process.env['INPUT_PATCH-KEYWORDS'] = 'fix,chore,docs';
   process.env['INPUT_DEFAULT-FIRST-TAG'] = 'v1.0.0';
-  process.env['INPUT_TERRAFORM-DOCS-VERSION'] = 'v0.20.0';
+  process.env['INPUT_TERRAFORM-DOCS-VERSION'] = 'v0.21.0';
   process.env['INPUT_DELETE-LEGACY-TAGS'] = 'false';
   process.env['INPUT_DISABLE-WIKI'] = 'true';
   process.env['INPUT_WIKI-SIDEBAR-CHANGELOG-MAX'] = '5';

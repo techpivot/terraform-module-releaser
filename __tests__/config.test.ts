@@ -333,7 +333,7 @@ describe('config', () => {
       expect(config.patchKeywords).toEqual(['fix', 'chore', 'docs']);
       expect(config.defaultSemverLevel).toBe('patch');
       expect(config.defaultFirstTag).toBe('v1.0.0');
-      expect(config.terraformDocsVersion).toBe('v0.20.0');
+      expect(config.terraformDocsVersion).toBe('v0.21.0');
       expect(config.deleteLegacyTags).toBe(true);
       expect(config.disableWiki).toBe(false);
       expect(config.wikiSidebarChangelogMax).toBe(5);
@@ -354,7 +354,7 @@ describe('config', () => {
         ['Semver Mode: conventional-commits'],
         ['Default Semver Level: patch'],
         ['Default First Tag: v1.0.0'],
-        ['Terraform Docs Version: v0.20.0'],
+        ['Terraform Docs Version: v0.21.0'],
         ['Delete Legacy Tags: true'],
         ['Disable Wiki: false'],
         ['Wiki Sidebar Changelog Max: 5'],
