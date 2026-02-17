@@ -64,7 +64,7 @@ config.resetDefaults(); // restore in beforeEach/afterEach
 Proxy-based mock context with helper methods:
 
 - **`.set({...})`** — Override specific context values
-- **`.reset()`** — Restore defaults
+- **`.resetDefaults()`** — Restore defaults
 - **`.useRealOctokit()`** — Switch to real authenticated Octokit client (requires `GITHUB_TOKEN`)
 - **`.useMockOctokit()`** — Switch back to mock Octokit (default)
 
