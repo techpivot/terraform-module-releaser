@@ -401,7 +401,7 @@ jobs:
         uses: techpivot/terraform-module-releaser@v1
         with:
           semver-mode: conventional-commits
-          conventional-commits-preset: angular
+          conventional-commits-preset: conventionalcommits
           default-semver-level: patch
           default-first-tag: v1.0.0
           terraform-docs-version: v0.20.0
