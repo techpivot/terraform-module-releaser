@@ -111,10 +111,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Terraform Module Releaser
-        uses: techpivot/terraform-module-releaser@v1
+        uses: techpivot/terraform-module-releaser@v2
 ```
 
 This configuration provides an out-of-the-box solution that should work for most projects, as the defaults are
@@ -260,14 +260,14 @@ Since `conventional-commits` is the default, no additional configuration is need
 
 ```yml
 - name: Terraform Module Releaser
-  uses: techpivot/terraform-module-releaser@v1
+  uses: techpivot/terraform-module-releaser@v2
 ```
 
 To customize the fallback level:
 
 ```yml
 - name: Terraform Module Releaser
-  uses: techpivot/terraform-module-releaser@v1
+  uses: techpivot/terraform-module-releaser@v2
   with:
     default-semver-level: minor
 ```
@@ -276,7 +276,7 @@ To revert to legacy keyword-based matching:
 
 ```yml
 - name: Terraform Module Releaser
-  uses: techpivot/terraform-module-releaser@v1
+  uses: techpivot/terraform-module-releaser@v2
   with:
     semver-mode: keywords
     major-keywords: major change,breaking change
@@ -400,7 +400,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Terraform Module Releaser
-        uses: techpivot/terraform-module-releaser@v1
+        uses: techpivot/terraform-module-releaser@v2
         with:
           semver-mode: conventional-commits
           default-semver-level: patch
