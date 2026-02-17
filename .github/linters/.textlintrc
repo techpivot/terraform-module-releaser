@@ -4,6 +4,8 @@
     "comments": true
   },
   "rules": {
-    "terminology": true
+    "terminology": {
+      "exclude": ["re[- ]export(s|ing|ed)?"]
+    }
   }
 }
