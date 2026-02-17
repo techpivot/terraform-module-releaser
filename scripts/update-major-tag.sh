@@ -16,6 +16,18 @@
 #
 # Usage: ./scripts/update-major-tag.sh
 #
+# Tag signing behavior:
+# - By default, the script creates GPG-signed annotated tags (git tag -s or -u).
+# - If signing is not available or fails, the script exits with an error unless
+#   explicit unsigned fallback is enabled via ALLOW_UNSIGNED_TAG.
+#
+# Optional environment variables:
+# - ALLOW_UNSIGNED_TAG=true : (literal "true" only) allow fallback to an unsigned
+#   annotated tag if signing fails; any other value (including unset) is treated
+#   as "false" and will cause the script to fail when signing is unavailable.
+# - SIGNING_KEY=<key-id>    : Use a specific key for signing (passed to git tag -u);
+#   if unset, Git's default signing key (if configured) is used.
+#
 
 set -euo pipefail
 
@@ -43,6 +55,10 @@ success() {
 warning() {
     echo -e "${YELLOW}WARNING: $1${NC}"
 }
+
+SIGNED_TAG=true
+ALLOW_UNSIGNED_TAG=${ALLOW_UNSIGNED_TAG:-false}
+SIGNING_KEY=${SIGNING_KEY:-}
 
 # Ensure we're in a git repository
 if ! git rev-parse --git-dir >/dev/null 2>&1; then
@@ -126,9 +142,40 @@ fi
 
 # Create new major tag pointing to current commit
 info "Creating major tag $MAJOR_TAG pointing to current commit ($CURRENT_COMMIT)"
-git tag -a "$MAJOR_TAG" -m "Update $MAJOR_TAG to $LATEST_IN_MAJOR" || error "Failed to create tag $MAJOR_TAG"
+
+TAG_MESSAGE="Update $MAJOR_TAG to $LATEST_IN_MAJOR"
+
+if [[ -n "$SIGNING_KEY" ]]; then
+    info "Creating signed tag using explicit signing key: $SIGNING_KEY"
+    if ! git tag -s "$MAJOR_TAG" -u "$SIGNING_KEY" -m "$TAG_MESSAGE"; then
+        if [[ "$ALLOW_UNSIGNED_TAG" == "true" ]]; then
+            warning "Failed to create signed tag with key '$SIGNING_KEY'. Falling back to unsigned tag."
+            git tag -a "$MAJOR_TAG" -m "$TAG_MESSAGE" || error "Failed to create fallback unsigned tag $MAJOR_TAG"
+            SIGNED_TAG=false
+        else
+            error "Failed to create signed tag with key '$SIGNING_KEY'. Ensure your signing key is configured and unlocked."
+        fi
+    fi
+else
+    info "Creating signed tag using Git's default signing key"
+    if ! git tag -s "$MAJOR_TAG" -m "$TAG_MESSAGE"; then
+        if [[ "$ALLOW_UNSIGNED_TAG" == "true" ]]; then
+            warning "Failed to create signed tag with default key. Falling back to unsigned tag."
+            git tag -a "$MAJOR_TAG" -m "$TAG_MESSAGE" || error "Failed to create fallback unsigned tag $MAJOR_TAG"
+            SIGNED_TAG=false
+        else
+            error "Failed to create signed tag. Configure Git signing and set ALLOW_UNSIGNED_TAG=true to bypass if needed."
+        fi
+    fi
+fi
 
 success "Major tag $MAJOR_TAG created successfully"
+
+if [[ "$SIGNED_TAG" == "true" ]]; then
+    success "Tag is signed. GitHub will show 'Verified' when the signing key is associated with your GitHub account."
+else
+    warning "Tag is unsigned. GitHub will show this tag as unverified."
+fi
 
 # Display push command
 echo ""
