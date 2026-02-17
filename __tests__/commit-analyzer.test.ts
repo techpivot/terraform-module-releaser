@@ -255,8 +255,8 @@ describe('commit-analyzer', () => {
       });
 
       it('should not detect breaking from partial BREAKING CHANGE text in body', () => {
-        // "NOT A BREAKING CHANGE" should still match because BREAKING CHANGE: is on its own line
-        // Actually, the regex /^BREAKING[ -]CHANGE\s*:/m only matches at the start of a line
+        // This contains "NOT A BREAKING CHANGE" in the body, but not a proper "BREAKING CHANGE:" footer
+        // The regex /^BREAKING[ -]CHANGE\s*:/m only matches when the footer starts at the beginning of a line
         const result = parseConventionalCommit('feat: feature\n\nThis is NOT A BREAKING CHANGE in text');
         expect(result?.breaking).toBe(false);
       });
