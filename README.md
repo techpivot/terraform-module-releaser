@@ -3,8 +3,8 @@
 <sup><b>A GitHub Action for managing Terraform modules in GitHub monorepos, automating versioning, releases, and
 documentation.</b></sup>
 
-[![Latest GitHub Release](https://img.shields.io/github/release/techpivot/terraform-module-releaser.svg?style=flat-square)][1]
-[![GitHub Marketplace](https://img.shields.io/badge/marketplace-terraform--module--releaser-blue?logo=github&style=flat-square)][2]
+[![Latest GitHub Release](https://img.shields.io/github/release/techpivot/terraform-module-releaser.svg)][1]
+[![GitHub Marketplace](https://img.shields.io/badge/marketplace-terraform--module--releaser-blue?logo=github)][2]
 ![CI](https://github.com/techpivot/terraform-module-releaser/actions/workflows/ci.yml/badge.svg?event=pull_request)
 [![Lint](https://github.com/techpivot/terraform-module-releaser/actions/workflows/lint.yml/badge.svg)][3]
 [![CodeQL](https://github.com/techpivot/terraform-module-releaser/actions/workflows/codeql-analysis.yml/badge.svg)][4]
@@ -25,6 +25,12 @@ examples, Terraform-docs details, and a full changelog.
 
 Compatible with both GitHub.com and GitHub Enterprise Server (GHES) – works seamlessly in cloud and on-premises
 environments.
+
+<p align="center">
+  <a href="https://github.com/sponsors/TechPivot">
+    <img alt="GitHub Sponsors" src="https://img.shields.io/github/sponsors/TechPivot?style=flat&logo=github&label=Looking%20For%20Sponsors%F0%9F%A4%8D&labelColor=bf3989" style="height:42px" />
+  </a>
+</p>
 
 ## 🚀 Features
 
