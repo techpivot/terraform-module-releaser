@@ -98,6 +98,10 @@ mode. Use existing patterns.
 **Always**: When adding/removing/changing inputs in `action.yml`, update `src/utils/metadata.ts` (`ACTION_INPUTS`) and
 `__tests__/utils/metadata.test.ts` in the same change.
 
+**Always**: For third-party GitHub Actions in workflow `uses:` steps, pin to a full commit SHA and keep an adjacent
+version comment (for example `# vX.Y.Z`). Determine the version by searching **all upstream tags**, selecting the
+latest semantic version, then resolving that tag to its SHA.
+
 **Ask first**: Adding new dependencies. Changing build config. Modifying GitHub Actions workflows.
 
 **Never**: Commit without running lint/tests. Modify `dist/` manually. Bypass TypeScript strict checks. Check in bundle
