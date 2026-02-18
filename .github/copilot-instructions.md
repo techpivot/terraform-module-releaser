@@ -99,8 +99,8 @@ mode. Use existing patterns.
 `__tests__/utils/metadata.test.ts` in the same change.
 
 **Always**: For third-party GitHub Actions in workflow `uses:` steps, pin to a full commit SHA and keep an adjacent
-version comment (for example `# vX.Y.Z`). Determine the version by searching **all upstream tags**, selecting the
-latest semantic version, then resolving that tag to its SHA.
+version comment (for example `# vX.Y.Z`). Determine the version by searching **all upstream tags**, selecting the latest
+semantic version, then resolving that tag to its SHA.
 
 **Ask first**: Adding new dependencies. Changing build config. Modifying GitHub Actions workflows.
 
