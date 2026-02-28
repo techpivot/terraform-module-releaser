@@ -60,7 +60,7 @@
     "@octokit/plugin-rest-endpoint-methods": "^17.0.0",
     "@octokit/request-error": "^7.1.0",
     "conventional-commits-parser": "^6.2.1",
-    "minimatch": "^10.2.2",
+    "minimatch": "^10.2.4",
     "p-limit": "^7.3.0",
     "which": "^6.0.1"
   },
