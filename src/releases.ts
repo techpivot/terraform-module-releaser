@@ -150,8 +150,10 @@ export async function createTaggedReleases(terraformModules: TerraformModule[]):
       for (const cmd of [
         ['config', '--local', 'user.name', GITHUB_ACTIONS_BOT_NAME],
         ['config', '--local', 'user.email', githubActionsBotEmail],
+        ['checkout', '-b', `_branch/${moduleName}`],
         ['add', '.'],
         ['commit', '-m', commitMessage.trim()],
+        ['push', '-f', 'origin', `_branch/${moduleName}`],
         ['tag', releaseTag],
         ['push', 'origin', releaseTag],
       ]) {
