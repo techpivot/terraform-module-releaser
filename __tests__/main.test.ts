@@ -63,6 +63,7 @@ describe('main', () => {
     context.isPrMergeEvent = false;
     config.disableWiki = false;
     config.deleteLegacyTags = true;
+    config.disableNoChangesComment = false;
 
     // Reset mocks with default values
     vi.mocked(hasReleaseComment).mockResolvedValue(false);
@@ -228,7 +229,38 @@ describe('main', () => {
       vi.mocked(TerraformModule.getTagsToDelete).mockReturnValue([]);
     });
 
-    it('should handle non-merge event (pull request event)', async () => {
+    it('should skip PR comment when no version changes and disable-no-changes-comment is true', async () => {
+      config.disableNoChangesComment = true;
+      vi.mocked(TerraformModule.getModulesNeedingRelease).mockReturnValue([]);
+
+      await run();
+
+      expect(addReleasePlanComment).not.toHaveBeenCalled();
+      expect(info).toHaveBeenCalledWith('No version changes detected. Skipping PR comment.');
+
+      // Should NOT call merge-specific functions
+      expect(createTaggedReleases).not.toHaveBeenCalled();
+      expect(addPostReleaseComment).not.toHaveBeenCalled();
+
+      // Should still set outputs
+      expect(setOutput).toHaveBeenCalled();
+    });
+
+    it('should skip PR comment when no module changes and delete-legacy-tags is disabled even with items to delete', async () => {
+      config.disableNoChangesComment = true;
+      config.deleteLegacyTags = false;
+      vi.mocked(TerraformModule.getModulesNeedingRelease).mockReturnValue([]);
+      vi.spyOn(TerraformModule, 'getReleasesToDelete').mockReturnValue([{ id: 1, title: 'old', body: '', tagName: 'modules/old/v0' }]);
+      vi.spyOn(TerraformModule, 'getTagsToDelete').mockReturnValue(['modules/old/v0']);
+
+      await run();
+
+      expect(addReleasePlanComment).not.toHaveBeenCalled();
+      expect(info).toHaveBeenCalledWith('No version changes detected. Skipping PR comment.');
+    });
+
+    it('should handle non-merge event (pull request event) when modules need release', async () => {
+      vi.mocked(TerraformModule.getModulesNeedingRelease).mockReturnValue([mockTerraformModuleNeedingRelease]);
       vi.mocked(getWikiStatus).mockReturnValue({ status: WIKI_STATUS.SUCCESS });
 
       await run();
@@ -250,7 +282,65 @@ describe('main', () => {
       expect(setOutput).toHaveBeenCalled();
     });
 
+    it('should comment when no modules need release but there are releases to delete', async () => {
+      const mockReleaseToDelete = { id: 99, title: 'old-release', body: '', tagName: 'old/v1.0.0' };
+      vi.mocked(TerraformModule.getModulesNeedingRelease).mockReturnValue([]);
+      vi.mocked(TerraformModule.getReleasesToDelete).mockReturnValue([mockReleaseToDelete]);
+      vi.mocked(getWikiStatus).mockReturnValue({ status: WIKI_STATUS.SUCCESS });
+
+      await run();
+
+      expect(addReleasePlanComment).toHaveBeenCalledWith([mockTerraformModule], [mockReleaseToDelete], [], {
+        status: WIKI_STATUS.SUCCESS,
+      });
+    });
+
+    it('should comment when no modules need release but there are tags to delete', async () => {
+      vi.mocked(TerraformModule.getModulesNeedingRelease).mockReturnValue([]);
+      vi.mocked(TerraformModule.getTagsToDelete).mockReturnValue(['old/v1.0.0']);
+      vi.mocked(getWikiStatus).mockReturnValue({ status: WIKI_STATUS.SUCCESS });
+
+      await run();
+
+      expect(addReleasePlanComment).toHaveBeenCalledWith([mockTerraformModule], [], ['old/v1.0.0'], {
+        status: WIKI_STATUS.SUCCESS,
+      });
+    });
+
+    it('should skip PR comment when disable-no-changes-comment is true and no changes', async () => {
+      config.disableNoChangesComment = true;
+      vi.mocked(TerraformModule.getModulesNeedingRelease).mockReturnValue([]);
+
+      await run();
+
+      expect(addReleasePlanComment).not.toHaveBeenCalled();
+      expect(info).toHaveBeenCalledWith('No version changes detected. Skipping PR comment.');
+    });
+
+    it('should still post PR comment when disable-no-changes-comment is true but modules need release', async () => {
+      config.disableNoChangesComment = true;
+      vi.mocked(TerraformModule.getModulesNeedingRelease).mockReturnValue([mockTerraformModuleNeedingRelease]);
+      vi.mocked(getWikiStatus).mockReturnValue({ status: WIKI_STATUS.SUCCESS });
+
+      await run();
+
+      expect(addReleasePlanComment).toHaveBeenCalled();
+    });
+
+    it('should still post PR comment when disable-no-changes-comment is true but there are legacy items to delete', async () => {
+      config.disableNoChangesComment = true;
+      vi.mocked(TerraformModule.getModulesNeedingRelease).mockReturnValue([]);
+      vi.mocked(TerraformModule.getReleasesToDelete).mockReturnValue([{ id: 99, title: 'old', body: '', tagName: 'old/v1.0.0' }]);
+      vi.mocked(getWikiStatus).mockReturnValue({ status: WIKI_STATUS.SUCCESS });
+
+      await run();
+
+      expect(addReleasePlanComment).toHaveBeenCalled();
+    });
+
     it('should handle wiki checkout errors and add release plan comment', async () => {
+      vi.mocked(TerraformModule.getModulesNeedingRelease).mockReturnValue([mockTerraformModuleNeedingRelease]);
+
       const mockError: ExecSyncError = Object.assign(new Error('Wiki checkout failed\nAdditional error details'), {
         name: 'ExecSyncError',
         pid: 12345,

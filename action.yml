@@ -111,6 +111,13 @@ inputs:
       or where third-party branding is undesirable.
     required: true
     default: "false"
+  disable-no-changes-comment:
+    description: >
+      When set to true, suppresses the PR comment when there are no module changes and no legacy
+      tags/releases to delete. Has no effect when there are changes to report; comments are always
+      posted in that case. By default, this is false so a comment is always posted.
+    required: true
+    default: "false"
   module-path-ignore:
     description: >
       A comma-separated list of module paths to completely ignore during processing. Paths matching these patterns will

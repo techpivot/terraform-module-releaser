@@ -19,6 +19,7 @@ describe('utils/metadata', () => {
         'wiki-sidebar-changelog-max',
         'wiki-usage-template',
         'disable-branding',
+        'disable-no-changes-comment',
         'module-path-ignore',
         'module-change-exclude-patterns',
         'module-asset-exclude-patterns',
@@ -59,6 +60,7 @@ describe('utils/metadata', () => {
         'delete-legacy-tags',
         'disable-wiki',
         'disable-branding',
+        'disable-no-changes-comment',
         'use-ssh-source-format',
         'use-version-prefix',
       ];
@@ -130,6 +132,7 @@ describe('utils/metadata', () => {
         'wiki-sidebar-changelog-max': 'wikiSidebarChangelogMax',
         'wiki-usage-template': 'wikiUsageTemplate',
         'disable-branding': 'disableBranding',
+        'disable-no-changes-comment': 'disableNoChangesComment',
         'module-path-ignore': 'modulePathIgnore',
         'module-change-exclude-patterns': 'moduleChangeExcludePatterns',
         'module-asset-exclude-patterns': 'moduleAssetExcludePatterns',
