@@ -33,10 +33,19 @@ function initialize(): { config: Config; context: Context } {
  * @returns {Promise<void>} Resolves when wiki-related operations are completed.
  */
 async function handlePullRequestEvent(
+  config: Config,
   terraformModules: TerraformModule[],
   releasesToDelete: GitHubRelease[],
   tagsToDelete: string[],
 ): Promise<void> {
+  const modulesNeedingRelease = TerraformModule.getModulesNeedingRelease(terraformModules);
+  const hasDeleteWork = config.deleteLegacyTags && (releasesToDelete.length > 0 || tagsToDelete.length > 0);
+
+  if (config.disableNoChangesComment && modulesNeedingRelease.length === 0 && !hasDeleteWork) {
+    info('No version changes detected. Skipping PR comment.');
+    return;
+  }
+
   const wikiStatusResult = getWikiStatus();
   await addReleasePlanComment(terraformModules, releasesToDelete, tagsToDelete, wikiStatusResult);
 
@@ -219,7 +228,7 @@ export async function run(): Promise<void> {
     if (context.isPrMergeEvent) {
       await handlePullRequestMergedEvent(config, terraformModules, releasesToDelete, tagsToDelete);
     } else {
-      await handlePullRequestEvent(terraformModules, releasesToDelete, tagsToDelete);
+      await handlePullRequestEvent(config, terraformModules, releasesToDelete, tagsToDelete);
     }
   } catch (error) {
     if (error instanceof Error) {

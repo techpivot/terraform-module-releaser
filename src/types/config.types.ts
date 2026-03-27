@@ -183,6 +183,13 @@ export interface Config {
   useVersionPrefix: boolean;
 
   /**
+   * When true, suppresses the PR comment when there are no module changes and no legacy
+   * tags/releases to delete. Has no effect when there are changes to report.
+   * By default, this is false so a comment is always posted (existing behavior).
+   */
+  disableNoChangesComment: boolean;
+
+  /**
    * Controls how Terraform module usage examples reference versions in generated documentation.
    *
    * When "tag" (default), module examples use the tag name in the ref parameter:
