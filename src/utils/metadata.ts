@@ -61,6 +61,7 @@ export const ACTION_INPUTS: Record<string, ActionInputMetadata> = {
   'tag-directory-separator': requiredString('tagDirectorySeparator'),
   'use-version-prefix': requiredBoolean('useVersionPrefix'),
   'module-ref-mode': requiredString('moduleRefMode'),
+  prerelease: requiredBoolean('prerelease'),
 } as const;
 
 /**

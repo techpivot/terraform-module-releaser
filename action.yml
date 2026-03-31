@@ -185,12 +185,20 @@ inputs:
     description: >
       Controls how Terraform module usage examples reference versions in generated documentation.
       Valid values: "tag" or "sha". When "tag" (default), examples use the tag name in the ref parameter
-      (e.g., ?ref=aws/vpc-endpoint/v1.1.3). When "sha", examples use the commit SHA with the tag as a 
-      comment (e.g., ?ref=abc123def456 # aws/vpc-endpoint/v1.1.3). This allows pinning to immutable 
+      (e.g., ?ref=aws/vpc-endpoint/v1.1.3). When "sha", examples use the commit SHA with the tag as a
+      comment (e.g., ?ref=abc123def456 # aws/vpc-endpoint/v1.1.3). This allows pinning to immutable
       commit SHAs that cannot be deleted, useful with Renovate for handling module removal scenarios.
       Note: This only affects generated documentation; tag and release creation remains unchanged.
     required: true
     default: "tag"
+  prerelease:
+    description: >
+      Whether to mark created GitHub releases as pre-releases. When true, releases will be
+      flagged as pre-releases on GitHub, which excludes them from being considered the "latest"
+      release. This is useful in monorepos where per-module releases may conflict with other
+      release tooling (e.g., auto shipit) that determines the latest release via the GitHub API.
+    required: true
+    default: "false"
 
 outputs:
   changed-module-names:
