@@ -27,6 +27,7 @@ describe('utils/metadata', () => {
         'tag-directory-separator',
         'use-version-prefix',
         'module-ref-mode',
+        'pre-release',
       ];
 
       expect(Object.keys(ACTION_INPUTS)).toEqual(expect.arrayContaining(expectedInputs));
@@ -61,6 +62,7 @@ describe('utils/metadata', () => {
         'disable-branding',
         'use-ssh-source-format',
         'use-version-prefix',
+        'pre-release',
       ];
 
       for (const inputName of booleanInputs) {
@@ -138,6 +140,7 @@ describe('utils/metadata', () => {
         'tag-directory-separator': 'tagDirectorySeparator',
         'use-version-prefix': 'useVersionPrefix',
         'module-ref-mode': 'moduleRefMode',
+        'pre-release': 'preRelease',
       };
 
       expect(Object.keys(expectedMappings)).toHaveLength(Object.keys(ACTION_INPUTS).length);

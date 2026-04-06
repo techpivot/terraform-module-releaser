@@ -191,7 +191,7 @@ inputs:
       Note: This only affects generated documentation; tag and release creation remains unchanged.
     required: true
     default: "tag"
-  prerelease:
+  pre-release:
     description: >
       Whether to mark created GitHub releases as pre-releases. When true, releases will be
       flagged as pre-releases on GitHub, which excludes them from being considered the "latest"

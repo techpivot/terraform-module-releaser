@@ -172,7 +172,7 @@ export async function createTaggedReleases(terraformModules: TerraformModule[]):
         name: releaseTag,
         body,
         draft: false,
-        prerelease: config.prerelease,
+        prerelease: config.preRelease,
       });
 
       const release = {

@@ -126,7 +126,7 @@ function initializeConfig(): Config {
     info(`Tag Directory Separator: ${configInstance.tagDirectorySeparator}`);
     info(`Use Version Prefix: ${configInstance.useVersionPrefix}`);
     info(`Module Ref Mode: ${configInstance.moduleRefMode}`);
-    info(`Prerelease: ${configInstance.prerelease}`);
+    info(`Pre-release: ${configInstance.preRelease}`);
 
     return configInstance;
   } finally {

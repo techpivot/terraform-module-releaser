@@ -204,5 +204,5 @@ export interface Config {
    * When true, releases are flagged as pre-releases on GitHub, excluding them from
    * being considered the "latest" release by the GitHub API.
    */
-  prerelease: boolean;
+  preRelease: boolean;
 }
