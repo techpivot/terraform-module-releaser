@@ -125,8 +125,8 @@ directory is only committed during the automated release process.
 
 ### Action Runtime
 
-- `action.yml` specifies `node20` as the runtime
-- The action runs on GitHub Actions runners (Ubuntu) with Node.js 20+
+- `action.yml` specifies `node24` as the runtime
+- The action runs on GitHub Actions runners (Ubuntu) with Node.js 24+
 - Entry point: `dist/index.js`
 
 ## Key Scripts

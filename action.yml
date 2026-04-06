@@ -207,5 +207,5 @@ outputs:
     description: JSON object mapping all module names to their details including path, latest tag, and latest tag version
 
 runs:
-  using: node20
+  using: node24
   main: dist/index.js
