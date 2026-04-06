@@ -10,16 +10,18 @@ on:
   schedule:
     - cron: "31 7 * * 3"
 
-permissions:
-  actions: read
-  checks: write
-  contents: read
-  security-events: write
-
 jobs:
   analyze:
     name: Analyze
     runs-on: ubuntu-latest
+    permissions:
+      # required for all workflows
+      security-events: write
+      # required to fetch internal or private CodeQL packs
+      packages: read
+      # only required for workflows in private repositories
+      actions: read
+      contents: read
     env:
       CODEQL_ACTION_FILE_COVERAGE_ON_PRS: true
 
