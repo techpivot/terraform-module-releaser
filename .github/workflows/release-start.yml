@@ -72,9 +72,8 @@ jobs:
       - name: Generate Changelog
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         id: changelog
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN_READ_AND_MODELS }}
         with:
+          github-token: ${{ secrets.GH_TOKEN_READ_AND_MODELS }}
           result-encoding: json
           script: |
             const { generateChangelog } = await import('${{ github.workspace }}/scripts/changelog.js');
