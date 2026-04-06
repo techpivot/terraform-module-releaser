@@ -1,9 +1,9 @@
-import type { AnnotationProperties, ExitCode, InputOptions } from 'node_modules/@actions/core';
+import type { AnnotationProperties, ExitCode, InputOptions } from '@actions/core';
 import { vi } from 'vitest';
 import type { Mock } from 'vitest';
 
 // Import the actual module
-const actual = await vi.importActual<typeof import('node_modules/@actions/core')>('@actions/core');
+const actual = await vi.importActual<typeof import('@actions/core')>('@actions/core');
 
 // Strictly typed MockedFunction helper that only applies to function types
 type MockedFunction<TFunc> = TFunc extends (...args: infer TArgs) => infer TReturn

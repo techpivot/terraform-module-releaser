@@ -1,11 +1,10 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
   "compilerOptions": {
-    "target": "ES2022",
+    "target": "ES2024",
     "module": "ES2022",
     "moduleResolution": "bundler",
     "types": ["node"],
-    "baseUrl": ".",
     "rootDir": ".",
     "outDir": "./dist",
     "sourceMap": true,
