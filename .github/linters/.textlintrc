@@ -5,7 +5,7 @@
   },
   "rules": {
     "terminology": {
-      "exclude": ["re[- ]export(s|ing|ed)?"]
+      "exclude": ["re[- ]export(s|ing|ed)?", "pre[- ]release(s)?"]
     }
   }
 }

@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { config } from '@/mocks/config';
 import { context } from '@/mocks/context';
 import { createTaggedReleases, deleteReleases, getAllReleases } from '@/releases';
 import { TerraformModule } from '@/terraform-module';
@@ -374,6 +375,32 @@ describe('releases', () => {
       expect(mockTerraformModule.needsRelease()).toBe(false);
       expect(startGroup).toHaveBeenCalledWith('Creating releases & tags for modules');
       expect(endGroup).toHaveBeenCalled();
+    });
+
+    it('should pass config.preRelease to GitHub API when creating releases', async () => {
+      config.set({ preRelease: true });
+
+      const mockRelease = {
+        data: {
+          id: 123456,
+          name: 'path/to/test-module/v1.1.0',
+          body: 'Mock changelog content',
+          tag_name: 'path/to/test-module/v1.1.0',
+          target_commitish: 'abc123def456',
+          draft: false,
+          prerelease: true,
+        },
+      };
+      stubOctokitReturnData('repos.createRelease', mockRelease);
+
+      await createTaggedReleases([mockTerraformModule]);
+
+      expect(context.octokit.rest.repos.createRelease).toHaveBeenCalledWith(
+        expect.objectContaining({
+          prerelease: true,
+          draft: false,
+        }),
+      );
     });
 
     it('should handle null/undefined name and body from GitHub API response', async () => {

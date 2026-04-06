@@ -198,4 +198,11 @@ export interface Config {
    * Note: This only affects generated documentation. Tag and release creation remains unchanged.
    */
   moduleRefMode: ModuleRefMode;
+
+  /**
+   * Whether to mark created GitHub releases as pre-releases.
+   * When true, releases are flagged as pre-releases on GitHub, excluding them from
+   * being considered the "latest" release by the GitHub API.
+   */
+  preRelease: boolean;
 }
