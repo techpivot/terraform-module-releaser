@@ -14,7 +14,7 @@ documentation.</b></sup>
 [1]: https://github.com/techpivot/terraform-module-releaser/releases/latest
 [2]: https://github.com/marketplace/actions/terraform-module-releaser
 [3]: https://github.com/techpivot/terraform-module-releaser/actions/workflows/lint.yml
-[4]: https://github.com/techpivot/terraform-module-releaser/actions/workflows/codeql-analysis.yml
+[4]: https://github.com/techpivot/terraform-module-releaser/actions/workflows/codeql.yml
 [5]: https://sonarcloud.io/summary/new_code?id=terraform-module-releaser
 
 Simplify the management of Terraform modules in your monorepo with this **GitHub Action**. It automates module-specific
