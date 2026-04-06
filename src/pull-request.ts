@@ -217,7 +217,11 @@ export async function addReleasePlanComment(
     // Initialize the comment body as an array of strings with appropriate header based on wiki status
     const commentBody: string[] = [PR_SUMMARY_MARKER];
 
-    if (wikiStatus.status === WIKI_STATUS.FAILURE) {
+    if (
+      wikiStatus.status === WIKI_STATUS.FAILURE_CHECKOUT ||
+      wikiStatus.status === WIKI_STATUS.FAILURE_TERRAFORM_DOCS_RUN ||
+      wikiStatus.status === WIKI_STATUS.FAILURE_TERRAFORM_DOCS_INSTALL
+    ) {
       commentBody.push('\n# ⚠️ Release Plan\n');
       commentBody.push('> ⚠️ **IMPORTANT**: _See Wiki Status error below._\n');
     } else {
@@ -281,15 +285,40 @@ export async function addReleasePlanComment(
       case WIKI_STATUS.SUCCESS:
         commentBody.push('✅ Enabled');
         break;
-      case WIKI_STATUS.FAILURE:
+
+      case WIKI_STATUS.FAILURE_CHECKOUT:
         commentBody.push('**⚠️ Failed to checkout wiki:**');
         commentBody.push('```');
-        commentBody.push(`${wikiStatus.errorSummary}`);
+        commentBody.push(`${wikiStatus.errorMessage}`);
         commentBody.push('```');
         commentBody.push(
           `Please consult the [README.md](${PROJECT_URL}/blob/main/README.md#getting-started) for additional information (**Ensure the Wiki is initialized**).`,
         );
         break;
+      case WIKI_STATUS.FAILURE_TERRAFORM_DOCS_INSTALL:
+        commentBody.push('**⚠️ terraform-docs installation failed:**');
+        commentBody.push('```');
+        commentBody.push(`${wikiStatus.errorMessage}`);
+        commentBody.push('```');
+        commentBody.push(
+          `Please consult the [README.md](${PROJECT_URL}/blob/main/README.md#terraform-docs-installation) for troubleshooting terraform-docs installation on the runner.`,
+        );
+        break;
+      case WIKI_STATUS.FAILURE_TERRAFORM_DOCS_RUN: {
+        const count = wikiStatus.terraformDocsErrors?.size ?? 0;
+        commentBody.push(
+          `⚠️ Wiki enabled, but terraform-docs validation failed for **${count}** module${count > 1 ? 's' : ''}:\n`,
+        );
+        commentBody.push('| Module | Error |', '|--|--|');
+        for (const [moduleName, errorMessage] of wikiStatus.terraformDocsErrors ?? []) {
+          const sanitized = errorMessage.replace(/\|/g, '\\|').replace(/\n/g, ' ').trim();
+          commentBody.push(`| \`${moduleName}\` | ${sanitized} |`);
+        }
+        commentBody.push(
+          '\nPlease fix the `.terraform-docs.yml` configuration before merging to avoid broken wiki pages.',
+        );
+        break;
+      }
     }
 
     // Automated Tag Cleanup

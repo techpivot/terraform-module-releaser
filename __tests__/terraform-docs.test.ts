@@ -1,10 +1,11 @@
 import { execFile, execFileSync } from 'node:child_process';
 import type { PromiseWithChild } from 'node:child_process';
-import { existsSync, unlinkSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, unlinkSync } from 'node:fs';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { context } from '@/mocks/context';
-import { ensureTerraformDocsConfigDoesNotExist, generateTerraformDocs, installTerraformDocs } from '@/terraform-docs';
+import { generateTerraformDocs, installTerraformDocs } from '@/terraform-docs';
 import type { TerraformModule } from '@/terraform-module';
 import { createMockTerraformModule } from '@/tests/helpers/terraform-module';
 import { info } from '@actions/core';
@@ -20,6 +21,17 @@ vi.mock('node:fs', async () => ({
   ...(await vi.importActual('node:fs')),
   existsSync: vi.fn(),
   unlinkSync: vi.fn(),
+  mkdtempSync: vi.fn(),
+  rmSync: vi.fn(),
+}));
+
+// Mock node:fs/promises
+vi.mock('node:fs/promises', async () => ({
+  ...(await vi.importActual('node:fs/promises')),
+  mkdtemp: vi.fn(),
+  readFile: vi.fn(),
+  writeFile: vi.fn(),
+  rm: vi.fn(),
 }));
 
 // Mock node:child_process functions
@@ -46,6 +58,12 @@ describe('terraform-docs', async () => {
   const mockWhichSync = vi.mocked(which.sync);
   const fsExistsSyncMock = vi.mocked(existsSync);
   const mockFsUnlinkSync = vi.mocked(unlinkSync);
+  const mockFsMkdtempSync = vi.mocked(mkdtempSync);
+  const mockFsRmSync = vi.mocked(rmSync);
+  const mockMkdtemp = vi.mocked(mkdtemp);
+  const mockReadFile = vi.mocked(readFile);
+  const mockWriteFile = vi.mocked(writeFile);
+  const mockRm = vi.mocked(rm);
   const mockExecFilePromisified = vi.mocked(execFilePromisified);
 
   afterEach(() => {
@@ -78,6 +96,8 @@ describe('terraform-docs', async () => {
     beforeEach(() => {
       mockExecFileSync.mockReturnValue('mocked output');
       mockWhichSync.mockImplementation((command) => commands[command as keyof typeof commands]);
+      mockFsMkdtempSync.mockReturnValue('/tmp');
+      mockFsRmSync.mockReturnValue(undefined);
     });
 
     for (const { platform, arch } of validCombinations) {
@@ -124,6 +144,8 @@ describe('terraform-docs', async () => {
 
     beforeEach(() => {
       mockWhichSync.mockImplementation((command) => commands[command as keyof typeof commands]);
+      mockFsMkdtempSync.mockReturnValue('/tmp');
+      mockFsRmSync.mockReturnValue(undefined);
       mockExecFileSync.mockImplementation((cmd: string, args?: readonly string[]) => {
         // Check for 'GetFolderPath('System')' in args and return systemDir if found
         if (cmd === commands.powershell && args?.some((arg) => arg.includes("GetFolderPath('System')"))) {
@@ -172,6 +194,11 @@ describe('terraform-docs', async () => {
   });
 
   describe('which.sync', () => {
+    beforeEach(() => {
+      mockFsMkdtempSync.mockReturnValue('/tmp');
+      mockFsRmSync.mockReturnValue(undefined);
+    });
+
     it('should throw error when binary doesn not exist', async () => {
       const realWhich = (await vi.importActual('which')) as typeof import('which');
 
@@ -191,6 +218,13 @@ describe('terraform-docs', async () => {
   });
 
   describe('terraform-docs version validation', () => {
+    beforeEach(() => {
+      mockExecFileSync.mockReturnValue('mocked output');
+      mockWhichSync.mockReturnValue('/usr/bin/mock');
+      mockFsMkdtempSync.mockReturnValue('/tmp');
+      mockFsRmSync.mockReturnValue(undefined);
+    });
+
     it('should accept valid version format', () => {
       expect(() => installTerraformDocs('v0.21.0')).not.toThrow();
     });
@@ -235,6 +269,8 @@ describe('terraform-docs', async () => {
       mockExecFileSync.mockImplementation(realChildProcess.execFileSync);
       fsExistsSyncMock.mockImplementation(realFs.existsSync);
       mockFsUnlinkSync.mockImplementation(realFs.unlinkSync);
+      mockFsMkdtempSync.mockImplementation(realFs.mkdtempSync);
+      mockFsRmSync.mockImplementation(realFs.rmSync);
       mockWhichSync.mockImplementation(realWhich.sync);
     });
 
@@ -243,6 +279,8 @@ describe('terraform-docs', async () => {
       mockExecFileSync.mockRestore();
       fsExistsSyncMock.mockRestore();
       mockFsUnlinkSync.mockRestore();
+      mockFsMkdtempSync.mockRestore();
+      mockFsRmSync.mockRestore();
       mockWhichSync.mockRestore();
     });
 
@@ -311,12 +349,18 @@ describe('terraform-docs', async () => {
     });
   });
 
-  describe('generate terraform docs for terraform module', () => {
+  describe('generateTerraformDocs', () => {
     let mockModule: TerraformModule;
+    const tmpDir = '/tmp/tfdocs-abc123';
 
     beforeEach(() => {
-      mockModule = createMockTerraformModule({ directory: 'test-module' });
+      context.set({ workspaceDir: '/workspace' });
+      mockModule = createMockTerraformModule({ directory: '/workspace/modules/vpc' });
       fsExistsSyncMock.mockReturnValue(false);
+      mockMkdtemp.mockResolvedValue(tmpDir);
+      mockWriteFile.mockResolvedValue();
+      mockRm.mockResolvedValue();
+      mockWhichSync.mockReturnValue('/usr/local/bin/terraform-docs');
       mockExecFilePromisified.mockReturnValue(
         Promise.resolve({
           stdout: '# Test Module\nThis is test documentation.',
@@ -325,45 +369,149 @@ describe('terraform-docs', async () => {
       );
     });
 
-    it('should remove existing ".terraform-docs.yml" config if present', async () => {
-      fsExistsSyncMock.mockReturnValue(true);
-
-      const terraformDocsFile = join(context.workspaceDir, '.terraform-docs.yml');
-
-      ensureTerraformDocsConfigDoesNotExist();
-      expect(fsExistsSyncMock).toHaveBeenCalledWith(terraformDocsFile);
-      expect(mockFsUnlinkSync).toHaveBeenCalledWith(terraformDocsFile);
-      expect(vi.mocked(info).mock.calls).toEqual([
-        ['Ensuring .terraform-docs.yml does not exist'],
-        ['Found .terraform-docs.yml file, removing.'],
-      ]);
-    });
-
-    it('should not remove ".terraform-docs.yml" config if not present', async () => {
-      fsExistsSyncMock.mockReturnValue(false);
-
-      const terraformDocsFile = join(context.workspaceDir, '.terraform-docs.yml');
-
-      ensureTerraformDocsConfigDoesNotExist();
-      expect(fsExistsSyncMock).toHaveBeenCalledWith(terraformDocsFile);
-      expect(mockFsUnlinkSync).not.toHaveBeenCalledWith(terraformDocsFile);
-      expect(vi.mocked(info).mock.calls).toEqual([
-        ['Ensuring .terraform-docs.yml does not exist'],
-        ['No .terraform-docs.yml found.'],
-      ]);
-    });
-
     it('should generate documentation successfully', async () => {
-      mockWhichSync.mockImplementation(() => '/usr/local/bin/terraform-docs2');
-
       const result = await generateTerraformDocs(mockModule);
 
       expect(result).toBe('# Test Module\nThis is test documentation.');
       expect(mockExecFilePromisified).toHaveBeenCalledWith(
-        '/usr/local/bin/terraform-docs2',
-        ['markdown', 'table', '--sort-by', 'required', mockModule.directory],
+        '/usr/local/bin/terraform-docs',
+        ['-c', join(tmpDir, '.terraform-docs.yml'), mockModule.directory],
         { encoding: 'utf-8' },
       );
+    });
+
+    it('should write merged config with required overrides', async () => {
+      await generateTerraformDocs(mockModule);
+
+      expect(mockWriteFile).toHaveBeenCalledWith(
+        join(tmpDir, '.terraform-docs.yml'),
+        expect.stringContaining('formatter: markdown table'),
+        'utf-8',
+      );
+
+      const writtenConfig = mockWriteFile.mock.calls[0][1] as string;
+      expect(writtenConfig).toContain('formatter: markdown table');
+      expect(writtenConfig).toContain("file: ''");
+    });
+
+    it('should merge user config with required overrides', async () => {
+      const userYaml = [
+        'formatter: markdown document',
+        'sections:',
+        '  hide:',
+        '    - providers',
+        'settings:',
+        '  anchor: false',
+        '  hide-empty: true',
+      ].join('\n');
+
+      fsExistsSyncMock.mockImplementation((path) => path === join('/workspace/modules/vpc', '.terraform-docs.yml'));
+      mockReadFile.mockResolvedValue(userYaml);
+
+      await generateTerraformDocs(mockModule);
+
+      const writtenConfig = mockWriteFile.mock.calls[0][1] as string;
+      expect(writtenConfig).toContain('formatter: markdown table');
+      expect(writtenConfig).toContain("file: ''");
+      expect(writtenConfig).toContain('providers');
+      expect(writtenConfig).toContain('anchor: false');
+      expect(writtenConfig).toContain('hide-empty: true');
+    });
+
+    it('should override user formatter setting', async () => {
+      const userYaml = 'formatter: asciidoc table\n';
+      fsExistsSyncMock.mockImplementation((path) => path === join('/workspace/modules/vpc', '.terraform-docs.yml'));
+      mockReadFile.mockResolvedValue(userYaml);
+
+      await generateTerraformDocs(mockModule);
+
+      const writtenConfig = mockWriteFile.mock.calls[0][1] as string;
+      expect(writtenConfig).toContain('formatter: markdown table');
+      expect(writtenConfig).not.toContain('asciidoc');
+      expect(info).toHaveBeenCalledWith(expect.stringContaining('"formatter":"markdown table"'));
+    });
+
+    it('should override user output.file setting', async () => {
+      const userYaml = 'formatter: markdown table\noutput:\n  file: README.md\n  mode: replace\n';
+      fsExistsSyncMock.mockImplementation((path) => path === join('/workspace/modules/vpc', '.terraform-docs.yml'));
+      mockReadFile.mockResolvedValue(userYaml);
+
+      await generateTerraformDocs(mockModule);
+
+      const writtenConfig = mockWriteFile.mock.calls[0][1] as string;
+      expect(writtenConfig).toContain("file: ''");
+      expect(writtenConfig).not.toContain('README.md');
+      expect(info).toHaveBeenCalledWith(expect.stringContaining('"file":""'));
+    });
+
+    it('should preserve user content template', async () => {
+      const userYaml = [
+        'formatter: markdown table',
+        'content: |-',
+        '  {{ .Header }}',
+        '  {{ .Inputs }}',
+        '  {{ .Outputs }}',
+      ].join('\n');
+      fsExistsSyncMock.mockImplementation((path) => path === join('/workspace/modules/vpc', '.terraform-docs.yml'));
+      mockReadFile.mockResolvedValue(userYaml);
+
+      await generateTerraformDocs(mockModule);
+
+      const writtenConfig = mockWriteFile.mock.calls[0][1] as string;
+      expect(writtenConfig).toContain('{{ .Header }}');
+      expect(writtenConfig).toContain('{{ .Inputs }}');
+      expect(writtenConfig).toContain('{{ .Outputs }}');
+    });
+
+    it('should preserve user header-from and footer-from', async () => {
+      const userYaml = 'formatter: markdown table\nheader-from: README.md\nfooter-from: FOOTER.md\n';
+      fsExistsSyncMock.mockImplementation((path) => path === join('/workspace/modules/vpc', '.terraform-docs.yml'));
+      mockReadFile.mockResolvedValue(userYaml);
+
+      await generateTerraformDocs(mockModule);
+
+      const writtenConfig = mockWriteFile.mock.calls[0][1] as string;
+      expect(writtenConfig).toContain('header-from: README.md');
+      expect(writtenConfig).toContain('footer-from: FOOTER.md');
+    });
+
+    it('should preserve user output-values', async () => {
+      const userYaml = 'formatter: markdown table\noutput-values:\n  enabled: true\n  from: output.json\n';
+      fsExistsSyncMock.mockImplementation((path) => path === join('/workspace/modules/vpc', '.terraform-docs.yml'));
+      mockReadFile.mockResolvedValue(userYaml);
+
+      await generateTerraformDocs(mockModule);
+
+      const writtenConfig = mockWriteFile.mock.calls[0][1] as string;
+      expect(writtenConfig).toContain('enabled: true');
+      expect(writtenConfig).toContain('from: output.json');
+    });
+
+    it('should warn and use defaults on YAML parse failure', async () => {
+      fsExistsSyncMock.mockImplementation((path) => path === join('/workspace/modules/vpc', '.terraform-docs.yml'));
+      mockReadFile.mockResolvedValue('invalid: yaml: [[[');
+
+      await generateTerraformDocs(mockModule);
+
+      const writtenConfig = mockWriteFile.mock.calls[0][1] as string;
+      expect(writtenConfig).toContain('formatter: markdown table');
+    });
+
+    it('should warn with non-Error throw on YAML parse failure', async () => {
+      fsExistsSyncMock.mockImplementation((path) => path === join('/workspace/modules/vpc', '.terraform-docs.yml'));
+      mockReadFile.mockRejectedValue('string error');
+
+      await generateTerraformDocs(mockModule);
+
+      expect(info).toHaveBeenCalledWith(expect.stringContaining('WARNING: Failed to parse'));
+      expect(info).toHaveBeenCalledWith(expect.stringContaining('string error'));
+    });
+
+    it('should log effective config as JSON', async () => {
+      await generateTerraformDocs(mockModule);
+
+      expect(info).toHaveBeenCalledWith(expect.stringContaining('Effective config:'));
+      expect(info).toHaveBeenCalledWith(expect.stringContaining('"formatter":"markdown table"'));
     });
 
     it('should throw error when terraform-docs command returns stderr', async () => {
@@ -394,11 +542,23 @@ describe('terraform-docs', async () => {
       await expect(generateTerraformDocs(mockModule)).rejects.toThrow(execError.message);
     });
 
-    it('should call core.info with appropriate messages', async () => {
+    it('should clean up temp directory even on error', async () => {
+      mockExecFilePromisified.mockReturnValue(
+        Promise.reject(new Error('failed')) as PromiseWithChild<{ stdout: string; stderr: string }>,
+      );
+
+      await expect(generateTerraformDocs(mockModule)).rejects.toThrow('failed');
+
+      expect(mockRm).toHaveBeenCalledWith(tmpDir, { recursive: true, force: true });
+    });
+
+    it('should log messages with module name prefix', async () => {
       await generateTerraformDocs(mockModule);
 
-      expect(info).toHaveBeenCalledWith(`Generating tf-docs for: ${mockModule.name}`);
-      expect(info).toHaveBeenCalledWith(`Finished tf-docs for: ${mockModule.name}`);
+      expect(info).toHaveBeenCalledWith(expect.stringContaining(`[${mockModule.name}] Generating tf-docs...`));
+      expect(info).toHaveBeenCalledWith(
+        expect.stringMatching(new RegExp(`\\[${mockModule.name}\\] Finished tf-docs \\(\\d+\\.\\d+s\\)`)),
+      );
     });
   });
 });

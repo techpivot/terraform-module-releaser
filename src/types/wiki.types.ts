@@ -1,4 +1,3 @@
-import type { ExecSyncError } from '@/types/node-child-process.types';
 import type { WIKI_STATUS } from '@/utils/constants';
 
 /**
@@ -12,26 +11,39 @@ import type { WIKI_STATUS } from '@/utils/constants';
 export type WikiStatus = (typeof WIKI_STATUS)[keyof typeof WIKI_STATUS];
 
 /**
- * Represents the result of a wiki checkout status operation for a Terraform module.
+ * Represents the result of a wiki status check for a Terraform module release.
  *
- * Provides details about the outcome of a wiki update or check, including status,
- * error information, and a human-readable error summary if applicable.
+ * Provides the overall status plus optional error details for rendering in PR comments
+ * and for failing the action when appropriate.
  */
 export interface WikiStatusResult {
-  /**
-   * The status of the wiki operation (e.g., 'success', 'skipped', 'failed').
-   */
+  /** The status of the wiki operation. */
   status: WikiStatus;
 
   /**
-   * Optional ExecSyncError object if the operation failed during git operations.
-   *
-   * This error is specifically from execFileSync calls in the wiki checkout process.
+   * Human-readable error message set for any failure status.
+   * Present when status is `FAILURE_CHECKOUT` or `FAILURE_TERRAFORM_DOCS`.
+   * Used to fail the GitHub Action after posting the PR comment.
    */
-  error?: ExecSyncError;
+  errorMessage?: string;
 
   /**
-   * Optional human-readable summary of the error, if present (First line).
+   * Map of module names to terraform-docs errors for display in the PR comment.
+   * Only present when status is `FAILURE_TERRAFORM_DOCS`.
    */
-  errorSummary?: string;
+  terraformDocsErrors?: Map<string, string>;
+}
+
+/**
+ * Represents the result of wiki file generation.
+ *
+ * Contains both the list of successfully generated files and a map of
+ * per-module errors for modules where terraform-docs generation failed.
+ */
+export interface WikiGenerationResult {
+  /** Paths of all successfully generated wiki files. */
+  updatedFiles: string[];
+
+  /** Map of moduleName → error message for modules that failed terraform-docs generation. */
+  moduleErrors: Map<string, string>;
 }

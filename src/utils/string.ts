@@ -86,3 +86,33 @@ export function renderTemplate(template: string, variables: Record<string, strin
     return value !== undefined && value !== null ? value : placeholder;
   });
 }
+
+/**
+ * Formats a repository URL as a Terraform module source URL.
+ *
+ * Converts repository URLs to the appropriate format for Terraform module sourcing:
+ * - SSH format: git::ssh://git@hostname/path.git
+ * - HTTPS format: git::https://hostname/path.git
+ *
+ * @param repoUrl - The repository URL (must be a valid HTTPS URL)
+ * @param useSSH - Whether to use SSH format instead of HTTPS
+ * @returns The formatted source URL for the module with git:: prefix
+ * @throws {TypeError} When repoUrl is not a valid URL that can be parsed
+ *
+ * @example
+ * ```typescript
+ * getModuleSource('https://github.com/owner/repo', false)
+ * // Returns: 'git::https://github.com/owner/repo.git'
+ *
+ * getModuleSource('https://github.techpivot.com/owner/repo', true)
+ * // Returns: 'git::ssh://git@github.techpivot.com/owner/repo.git'
+ * ```
+ */
+export function getModuleSource(repoUrl: string, useSSH: boolean): string {
+  if (useSSH) {
+    const url = new URL(repoUrl);
+    return `git::ssh://git@${url.hostname}${url.pathname}.git`;
+  }
+
+  return `git::${repoUrl}.git`;
+}

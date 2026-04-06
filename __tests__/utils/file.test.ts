@@ -1,9 +1,9 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative } from 'node:path';
-import { context } from '@/mocks/context';
 import {
   copyModuleContents,
+  findModuleTerraformDocsConfig,
   findTerraformModuleDirectories,
   getRelativeTerraformModulePathFromFilePath,
   isTerraformDirectory,
@@ -507,17 +507,6 @@ describe('utils/file', () => {
   });
 
   describe('getRelativeTerraformModulePathFromFilePath()', () => {
-    // const originalWorkspaceDir = context.workspaceDir;
-
-    beforeEach(() => {
-      context.workspaceDir = tmpDir; // Set workspaceDir to tmpDir for tests
-    });
-
-    afterEach(() => {
-      // Restore original context
-      //context.workspaceDir = originalWorkspaceDir;
-    });
-
     it('should return relative path for file in terraform module directory', () => {
       // Create module structure
       const moduleDir = join(tmpDir, 'modules', 'vpc');
@@ -527,7 +516,7 @@ describe('utils/file', () => {
 
       // Test with absolute path
       const absoluteFilePath = join(moduleDir, 'main.tf');
-      const result = getRelativeTerraformModulePathFromFilePath(absoluteFilePath);
+      const result = getRelativeTerraformModulePathFromFilePath(absoluteFilePath, tmpDir);
 
       expect(result).toBe('modules/vpc');
     });
@@ -541,7 +530,7 @@ describe('utils/file', () => {
       const filePath = join(moduleDir, 'outputs.tf');
       writeFileSync(filePath, 'output "vpc_id" { value = aws_vpc.main.id }');
 
-      const result = getRelativeTerraformModulePathFromFilePath(filePath);
+      const result = getRelativeTerraformModulePathFromFilePath(filePath, tmpDir);
 
       expect(result).toBe('terraform/aws/networking/vpc');
     });
@@ -557,7 +546,7 @@ describe('utils/file', () => {
       const scriptFile = join(subDir, 'init.sh');
       writeFileSync(scriptFile, '#!/bin/bash\necho "Hello World"');
 
-      const result = getRelativeTerraformModulePathFromFilePath(scriptFile);
+      const result = getRelativeTerraformModulePathFromFilePath(scriptFile, tmpDir);
 
       expect(result).toBe('modules/complex');
     });
@@ -571,7 +560,7 @@ describe('utils/file', () => {
       // Use relative path from tmpDir
       const relativeFilePath = 'modules/storage/main.tf';
 
-      const result = getRelativeTerraformModulePathFromFilePath(relativeFilePath);
+      const result = getRelativeTerraformModulePathFromFilePath(relativeFilePath, tmpDir);
 
       expect(result).toBe('modules/storage');
     });
@@ -583,7 +572,7 @@ describe('utils/file', () => {
       const readmeFile = join(docsDir, 'README.md');
       writeFileSync(readmeFile, '# Documentation');
 
-      const result = getRelativeTerraformModulePathFromFilePath(readmeFile);
+      const result = getRelativeTerraformModulePathFromFilePath(readmeFile, tmpDir);
 
       expect(result).toBeNull();
     });
@@ -593,7 +582,7 @@ describe('utils/file', () => {
       const packageFile = join(tmpDir, 'package.json');
       writeFileSync(packageFile, '{"name": "test"}');
 
-      const result = getRelativeTerraformModulePathFromFilePath(packageFile);
+      const result = getRelativeTerraformModulePathFromFilePath(packageFile, tmpDir);
 
       expect(result).toBeNull();
     });
@@ -606,7 +595,7 @@ describe('utils/file', () => {
       const configFile = join(tmpDir, 'terraform.tfvars');
       writeFileSync(configFile, 'region = "us-east-1"');
 
-      const result = getRelativeTerraformModulePathFromFilePath(configFile);
+      const result = getRelativeTerraformModulePathFromFilePath(configFile, tmpDir);
 
       expect(result).toBeNull();
     });
@@ -628,7 +617,7 @@ describe('utils/file', () => {
       const testFile = join(tmpDir, 'test.txt');
       writeFileSync(testFile, 'test content');
 
-      const result = getRelativeTerraformModulePathFromFilePath(testFile);
+      const result = getRelativeTerraformModulePathFromFilePath(testFile, tmpDir);
 
       expect(result).toBeNull();
 
@@ -652,7 +641,7 @@ describe('utils/file', () => {
       const deepFile = join(deepSubDir, 'bootstrap.sh');
       writeFileSync(deepFile, '#!/bin/bash\necho "Bootstrapping..."');
 
-      const result = getRelativeTerraformModulePathFromFilePath(deepFile);
+      const result = getRelativeTerraformModulePathFromFilePath(deepFile, tmpDir);
 
       expect(result).toBe('infrastructure/aws/services/compute/ec2');
     });
@@ -670,7 +659,7 @@ describe('utils/file', () => {
         const filePath = join(moduleDir, fileName);
         writeFileSync(filePath, `# ${fileName} content`);
 
-        const result = getRelativeTerraformModulePathFromFilePath(filePath);
+        const result = getRelativeTerraformModulePathFromFilePath(filePath, tmpDir);
         expect(result).toBe('modules/database');
       }
     });
@@ -1013,6 +1002,99 @@ describe('utils/file', () => {
 
       expect(existsSync(join(directory, 'file.txt'))).toBe(false);
       expect(existsSync(join(directory, 'file.js'))).toBe(false);
+    });
+  });
+
+  describe('findModuleTerraformDocsConfig()', () => {
+    it('should return null when no config exists', () => {
+      const moduleDir = join(tmpDir, 'modules', 'vpc');
+      mkdirSync(moduleDir, { recursive: true });
+
+      expect(findModuleTerraformDocsConfig(moduleDir, tmpDir)).toBeNull();
+    });
+
+    it('should find .terraform-docs.yml in module root', () => {
+      const moduleDir = join(tmpDir, 'modules', 'vpc');
+      mkdirSync(moduleDir, { recursive: true });
+      writeFileSync(join(moduleDir, '.terraform-docs.yml'), 'formatter: markdown');
+
+      expect(findModuleTerraformDocsConfig(moduleDir, tmpDir)).toBe(join(moduleDir, '.terraform-docs.yml'));
+    });
+
+    it('should find config in .config/ subdirectory', () => {
+      const moduleDir = join(tmpDir, 'modules', 'vpc');
+      const configDir = join(moduleDir, '.config');
+      mkdirSync(configDir, { recursive: true });
+      writeFileSync(join(configDir, '.terraform-docs.yml'), 'formatter: markdown');
+
+      expect(findModuleTerraformDocsConfig(moduleDir, tmpDir)).toBe(join(configDir, '.terraform-docs.yml'));
+    });
+
+    it('should prefer module root over .config/ subdirectory', () => {
+      const moduleDir = join(tmpDir, 'modules', 'vpc');
+      const configDir = join(moduleDir, '.config');
+      mkdirSync(configDir, { recursive: true });
+      writeFileSync(join(moduleDir, '.terraform-docs.yml'), 'formatter: markdown');
+      writeFileSync(join(configDir, '.terraform-docs.yml'), 'formatter: other');
+
+      expect(findModuleTerraformDocsConfig(moduleDir, tmpDir)).toBe(join(moduleDir, '.terraform-docs.yml'));
+    });
+
+    it('should walk up to parent directory when not found in module dir', () => {
+      const modulesDir = join(tmpDir, 'modules');
+      const moduleDir = join(modulesDir, 'vpc');
+      mkdirSync(moduleDir, { recursive: true });
+      writeFileSync(join(modulesDir, '.terraform-docs.yml'), 'formatter: markdown');
+
+      expect(findModuleTerraformDocsConfig(moduleDir, tmpDir)).toBe(join(modulesDir, '.terraform-docs.yml'));
+    });
+
+    it('should walk up to workspace root when not found in intermediate dirs', () => {
+      const moduleDir = join(tmpDir, 'modules', 'vpc');
+      mkdirSync(moduleDir, { recursive: true });
+      writeFileSync(join(tmpDir, '.terraform-docs.yml'), 'formatter: markdown');
+
+      expect(findModuleTerraformDocsConfig(moduleDir, tmpDir)).toBe(join(tmpDir, '.terraform-docs.yml'));
+    });
+
+    it('should find config in .config/ of parent directory', () => {
+      const moduleDir = join(tmpDir, 'modules', 'vpc');
+      const rootConfigDir = join(tmpDir, '.config');
+      mkdirSync(moduleDir, { recursive: true });
+      mkdirSync(rootConfigDir, { recursive: true });
+      writeFileSync(join(rootConfigDir, '.terraform-docs.yml'), 'formatter: markdown');
+
+      expect(findModuleTerraformDocsConfig(moduleDir, tmpDir)).toBe(join(rootConfigDir, '.terraform-docs.yml'));
+    });
+
+    it('should prefer closer directory config over workspace root config', () => {
+      const modulesDir = join(tmpDir, 'modules');
+      const moduleDir = join(modulesDir, 'vpc');
+      mkdirSync(moduleDir, { recursive: true });
+      writeFileSync(join(modulesDir, '.terraform-docs.yml'), 'formatter: closer');
+      writeFileSync(join(tmpDir, '.terraform-docs.yml'), 'formatter: root');
+
+      expect(findModuleTerraformDocsConfig(moduleDir, tmpDir)).toBe(join(modulesDir, '.terraform-docs.yml'));
+    });
+
+    it('should not search above workspace root', () => {
+      const workspaceDir = join(tmpDir, 'workspace');
+      const moduleDir = join(workspaceDir, 'modules', 'vpc');
+      mkdirSync(moduleDir, { recursive: true });
+      // Place config above workspace root — should NOT be found
+      writeFileSync(join(tmpDir, '.terraform-docs.yml'), 'formatter: above-root');
+
+      expect(findModuleTerraformDocsConfig(moduleDir, workspaceDir)).toBeNull();
+    });
+
+    it('should return null when module directory is outside the workspace root', () => {
+      const workspaceDir = join(tmpDir, 'workspace');
+      const moduleDir = join(tmpDir, 'outside', 'vpc');
+      mkdirSync(workspaceDir, { recursive: true });
+      mkdirSync(moduleDir, { recursive: true });
+      writeFileSync(join(tmpDir, '.terraform-docs.yml'), 'formatter: unrelated-parent');
+
+      expect(findModuleTerraformDocsConfig(moduleDir, workspaceDir)).toBeNull();
     });
   });
 });

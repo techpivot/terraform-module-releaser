@@ -1,8 +1,60 @@
 import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { dirname, extname, isAbsolute, join, relative, resolve } from 'node:path';
-import { context } from '@/context';
+import { TERRAFORM_DOCS_CONFIG_FILENAME } from '@/utils/constants';
 import { info } from '@actions/core';
 import { minimatch } from 'minimatch';
+
+/**
+ * Locates a `.terraform-docs.yml` configuration file for a module.
+ *
+ * Walks from the module directory up to (and including) the workspace root, checking each
+ * directory and its `.config/` subdirectory. This mirrors the discovery behavior used by
+ * this action: module root → .config/ → parent dir → parent .config/ → … → workspace root.
+ *
+ * The first config file found wins (closest to the module takes precedence). If the module
+ * directory is outside the workspace root, returns `null` without searching parent directories.
+ *
+ * @param moduleDirectory - The absolute path to the Terraform module directory.
+ * @param workspaceDir - The absolute or relative workspace root used as the search boundary.
+ * @returns The absolute path to the found config file, or `null` if none exists.
+ */
+export function findModuleTerraformDocsConfig(moduleDirectory: string, workspaceDir: string): string | null {
+  const resolvedWorkspaceDir = resolve(workspaceDir);
+  let currentDir = resolve(moduleDirectory);
+
+  const relativeModulePath = relative(resolvedWorkspaceDir, currentDir);
+  const isWithinWorkspace =
+    relativeModulePath === '' || (!relativeModulePath.startsWith('..') && !isAbsolute(relativeModulePath));
+  if (!isWithinWorkspace) {
+    return null;
+  }
+
+  // Walk from module dir up to workspace root (inclusive)
+  while (true) {
+    // Check current directory and its .config/ subdirectory
+    for (const dir of [currentDir, join(currentDir, '.config')]) {
+      const configPath = join(dir, TERRAFORM_DOCS_CONFIG_FILENAME);
+      if (existsSync(configPath)) {
+        return configPath;
+      }
+    }
+
+    // Stop after checking workspace root
+    if (currentDir === resolvedWorkspaceDir) {
+      break;
+    }
+
+    // Move to parent directory, but don't go above workspace root
+    const parentDir = dirname(currentDir);
+    /* c8 ignore next 3 -- unreachable: isWithinWorkspace guarantees resolvedWorkspaceDir is traversed before filesystem root */
+    if (parentDir === currentDir) {
+      break;
+    }
+    currentDir = parentDir;
+  }
+
+  return null;
+}
 
 /**
  * Checks if a directory contains any Terraform (.tf) files.
@@ -129,9 +181,9 @@ export function findTerraformModuleDirectories(workspaceDir: string, modulePathI
  * @returns {string | null} Relative path to the associated Terraform module directory, or null
  *                          if no directory is found.
  */
-export function getRelativeTerraformModulePathFromFilePath(filePath: string): string | null {
-  const rootDir = resolve(context.workspaceDir);
-  const absoluteFilePath = isAbsolute(filePath) ? filePath : resolve(context.workspaceDir, filePath); // Handle relative/absolute
+export function getRelativeTerraformModulePathFromFilePath(filePath: string, workspaceDir: string): string | null {
+  const rootDir = resolve(workspaceDir);
+  const absoluteFilePath = isAbsolute(filePath) ? filePath : resolve(workspaceDir, filePath);
   let directory = dirname(absoluteFilePath);
 
   // Traverse upward until the current working directory (rootDir) is reached
