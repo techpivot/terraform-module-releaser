@@ -7,7 +7,7 @@ documentation.</b></sup>
 [![GitHub Marketplace](https://img.shields.io/badge/marketplace-terraform--module--releaser-blue?logo=github&style=flat)][2]
 ![CI](https://github.com/techpivot/terraform-module-releaser/actions/workflows/ci.yml/badge.svg?event=pull_request)
 [![Lint](https://github.com/techpivot/terraform-module-releaser/actions/workflows/lint.yml/badge.svg)][3]
-[![CodeQL](https://github.com/techpivot/terraform-module-releaser/actions/workflows/codeql-analysis.yml/badge.svg)][4]
+[![CodeQL](https://github.com/techpivot/terraform-module-releaser/actions/workflows/codeql.yml/badge.svg)][4]
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=terraform-module-releaser&metric=alert_status)][5]
 [![Coverage](./assets/coverage-badge.svg)](./assets/coverage-badge.svg)
 
