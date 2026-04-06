@@ -333,7 +333,7 @@ export function createDefaultOctokitMock(): OctokitRestApi {
             yield response;
 
             const link = response.headers?.link;
-            if (!link || !link.includes('rel="next"')) {
+            if (!link?.includes('rel="next"')) {
               break;
             }
 
