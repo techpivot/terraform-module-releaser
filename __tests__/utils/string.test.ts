@@ -1,4 +1,4 @@
-import { removeLeadingCharacters, removeTrailingCharacters, renderTemplate } from '@/utils/string';
+import { getModuleSource, removeLeadingCharacters, removeTrailingCharacters, renderTemplate } from '@/utils/string';
 import { describe, expect, it } from 'vitest';
 
 describe('utils/string', () => {
@@ -238,6 +238,28 @@ describe('utils/string', () => {
       const variables = { key1: '', key2: null, key3: undefined };
       const result = renderTemplate(template, variables);
       expect(result).toBe('AB{{key2}}C{{key3}}D');
+    });
+  });
+
+  describe('getModuleSource()', () => {
+    it('should return HTTPS format with git:: prefix', () => {
+      expect(getModuleSource('https://github.com/owner/repo', false)).toBe('git::https://github.com/owner/repo.git');
+    });
+
+    it('should return SSH format with git:: prefix', () => {
+      expect(getModuleSource('https://github.com/owner/repo', true)).toBe('git::ssh://git@github.com/owner/repo.git');
+    });
+
+    it('should handle custom GitHub Enterprise hostnames for SSH', () => {
+      expect(getModuleSource('https://github.techpivot.com/owner/repo', true)).toBe(
+        'git::ssh://git@github.techpivot.com/owner/repo.git',
+      );
+    });
+
+    it('should handle custom GitHub Enterprise hostnames for HTTPS', () => {
+      expect(getModuleSource('https://github.techpivot.com/owner/repo', false)).toBe(
+        'git::https://github.techpivot.com/owner/repo.git',
+      );
     });
   });
 });

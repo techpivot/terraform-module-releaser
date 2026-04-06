@@ -569,8 +569,8 @@ describe('pull-request', () => {
       stubOctokitReturnData('issues.listComments', { data: [] });
 
       await addReleasePlanComment([], [], [], {
-        status: WIKI_STATUS.FAILURE,
-        errorSummary,
+        status: WIKI_STATUS.FAILURE_CHECKOUT,
+        errorMessage: errorSummary,
       });
 
       expect(context.octokit.rest.issues.createComment).toHaveBeenCalledWith(
@@ -617,13 +617,35 @@ describe('pull-request', () => {
           expectedContent: '✅ Enabled',
         },
         {
-          status: WIKI_STATUS.FAILURE,
-          errorSummary: 'Failed to clone',
+          status: WIKI_STATUS.FAILURE_CHECKOUT,
+          errorMessage: 'Failed to clone',
           expectedContent: '**⚠️ Failed to checkout wiki:**',
+        },
+        {
+          status: WIKI_STATUS.FAILURE_TERRAFORM_DOCS_INSTALL,
+          errorMessage: 'binary not found in PATH',
+          expectedContent: '**⚠️ terraform-docs installation failed:**',
         },
         {
           status: WIKI_STATUS.DISABLED,
           expectedContent: '🚫 Wiki generation **disabled** via `disable-wiki` flag.',
+        },
+        {
+          status: WIKI_STATUS.FAILURE_TERRAFORM_DOCS_RUN,
+          terraformDocsErrors: new Map([['vpc-endpoint', 'Invalid module_ref_mode: bad']]),
+          expectedContent: 'terraform-docs validation failed',
+        },
+        {
+          status: WIKI_STATUS.FAILURE_TERRAFORM_DOCS_RUN,
+          terraformDocsErrors: new Map([
+            ['vpc-endpoint', 'Invalid module_ref_mode: bad'],
+            ['s3-bucket-object', 'Invalid module_ref_mode: worse'],
+          ]),
+          expectedContent: 'terraform-docs validation failed for **2** modules',
+        },
+        {
+          status: WIKI_STATUS.FAILURE_TERRAFORM_DOCS_RUN,
+          expectedContent: 'terraform-docs validation failed for **0** module',
         },
       ];
 
@@ -633,7 +655,11 @@ describe('pull-request', () => {
         });
         stubOctokitReturnData('issues.listComments', { data: [] });
 
-        await addReleasePlanComment([], [], [], { status: testCase.status, errorSummary: testCase.errorSummary });
+        await addReleasePlanComment([], [], [], {
+          status: testCase.status,
+          errorMessage: testCase.errorMessage,
+          terraformDocsErrors: testCase.terraformDocsErrors,
+        });
 
         expect(context.octokit.rest.issues.createComment).toHaveBeenCalledWith(
           expect.objectContaining({

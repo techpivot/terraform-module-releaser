@@ -68,7 +68,7 @@ export function parseTerraformModules(
     const modulesToCommitMap = new Map<string, boolean>();
 
     for (const relativeFilePath of files) {
-      const relativeModulePath = getRelativeTerraformModulePathFromFilePath(relativeFilePath);
+      const relativeModulePath = getRelativeTerraformModulePathFromFilePath(relativeFilePath, context.workspaceDir);
 
       if (relativeModulePath === null) {
         // File isn't associated with a Terraform module - continue to next file.

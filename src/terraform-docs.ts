@@ -1,11 +1,15 @@
 import { execFile, execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, rmSync, unlinkSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { context } from '@/context';
 import type { TerraformModule } from '@/terraform-module';
+import { findModuleTerraformDocsConfig } from '@/utils/file';
+import { bufferedInfo } from '@/utils/log-buffer';
 import { endGroup, info, startGroup } from '@actions/core';
+import yaml from 'js-yaml';
 import which from 'which';
 
 const execFilePromisified = promisify(execFile);
@@ -217,51 +221,75 @@ export function installTerraformDocs(terraformDocsVersion: string): void {
 }
 
 /**
- * Ensures that the .terraform-docs.yml configuration file does not exist in the workspace directory.
- * If the file exists, it will be removed to prevent conflicts during Terraform documentation generation.
- *
- * @returns {void} This function does not return a value.
- */
-export function ensureTerraformDocsConfigDoesNotExist(): void {
-  info('Ensuring .terraform-docs.yml does not exist');
-
-  const terraformDocsFile = join(context.workspaceDir, '.terraform-docs.yml');
-  if (existsSync(terraformDocsFile)) {
-    info('Found .terraform-docs.yml file, removing.');
-    unlinkSync(terraformDocsFile);
-  } else {
-    info('No .terraform-docs.yml found.');
-  }
-}
-
-/**
  * Generates Terraform documentation for a given module.
  *
- * This function runs the `terraform-docs` CLI tool to generate a Markdown table format of the Terraform documentation
- * for the specified module. It will sort the output by required fields.
+ * Discovers any module-level `.terraform-docs.yml`, merges user settings with our required
+ * overrides (`formatter`, `output`), writes a temp config, runs terraform-docs,
+ * and cleans up automatically. Fully async and safe for parallel invocation.
  *
- * @param {TerraformModule} terraformModule - An object containing the module details, including:
- *   - `name`: The name of the Terraform module.
- *   - `directory`: The directory path where the Terraform module is located.
- * @returns {Promise<string>} A promise that resolves with the generated Terraform documentation in Markdown format.
- * @throws {Error} Throws an error if the `terraform-docs` command fails or produces an error in the `stderr` output.
+ * Uses `bufferedInfo()` for logging — when called inside `withBufferedLogs()`,
+ * output is buffered and flushed as a contiguous block per module.
+ *
+ * @param {TerraformModule} terraformModule - The module to generate docs for.
+ * @returns {Promise<string>} The generated Terraform documentation in Markdown format.
+ * @throws {Error} If `terraform-docs` fails or produces stderr output.
  */
-export async function generateTerraformDocs({ name, directory }: TerraformModule) {
-  info(`Generating tf-docs for: ${name}`);
+export async function generateTerraformDocs({ name, directory }: TerraformModule): Promise<string> {
+  const startTime = performance.now();
+  const prefix = `[${name}] `;
+  const log = (msg: string) => bufferedInfo(`${prefix}${msg}`);
 
-  const terraformDocsPath = which.sync('terraform-docs');
+  log('Generating tf-docs...');
 
-  const { stdout, stderr } = await execFilePromisified(
-    terraformDocsPath,
-    ['markdown', 'table', '--sort-by', 'required', directory],
-    { encoding: 'utf-8' },
-  );
+  // Discover and parse user config
+  const userConfigPath = findModuleTerraformDocsConfig(directory, context.workspaceDir);
+  let userConfig: Record<string, unknown> = {};
 
-  if (stderr) {
-    throw new Error(`Terraform-docs generation failed for module: ${name}\n${stderr}`);
+  if (userConfigPath) {
+    log(`Using config: ${userConfigPath}`);
+    try {
+      const rawContent = await readFile(userConfigPath, 'utf-8');
+      const parsed = yaml.load(rawContent);
+      if (parsed && typeof parsed === 'object') {
+        userConfig = parsed as Record<string, unknown>;
+      }
+    } catch (error) {
+      log(
+        `WARNING: Failed to parse ${userConfigPath}, using defaults: ${error instanceof Error ? error.message : error}`,
+      );
+    }
   }
 
-  info(`Finished tf-docs for: ${name}`);
+  // Merge: spread all user settings, then override the keys we control
+  const mergedConfig: Record<string, unknown> = {
+    ...userConfig,
+    formatter: 'markdown table',
+    output: { file: '', mode: 'inject' },
+  };
 
-  return stdout;
+  log(`Effective config: ${JSON.stringify(mergedConfig)}`);
+
+  // Write merged config to a temp file, run terraform-docs, then clean up
+  const tmpDir = await mkdtemp(join(tmpdir(), 'tfdocs-'));
+  const configPath = join(tmpDir, '.terraform-docs.yml');
+
+  try {
+    await writeFile(configPath, yaml.dump(mergedConfig, { lineWidth: -1 }), 'utf-8');
+
+    const terraformDocsPath = which.sync('terraform-docs');
+    const { stdout, stderr } = await execFilePromisified(terraformDocsPath, ['-c', configPath, directory], {
+      encoding: 'utf-8',
+    });
+
+    if (stderr) {
+      throw new Error(`Terraform-docs generation failed for module: ${name}\n${stderr}`);
+    }
+
+    const elapsed = ((performance.now() - startTime) / 1000).toFixed(2);
+    log(`Finished tf-docs (${elapsed}s)`);
+
+    return stdout;
+  } finally {
+    await rm(tmpDir, { recursive: true, force: true });
+  }
 }

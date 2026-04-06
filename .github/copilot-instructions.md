@@ -81,6 +81,11 @@ docs/                       # Detailed documentation for humans and AI agents
   because GitHub Wiki breaks with those characters. Test fixtures use these chars in filenames.
 - **Path aliases**: `@/` → `src/`, `@/tests/` → `__tests__/`, `@/mocks/` → `__mocks__/` (configured in tsconfig.json and
   vitest.config.ts).
+- **Pure utilities**: Files in `src/utils/` must be pure — take all dependencies as parameters, no `config`/`context`
+  singleton imports. Service-layer files in `src/` (e.g., `wiki.ts`, `releases.ts`, `parser.ts`) may use singletons and
+  pass values down to utilities. This keeps utils trivially testable and reusable without mock setup.
+- **Naming conventions**: `get*` for accessors/lookups, `generate*` for producers that may do I/O, `render*` for
+  template/string assembly.
 
 ## Code Standards
 
@@ -96,7 +101,8 @@ docs/                       # Detailed documentation for humans and AI agents
 mode. Use existing patterns.
 
 **Always**: When adding/removing/changing inputs in `action.yml`, update `src/utils/metadata.ts` (`ACTION_INPUTS`) and
-`__tests__/utils/metadata.test.ts` in the same change.
+`__tests__/utils/metadata.test.ts` in the same change. Also update the input parameters table and full configuration
+example in `README.md`.
 
 **Always**: For third-party GitHub Actions in workflow `uses:` steps, pin to a full commit SHA and keep an adjacent
 version comment (for example `# vX.Y.Z`). Determine the version by searching **all upstream tags**, selecting the latest

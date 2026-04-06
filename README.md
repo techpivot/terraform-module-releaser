@@ -423,6 +423,7 @@ jobs:
           tag-directory-separator: /
           use-version-prefix: true
           module-ref-mode: tag
+          pre-release: false
           wiki-usage-template: |
             This is a custom wiki usage block that supports markdown.
 
@@ -495,13 +496,21 @@ The following outputs are available from this action:
 > previous release version, while `releaseTag` and `releaseType` reflect the new release that was just created. To
 > reference the newly published version, use the value of `releaseTag`.
 
-## Inspiration
+## Terraform Docs Configuration
 
-This action was inspired by the blog post
-[GitHub-Powered Terraform Modules Monorepo](https://cloudchronicles.blog/blog/GitHub-Powered-Terraform-Modules-Monorepo/)
-by Piotr Krukowski.
+This action supports custom **terraform-docs** configuration for wiki documentation generation. When generating docs for
+a module, it searches for a `.terraform-docs.yml` file in the following order:
 
-## Notes
+1. The module directory
+2. The `.config/` subdirectory of the module directory
+3. Parent directories (repeating steps 1–2 at each level)
+4. The workspace root directory and its `.config/` subdirectory
+
+The first config file found wins — closest to the module takes precedence. If found, user settings are preserved (e.g.,
+`content`, `sections`, `settings`). However, `formatter` and `output` are always overridden to ensure consistent
+Markdown table output for the wiki. If no config file is found, sensible defaults are used.
+
+## Parsing Behavior
 
 - This action uses [Conventional Commits](https://www.conventionalcommits.org/) by default to automatically determine
   the release type _(major, minor, or patch)_ based on commit messages. This behavior is configurable via
@@ -515,6 +524,9 @@ by Piotr Krukowski.
   by labels, which were PR-specific and didn't account for individual commits per module. By using commit messages, we
   can now accurately tag and version only the relevant commits, providing a more precise and efficient release
   management process.
+
+## Notes
+
 - **100% GitHub-based**: This action has no external service dependencies, eliminating the need for additional
   authentication and complexity. Unlike earlier variations that stored built module assets in external services like
   Amazon S3, this action keeps everything within GitHub, providing a self-contained and streamlined solution for

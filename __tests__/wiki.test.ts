@@ -6,9 +6,10 @@ import { basename, join } from 'node:path';
 import { config } from '@/mocks/config';
 import { context } from '@/mocks/context';
 import { parseTerraformModules } from '@/parser';
-import { installTerraformDocs } from '@/terraform-docs';
+import * as terraformDocs from '@/terraform-docs';
 import type { ExecSyncError } from '@/types';
 import { WIKI_STATUS } from '@/utils/constants';
+
 import { checkoutWiki, commitAndPushWikiChanges, generateWikiFiles, getWikiLink, getWikiStatus } from '@/wiki';
 import { endGroup, info, startGroup } from '@actions/core';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -219,7 +220,7 @@ describe('wiki', async () => {
 
       vi.mocked(execFileSync).mockImplementation(originalExecFileSync);
       // Actually install terraform-docs as we're actually going to generate using terraform docs.
-      installTerraformDocs(config.terraformDocsVersion);
+      terraformDocs.installTerraformDocs(config.terraformDocsVersion);
     });
 
     afterAll(() => {
@@ -229,7 +230,7 @@ describe('wiki', async () => {
 
     it('should generate all required wiki files', async () => {
       vi.clearAllMocks();
-      const files = await generateWikiFiles(terraformModules);
+      const { updatedFiles: files } = await generateWikiFiles(terraformModules);
 
       // With modulePathIgnore: [], all modules in tf-modules directory should be processed
       // tf-modules directory contains: animal, kms, kms/examples/complete, s3-bucket-object, vpc-endpoint, zoo
@@ -257,7 +258,7 @@ describe('wiki', async () => {
         expect(content.length).toBeGreaterThan(0);
       }
 
-      expect(startGroup).toHaveBeenCalledWith('Generating wiki files...');
+      expect(startGroup).toHaveBeenCalledWith('Generating wiki files');
       expect(endGroup).toHaveBeenCalled();
     });
 
@@ -278,7 +279,7 @@ describe('wiki', async () => {
     });
 
     it('should use the default usage block when custom template is not provided', async () => {
-      const files = await generateWikiFiles(terraformModules);
+      const { updatedFiles: files } = await generateWikiFiles(terraformModules);
       for (const file of files) {
         if (
           file.endsWith('.md') &&
@@ -296,7 +297,7 @@ describe('wiki', async () => {
       const customUsage = 'This is a custom usage template: {{module_name}}';
       config.set({ wikiUsageTemplate: customUsage });
       const terraformModule = terraformModules[0];
-      const files = await generateWikiFiles([terraformModule]);
+      const { updatedFiles: files } = await generateWikiFiles([terraformModule]);
       for (const file of files) {
         if (
           file.endsWith('.md') &&
@@ -315,7 +316,7 @@ describe('wiki', async () => {
       const customUsage = 'Module: {{module_name}}, Missing: {{missing_variable}}';
       config.set({ wikiUsageTemplate: customUsage });
       const terraformModule = terraformModules[0];
-      const files = await generateWikiFiles([terraformModule]);
+      const { updatedFiles: files } = await generateWikiFiles([terraformModule]);
       for (const file of files) {
         if (
           file.endsWith('.md') &&
@@ -333,7 +334,7 @@ describe('wiki', async () => {
       const customUsage =
         'Name: {{module_name}}, Tag: {{latest_tag}}, Version: {{latest_tag_version_number}}, Source: {{module_source}}, TFName: {{module_name_terraform}}';
       config.set({ useSSHSourceFormat: true, wikiUsageTemplate: customUsage });
-      const files = await generateWikiFiles(terraformModules);
+      const { updatedFiles: files } = await generateWikiFiles(terraformModules);
       for (const file of files) {
         if (
           file.endsWith('.md') &&
@@ -359,7 +360,7 @@ describe('wiki', async () => {
         modulePathIgnore: [],
       });
 
-      const files = await generateWikiFiles(terraformModules);
+      const { updatedFiles: files } = await generateWikiFiles(terraformModules);
 
       // Find the vpc-endpoint module file (it has a tag)
       const vpcEndpointFile = files.find((f) => basename(f) === 'vpc‒endpoint.md');
@@ -383,7 +384,7 @@ describe('wiki', async () => {
       // Create a module with a tag but no commit SHA
       const moduleWithoutSHA = terraformModules.find((m) => m.name !== 'vpc-endpoint');
       if (moduleWithoutSHA) {
-        const files = await generateWikiFiles([moduleWithoutSHA]);
+        const { updatedFiles: files } = await generateWikiFiles([moduleWithoutSHA]);
 
         // The file should still be generated
         expect(files.length).toBeGreaterThan(0);
@@ -391,12 +392,30 @@ describe('wiki', async () => {
       }
     });
 
-    it('should throw error for invalid module_ref_mode', async () => {
+    it('should return moduleErrors for invalid module_ref_mode', async () => {
       // Force an invalid moduleRefMode by bypassing validation
       // @ts-expect-error - Testing invalid moduleRefMode value
       config.set({ moduleRefMode: 'invalid-mode' });
 
-      await expect(generateWikiFiles(terraformModules)).rejects.toThrow('Invalid module_ref_mode: invalid-mode');
+      const { moduleErrors } = await generateWikiFiles(terraformModules);
+      expect(moduleErrors.size).toBeGreaterThan(0);
+      for (const [, errorMessage] of moduleErrors) {
+        expect(errorMessage).toContain('Invalid module_ref_mode: invalid-mode');
+      }
+    });
+
+    it('should stringify non-Error module failures', async () => {
+      const generateTerraformDocsSpy = vi
+        .spyOn(terraformDocs, 'generateTerraformDocs')
+        .mockRejectedValueOnce('string failure');
+
+      try {
+        const { moduleErrors } = await generateWikiFiles(terraformModules);
+        expect(moduleErrors.size).toBeGreaterThan(0);
+        expect(Array.from(moduleErrors.values())).toContain('string failure');
+      } finally {
+        generateTerraformDocsSpy.mockRestore();
+      }
     });
   });
 
@@ -483,113 +502,171 @@ describe('wiki', async () => {
     });
   });
 
-  describe('formatModuleSource()', () => {
-    beforeEach(() => {
-      context.set({
-        repo: { owner: 'techpivot', repo: 'terraform-module-releaser' },
-        repoUrl: 'https://github.com/techpivot/terraform-module-releaser',
-      });
-    });
-
-    it('should format source URL as HTTPS when useSSHSourceFormat is false', async () => {
-      config.set({ useSSHSourceFormat: false });
-      const files = await generateWikiFiles(terraformModules);
-
-      // Read each generated .md file and verify it contains HTTPS format
-      for (const file of files) {
-        if (file.endsWith('.md')) {
-          const content = readFileSync(file, 'utf8');
-          if (content.includes('source =')) {
-            expect(content).toContain('source = "git::https://github.com/techpivot/terraform-module-releaser.git?ref=');
-            expect(content).not.toContain(
-              'source = "git::ssh://git@github.com/techpivot/terraform-module-releaser.git?ref=',
-            );
-          }
-        }
-      }
-    });
-
-    it('should format source URL as SSH when useSSHSourceFormat is true', async () => {
-      config.set({ useSSHSourceFormat: true });
-      const files = await generateWikiFiles(terraformModules);
-
-      // Read each generated .md file and verify it contains SSH format
-      for (const file of files) {
-        if (file.endsWith('.md')) {
-          const content = readFileSync(file, 'utf8');
-          if (content.includes('source =')) {
-            expect(content).toContain(
-              'source = "git::ssh://git@github.com/techpivot/terraform-module-releaser.git?ref=',
-            );
-            expect(content).not.toContain(
-              'source = "git::https://github.com/techpivot/terraform-module-releaser.git?ref=',
-            );
-          }
-        }
-      }
-    });
-  });
-
   describe('getWikiStatus()', () => {
     beforeEach(() => {
-      // Reset config to default state for each test
       config.set({ disableWiki: false });
       vi.clearAllMocks();
     });
 
-    it('should return DISABLED status when wiki is disabled', () => {
+    it('should return DISABLED status when wiki is disabled', async () => {
       config.set({ disableWiki: true });
 
-      const result = getWikiStatus();
+      const result = await getWikiStatus([]);
 
       expect(result).toEqual({ status: WIKI_STATUS.DISABLED });
       // Should not attempt to checkout wiki when disabled
       expect(vi.mocked(execFileSync)).not.toHaveBeenCalled();
     });
 
-    it('should return SUCCESS status when checkout succeeds', () => {
-      // Mock successful checkout
-      vi.mocked(execFileSync).mockImplementation(() => Buffer.from(''));
+    it('should return SUCCESS status when checkout and generation succeed', async () => {
+      // Allow real execFileSync for terraform-docs but keep git calls (checkoutWiki) as no-ops
+      vi.mocked(execFileSync).mockImplementation((...args: unknown[]) => {
+        const [command] = args as [string];
+        if (typeof command === 'string' && basename(command) === 'git') {
+          return Buffer.from('');
+        }
+        return originalExecFileSync(...(args as Parameters<typeof originalExecFileSync>));
+      });
 
-      const result = getWikiStatus();
+      const result = await getWikiStatus(terraformModules);
 
-      expect(result).toEqual({ status: WIKI_STATUS.SUCCESS });
-      // Should attempt to checkout wiki
-      expect(vi.mocked(execFileSync)).toHaveBeenCalled();
+      expect(result.status).toBe(WIKI_STATUS.SUCCESS);
+      expect(result.errorMessage).toBeUndefined();
     });
 
-    it('should return FAILURE status with error details when checkout fails', () => {
-      const mockError = new Error('Repository not found') as ExecSyncError;
-      mockError.status = 128;
-      mockError.signal = null;
-      mockError.stderr = Buffer.from('fatal: repository not found');
-      mockError.stdout = Buffer.from('');
+    it('should return FAILURE_TERRAFORM_DOCS status when generateWikiFiles has module errors', async () => {
+      // Mock git commands as no-ops, allow real execFileSync for terraform-docs
+      vi.mocked(execFileSync).mockImplementation((...args: unknown[]) => {
+        const [command] = args as [string];
+        if (typeof command === 'string' && basename(command) === 'git') {
+          return Buffer.from('');
+        }
+        return originalExecFileSync(...(args as Parameters<typeof originalExecFileSync>));
+      });
+
+      // Force an invalid moduleRefMode to trigger terraform-docs errors
+      // @ts-expect-error - Testing invalid moduleRefMode value
+      config.set({ moduleRefMode: 'invalid-mode' });
+
+      const result = await getWikiStatus(terraformModules);
+
+      expect(result.status).toBe(WIKI_STATUS.FAILURE_TERRAFORM_DOCS_RUN);
+      expect(result.errorMessage).toBeDefined();
+      expect(result.terraformDocsErrors).toBeDefined();
+      expect(result.terraformDocsErrors?.size).toBeGreaterThan(0);
+    });
+
+    it('should return singular terraform-docs failure message when exactly one module fails', async () => {
+      // Mock git commands as no-ops, allow real execFileSync for terraform-docs
+      vi.mocked(execFileSync).mockImplementation((...args: unknown[]) => {
+        const [command] = args as [string];
+        if (typeof command === 'string' && basename(command) === 'git') {
+          return Buffer.from('');
+        }
+        return originalExecFileSync(...(args as Parameters<typeof originalExecFileSync>));
+      });
+
+      // Force an invalid moduleRefMode to trigger terraform-docs errors
+      // @ts-expect-error - Testing invalid moduleRefMode value
+      config.set({ moduleRefMode: 'invalid-mode' });
+
+      const firstModule = terraformModules[0];
+      if (!firstModule) {
+        throw new Error('Expected at least one terraform module for this test');
+      }
+
+      const result = await getWikiStatus([firstModule]);
+
+      expect(result.status).toBe(WIKI_STATUS.FAILURE_TERRAFORM_DOCS_RUN);
+      expect(result.terraformDocsErrors?.size).toBe(1);
+      expect(result.errorMessage).toContain('1 module');
+    });
+
+    it('should return FAILURE_TERRAFORM_DOCS_INSTALL status when terraform-docs installation fails', async () => {
+      // Mock git commands as no-ops so checkout succeeds
+      vi.mocked(execFileSync).mockImplementation((...args: unknown[]) => {
+        const [command] = args as [string];
+        if (typeof command === 'string' && basename(command) === 'git') {
+          return Buffer.from('');
+        }
+        return originalExecFileSync(...(args as Parameters<typeof originalExecFileSync>));
+      });
+
+      const installSpy = vi.spyOn(terraformDocs, 'installTerraformDocs').mockImplementationOnce(() => {
+        throw new Error('Failed to install terraform-docs: binary not found in PATH');
+      });
+
+      try {
+        const result = await getWikiStatus(terraformModules);
+
+        expect(result.status).toBe(WIKI_STATUS.FAILURE_TERRAFORM_DOCS_INSTALL);
+        expect(result.errorMessage).toBe('Failed to install terraform-docs: binary not found in PATH');
+        expect(result.terraformDocsErrors).toBeUndefined();
+      } finally {
+        installSpy.mockRestore();
+      }
+    });
+
+    it('should handle non-Error terraform-docs install failures', async () => {
+      // Mock git commands as no-ops so checkout succeeds
+      vi.mocked(execFileSync).mockImplementation((...args: unknown[]) => {
+        const [command] = args as [string];
+        if (typeof command === 'string' && basename(command) === 'git') {
+          return Buffer.from('');
+        }
+        return originalExecFileSync(...(args as Parameters<typeof originalExecFileSync>));
+      });
+
+      const installSpy = vi.spyOn(terraformDocs, 'installTerraformDocs').mockImplementationOnce(() => {
+        throw 'terraform-docs install string error'; // eslint-disable-line no-throw-literal
+      });
+
+      try {
+        const result = await getWikiStatus(terraformModules);
+
+        expect(result.status).toBe(WIKI_STATUS.FAILURE_TERRAFORM_DOCS_INSTALL);
+        expect(result.errorMessage).toBe('terraform-docs install string error');
+        expect(result.terraformDocsErrors).toBeUndefined();
+      } finally {
+        installSpy.mockRestore();
+      }
+    });
+
+    it('should return FAILURE_CHECKOUT status with error details when checkout fails', async () => {
+      const mockError = new Error('Repository not found');
 
       vi.mocked(execFileSync).mockImplementationOnce(() => {
         throw mockError;
       });
 
-      const result = getWikiStatus();
+      const result = await getWikiStatus([]);
 
-      expect(result.status).toBe(WIKI_STATUS.FAILURE);
-      expect(result.error).toBe(mockError);
-      expect(result.errorSummary).toBe('Error: Repository not found');
+      expect(result.status).toBe(WIKI_STATUS.FAILURE_CHECKOUT);
+      expect(result.errorMessage).toBe('Repository not found');
       expect(vi.mocked(execFileSync)).toHaveBeenCalled();
     });
 
-    it('should handle ExecSyncError with complex error messages', () => {
-      const mockError = new Error('Git clone failed\nAdditional details') as ExecSyncError;
-      mockError.status = 1;
+    it('should handle errors with complex messages', async () => {
+      const mockError = new Error('Git clone failed\nAdditional details');
 
       vi.mocked(execFileSync).mockImplementationOnce(() => {
         throw mockError;
       });
 
-      const result = getWikiStatus();
+      const result = await getWikiStatus([]);
 
-      expect(result.status).toBe(WIKI_STATUS.FAILURE);
-      expect(result.error).toBe(mockError);
-      expect(result.errorSummary).toBe('Error: Git clone failed\nAdditional details');
+      expect(result.status).toBe(WIKI_STATUS.FAILURE_CHECKOUT);
+      expect(result.errorMessage).toBe('Git clone failed\nAdditional details');
+    });
+    it('should handle non-Error checkout failures', async () => {
+      vi.mocked(execFileSync).mockImplementationOnce(() => {
+        throw 'string error'; // eslint-disable-line no-throw-literal
+      });
+
+      const result = await getWikiStatus([]);
+
+      expect(result.status).toBe(WIKI_STATUS.FAILURE_CHECKOUT);
+      expect(result.errorMessage).toBe('string error');
     });
   });
 });

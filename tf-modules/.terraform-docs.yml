@@ -1,0 +1,18 @@
+formatter: "" # this is required
+
+version: ">0.19.0"
+
+header-from: main.tf
+footer-from: ""
+
+recursive:
+  enabled: false
+  path: modules
+  include-main: true
+
+sections:
+  hide: []
+  show: []
+
+  hide-all: false # deprecated in v0.13.0, removed in v0.15.0
+  show-all: true # deprecated in v0.13.0, removed in v0.15.0
