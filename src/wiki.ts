@@ -7,10 +7,10 @@ import { join, resolve } from 'node:path';
 import { getTerraformModuleFullReleaseChangelog } from '@/changelog';
 import { config } from '@/config';
 import { context } from '@/context';
-import { renderTemplate } from '@/utils/string';
-import { generateTerraformDocs } from '@/terraform-docs';
+import { getModuleSource, renderTemplate } from '@/utils/string';
+import { generateTerraformDocs, installTerraformDocs } from '@/terraform-docs';
 import type { TerraformModule } from '@/terraform-module';
-import type { ExecSyncError, WikiStatusResult } from '@/types';
+import type { WikiGenerationResult, WikiStatusResult } from '@/types';
 import {
   BRANDING_WIKI,
   GITHUB_ACTIONS_BOT_NAME,
@@ -25,6 +25,7 @@ import {
 } from '@/utils/constants';
 import { removeDirectoryContents } from '@/utils/file';
 import { configureGitAuthentication, getGitHubActionsBotEmail } from '@/utils/github';
+import { bufferedError, bufferedInfo, withBufferedLogs } from '@/utils/log-buffer';
 import { endGroup, info, startGroup } from '@actions/core';
 import pLimit from 'p-limit';
 import which from 'which';
@@ -117,31 +118,60 @@ export function checkoutWiki(): void {
 }
 
 /**
- * Checks the status of the wiki operation for a Terraform module release.
+ * Determines the full wiki status for a set of Terraform modules.
  *
- * This function will never throw an error; all errors are caught and returned as part of the result.
+ * Performs a multi-stage check:
+ * 1. Returns `DISABLED` if wiki generation is turned off via config.
+ * 2. Attempts to clone/checkout the wiki repository — returns `FAILURE_CHECKOUT` on error.
+ * 3. Installs terraform-docs — returns `FAILURE_TERRAFORM_DOCS_INSTALL` if installation fails.
+ * 4. Runs a full wiki generation (files are written but not committed) to validate that terraform-docs can process every module — returns `FAILURE_TERRAFORM_DOCS_RUN` with per-module errors if any fail, or if any non-module-scoped error occurs.
+ * 5. Returns `SUCCESS` if all stages pass.
  *
- * @returns {WikiStatusResult} The result of the wiki status check, including error details if any failure occurs.
+ * This function never throws; all errors are captured and returned as part of the result.
+ *
+ * @param {TerraformModule[]} terraformModules - All Terraform modules in the workspace.
+ * @returns {Promise<WikiStatusResult>} The wiki status, including any error details. Possible status values:
+ *   - `DISABLED`: Wiki generation is disabled by config.
+ *   - `FAILURE_CHECKOUT`: Wiki checkout failed (see `errorMessage`).
+ *   - `FAILURE_TERRAFORM_DOCS_INSTALL`: terraform-docs install failed (see `errorMessage`).
+ *   - `FAILURE_TERRAFORM_DOCS_RUN`: terraform-docs run or wiki file generation failed (see `errorMessage`, `terraformDocsErrors`).
+ *   - `SUCCESS`: All steps succeeded.
  */
-export function getWikiStatus(): WikiStatusResult {
+export async function getWikiStatus(terraformModules: TerraformModule[]): Promise<WikiStatusResult> {
+  if (config.disableWiki) {
+    return { status: WIKI_STATUS.DISABLED };
+  }
+
   try {
-    if (config.disableWiki) {
-      return { status: WIKI_STATUS.DISABLED };
-    }
-
     checkoutWiki();
-
-    return { status: WIKI_STATUS.SUCCESS };
   } catch (err) {
-    // Since all errors in checkoutWiki() come from execFileSync, we can safely cast to ExecSyncError
-    const execError = err as ExecSyncError;
-
+    const errorMessage = err instanceof Error ? err.message : String(err).trim();
     return {
-      status: WIKI_STATUS.FAILURE,
-      error: execError,
-      errorSummary: String(execError).trim(),
+      status: WIKI_STATUS.FAILURE_CHECKOUT,
+      errorMessage,
     };
   }
+
+  try {
+    installTerraformDocs(config.terraformDocsVersion);
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : String(err).trim();
+    return {
+      status: WIKI_STATUS.FAILURE_TERRAFORM_DOCS_INSTALL,
+      errorMessage,
+    };
+  }
+
+  const { moduleErrors } = await generateWikiFiles(terraformModules);
+  if (moduleErrors.size > 0) {
+    return {
+      status: WIKI_STATUS.FAILURE_TERRAFORM_DOCS_RUN,
+      errorMessage: `terraform-docs validation failed for ${moduleErrors.size} module${moduleErrors.size > 1 ? 's' : ''}`,
+      terraformDocsErrors: moduleErrors,
+    };
+  }
+
+  return { status: WIKI_STATUS.SUCCESS };
 }
 
 /**
@@ -223,45 +253,6 @@ export function getWikiLink(moduleName: string, relative = true): string {
 }
 
 /**
- * Formats the module source URL based on configuration settings.
- *
- * Converts repository URLs to the appropriate format for Terraform module sourcing:
- * - SSH format: git::ssh://git@hostname/path.git
- * - HTTPS format: git::https://hostname/path.git
- *
- * @param repoUrl - The repository URL (must be a valid HTTPS URL)
- * @param useSSH - Whether to use SSH format instead of HTTPS
- * @returns The formatted source URL for the module with git:: prefix
- * @throws {TypeError} When repoUrl is not a valid URL that can be parsed
- *
- * @example
- * ```typescript
- * // HTTPS format
- * getModuleSource('https://github.com/owner/repo', false)
- * // Returns: 'git::https://github.com/owner/repo.git'
- *
- * // SSH format
- * getModuleSource('https://github.techpivot.com/owner/repo', true)
- * // Returns: 'git::ssh://git@github.techpivot.com/owner/repo.git'
- * ```
- */
-function getModuleSource(repoUrl: string, useSSH: boolean): string {
-  if (useSSH) {
-    const url = new URL(repoUrl);
-    const hostname = url.hostname;
-    const pathname = url.pathname;
-
-    // Convert HTTPS URL to SSH format with git:: prefix
-    // From: https://github.techpivot.com/owner/repo
-    // To: git::ssh://git@github.techpivot.com/owner/repo.git
-    return `git::ssh://git@${hostname}${pathname}.git`;
-  }
-
-  // Return HTTPS format with git:: prefix
-  return `git::${repoUrl}.git`;
-}
-
-/**
  * Writes content to a wiki file in the workspace wiki subdirectory.
  *
  * This function creates or overwrites a file in the wiki subdirectory with the
@@ -275,18 +266,17 @@ function getModuleSource(repoUrl: string, useSSH: boolean): string {
 async function writeWikiFile(basename: string, content: string): Promise<string> {
   const wikiFile = join(context.workspaceDir, WIKI_SUBDIRECTORY_NAME, basename);
   await fsp.writeFile(wikiFile, content, 'utf8');
-  info(`Generated: ${basename}`);
   return wikiFile;
 }
 
 /**
- * Generates the wiki file associated with the specified Terraform module.
- * Ensures that the directory structure is created if it doesn't exist and handles overwriting
- * the existing wiki file.
+ * Generates the wiki file for a Terraform module.
+ *
+ * Orchestrates changelog retrieval, terraform-docs generation, content assembly,
+ * and file writing for a single module's wiki page.
  *
  * @param {TerraformModule} terraformModule - The Terraform module to generate the wiki file for.
  * @returns {Promise<string>} The path to the wiki file that was written.
- * @throws Will throw an error if the file cannot be written.
  */
 async function generateWikiTerraformModule(terraformModule: TerraformModule): Promise<string> {
   const changelog = getTerraformModuleFullReleaseChangelog(terraformModule);
@@ -300,7 +290,6 @@ async function generateWikiTerraformModule(terraformModule: TerraformModule): Pr
 
   switch (config.moduleRefMode) {
     case MODULE_REF_MODE_TAG:
-      // Use the tag as the ref
       ref = latestTag ?? '';
       break;
     case MODULE_REF_MODE_SHA:
@@ -308,13 +297,11 @@ async function generateWikiTerraformModule(terraformModule: TerraformModule): Pr
       refComment = terraformModule.getLatestTagVersion() ? ` # ${terraformModule.getLatestTagVersion()}` : '';
       break;
     default:
-      // This should never happen due to validation at config load time
       throw new Error(`Invalid module_ref_mode: ${config.moduleRefMode}`);
   }
 
-  // Warn if ref is empty (could happen if latestTag is null/empty or SHA not found in SHA mode)
   if (!ref) {
-    info(`Warning: No ref available for module '${terraformModule.name}' (tag: '${latestTag}')`);
+    bufferedInfo(`Warning: No ref available for module '${terraformModule.name}' (tag: '${latestTag}')`);
   }
 
   const usage = renderTemplate(config.wikiUsageTemplate, {
@@ -337,8 +324,6 @@ async function generateWikiTerraformModule(terraformModule: TerraformModule): Pr
     '\n# Changelog\n',
     changelog,
   ].join('\n');
-
-  // Write the markdown content to the wiki file, overwriting if it exists
 
   return await writeWikiFile(`${getWikiSlug(terraformModule.name)}.md`, content);
 }
@@ -508,20 +493,18 @@ async function generateWikiHome(terraformModules: TerraformModule[]): Promise<st
 }
 
 /**
- * Updates the wiki documentation for a list of Terraform modules.
+ * Generates all wiki files for the given Terraform modules.
  *
- * This function generates markdown content for each Terraform module by calling
- * `getWikiFileMarkdown` and appending its associated changelog, then writes the
- * content to the wiki. It commits and pushes the changes to the wiki repository.
+ * Clears the wiki directory (preserving `.git`), then generates per-module wiki pages,
+ * Home, Sidebar, and Footer files in parallel using `pLimit`. Per-module terraform-docs
+ * errors are captured and returned (not thrown) so callers can decide how to handle them.
  *
- * The function limits the number of concurrent wiki updates by using `pLimit`.
- * Once all wiki files are updated, it commits and pushes the changes to the repository.
- *
- * @param {TerraformModule[]} terraformModules - A list of Terraform modules to update in the wiki.
- * @returns {Promise<string[]>} A promise that resolves to a list of file paths of the updated wiki files.
+ * @param {TerraformModule[]} terraformModules - A list of Terraform modules to generate wiki files for.
+ * @returns {Promise<WikiGenerationResult>} The generated file paths and any per-module errors.
  */
-export async function generateWikiFiles(terraformModules: TerraformModule[]): Promise<string[]> {
-  startGroup('Generating wiki files...');
+export async function generateWikiFiles(terraformModules: TerraformModule[]): Promise<WikiGenerationResult> {
+  const startTime = performance.now();
+  startGroup('Generating wiki files');
 
   // Clears the contents of the Wiki directory to ensure no stale content remains,
   // as the Wiki is fully regenerated during each run.
@@ -546,10 +529,19 @@ export async function generateWikiFiles(terraformModules: TerraformModule[]): Pr
 
   const limit = pLimit(parallelism);
   const updatedFiles: string[] = [];
+  const moduleErrors = new Map<string, string>();
   const tasks = terraformModules.map((module) => {
-    return limit(async () => {
-      updatedFiles.push(await generateWikiTerraformModule(module));
-    });
+    return limit(() =>
+      withBufferedLogs(async () => {
+        try {
+          updatedFiles.push(await generateWikiTerraformModule(module));
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          bufferedError(message);
+          moduleErrors.set(module.name, message);
+        }
+      }),
+    );
   });
   await Promise.all(tasks);
 
@@ -562,9 +554,12 @@ export async function generateWikiFiles(terraformModules: TerraformModule[]): Pr
 
   info('Wiki files generated:');
   info(JSON.stringify(updatedFiles, null, 2));
+
+  const totalElapsed = ((performance.now() - startTime) / 1000).toFixed(2);
+  info(`Total wiki generation time: ${totalElapsed}s`);
   endGroup();
 
-  return updatedFiles;
+  return { updatedFiles, moduleErrors };
 }
 
 /**

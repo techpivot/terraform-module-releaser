@@ -4,7 +4,7 @@ import { parseTerraformModules } from '@/parser';
 import { addPostReleaseComment, addReleasePlanComment, getPullRequestCommits, hasReleaseComment } from '@/pull-request';
 import { createTaggedReleases, deleteReleases, getAllReleases } from '@/releases';
 import { deleteTags, getAllTags } from '@/tags';
-import { ensureTerraformDocsConfigDoesNotExist, installTerraformDocs } from '@/terraform-docs';
+import { installTerraformDocs } from '@/terraform-docs';
 import { TerraformModule } from '@/terraform-module';
 import type { Config, Context, GitHubRelease } from '@/types';
 import { checkoutWiki, commitAndPushWikiChanges, generateWikiFiles, getWikiStatus } from '@/wiki';
@@ -24,8 +24,8 @@ function initialize(): { config: Config; context: Context } {
 }
 
 /**
- * Handles wiki-related operations, including checkout, generating release plan comments,
- * and error handling for failures.
+ * Handles pull request open/sync events: determines wiki status (including terraform-docs
+ * pre-flight validation), posts a release plan comment, and re-throws checkout errors.
  *
  * @param {TerraformModule[]} terraformModules - List of Terraform modules associated with this workspace.
  * @param {GitHubRelease[]} releasesToDelete - List of Terraform releases to delete.
@@ -37,11 +37,12 @@ async function handlePullRequestEvent(
   releasesToDelete: GitHubRelease[],
   tagsToDelete: string[],
 ): Promise<void> {
-  const wikiStatusResult = getWikiStatus();
+  const wikiStatusResult = await getWikiStatus(terraformModules);
+
   await addReleasePlanComment(terraformModules, releasesToDelete, tagsToDelete, wikiStatusResult);
 
-  if (wikiStatusResult.error) {
-    throw wikiStatusResult.error;
+  if (wikiStatusResult.errorMessage) {
+    throw new Error(wikiStatusResult.errorMessage);
   }
 }
 
@@ -75,9 +76,13 @@ async function handlePullRequestMergedEvent(
     info('Wiki generation is disabled.');
   } else {
     installTerraformDocs(config.terraformDocsVersion);
-    ensureTerraformDocsConfigDoesNotExist();
     checkoutWiki();
-    await generateWikiFiles(terraformModules);
+    const { moduleErrors } = await generateWikiFiles(terraformModules);
+    if (moduleErrors.size > 0) {
+      throw new Error(
+        `terraform-docs generation failed for ${moduleErrors.size} module${moduleErrors.size > 1 ? 's' : ''} (see errors above)`,
+      );
+    }
     await commitAndPushWikiChanges();
   }
 }

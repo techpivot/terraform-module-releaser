@@ -79,7 +79,9 @@ export const RELEASE_REASON = {
  */
 export const WIKI_STATUS = {
   SUCCESS: 'SUCCESS',
-  FAILURE: 'FAILURE',
+  FAILURE_CHECKOUT: 'FAILURE_CHECKOUT',
+  FAILURE_TERRAFORM_DOCS_INSTALL: 'FAILURE_TERRAFORM_DOCS_INSTALL',
+  FAILURE_TERRAFORM_DOCS_RUN: 'FAILURE_TERRAFORM_DOCS_RUN',
   DISABLED: 'DISABLED',
 } as const;
 export const WIKI_HOME_FILENAME = 'Home.md';
@@ -156,3 +158,11 @@ export const SEMVER_MODE = {
  * Valid semver mode values for the `semver-mode` input.
  */
 export const VALID_SEMVER_MODES = [SEMVER_MODE.KEYWORDS, SEMVER_MODE.CONVENTIONAL_COMMITS] as const;
+
+/**
+ * The terraform-docs configuration filename supported by this action.
+ *
+ * We intentionally align with the current terraform-docs-supported `.terraform-docs.yml`
+ * filename and use it for module-level discovery.
+ */
+export const TERRAFORM_DOCS_CONFIG_FILENAME = '.terraform-docs.yml';
