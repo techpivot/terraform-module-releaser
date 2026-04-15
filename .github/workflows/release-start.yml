@@ -70,7 +70,7 @@ jobs:
         run: npm run check:fix
 
       - name: Generate Changelog
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         id: changelog
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN_READ_AND_MODELS }}
@@ -117,7 +117,7 @@ jobs:
       # Note: We can't change the head branch once a PR is opened. Thus we need to delete any branches
       # that exist from any existing open pull requests. (App Perm = Pull Request: Read + Write)
       - name: Close existing release pull requests
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           github-token: ${{ steps.app-token.outputs.token }}
           script: |
