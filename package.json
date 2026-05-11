@@ -62,7 +62,7 @@
     "conventional-commits-parser": "^6.3.0",
     "minimatch": "^10.2.4",
     "p-limit": "^7.3.0",
-    "which": "^6.0.1"
+    "which": "^7.0.0"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.14",
