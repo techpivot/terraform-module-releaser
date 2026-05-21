@@ -31418,6 +31418,7 @@ const ACTION_INPUTS = {
     'wiki-sidebar-changelog-max': requiredNumber('wikiSidebarChangelogMax'),
     'wiki-usage-template': requiredString('wikiUsageTemplate'),
     'disable-branding': requiredBoolean('disableBranding'),
+    'hide-no-changes-pr-comment': requiredBoolean('hideNoChangesPrComment'),
     'module-path-ignore': optionalArray('modulePathIgnore'),
     'module-change-exclude-patterns': optionalArray('moduleChangeExcludePatterns'),
     'module-asset-exclude-patterns': optionalArray('moduleAssetExcludePatterns'),
@@ -31572,6 +31573,7 @@ function initializeConfig() {
         info(`Use Version Prefix: ${configInstance.useVersionPrefix}`);
         info(`Module Ref Mode: ${configInstance.moduleRefMode}`);
         info(`Pre-release: ${configInstance.preRelease}`);
+        info(`Hide No-Changes PR Comment: ${configInstance.hideNoChangesPrComment}`);
         return configInstance;
     }
     finally {
@@ -35899,17 +35901,17 @@ const nomatchRegex = /(?!.*)/;
 function regex_escape(string) {
     return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
-function joinOr(parts) {
+function join(parts, joiner) {
     return parts
-        .map(val => (typeof val === 'string' ? regex_escape(val.trim()) : val.source))
+        .map(val => regex_escape(val.trim()))
         .filter(Boolean)
-        .join('|');
+        .join(joiner);
 }
 function getNotesRegex(noteKeywords, notesPattern) {
     if (!noteKeywords) {
         return nomatchRegex;
     }
-    const noteKeywordsSelection = joinOr(noteKeywords);
+    const noteKeywordsSelection = join(noteKeywords, '|');
     if (!notesPattern) {
         return new RegExp(`^[\\s|*]*(${noteKeywordsSelection})[:\\s]+(.*)`, 'i');
     }
@@ -35920,14 +35922,14 @@ function getReferencePartsRegex(issuePrefixes, issuePrefixesCaseSensitive) {
         return nomatchRegex;
     }
     const flags = issuePrefixesCaseSensitive ? 'g' : 'gi';
-    return new RegExp(`(?:.*?)??\\s*([\\w-\\.\\/]*?)??(${joinOr(issuePrefixes)})([\\w-]+)(?=\\s|$|[,;)\\]])`, flags);
+    return new RegExp(`(?:.*?)??\\s*([\\w-\\.\\/]*?)??(${join(issuePrefixes, '|')})([\\w-]+)(?=\\s|$|[,;)\\]])`, flags);
 }
 function getReferencesRegex(referenceActions) {
     if (!referenceActions) {
         // matches everything
         return /()(.+)/gi;
     }
-    const joinedKeywords = joinOr(referenceActions);
+    const joinedKeywords = join(referenceActions, '|');
     return new RegExp(`(${joinedKeywords})(?:\\s+(.*?))(?=(?:${joinedKeywords})|$)`, 'gi');
 }
 /**
@@ -35947,7 +35949,7 @@ function getParserRegexes(options = {}) {
         url: /\b(?:https?):\/\/(?:www\.)?([-a-zA-Z0-9@:%_+.~#?&//=])+\b/
     };
 }
-//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoicmVnZXguanMiLCJzb3VyY2VSb290IjoiIiwic291cmNlcyI6WyIuLi9zcmMvcmVnZXgudHMiXSwibmFtZXMiOltdLCJtYXBwaW5ncyI6IkFBS0EsTUFBTSxZQUFZLEdBQUcsUUFBUSxDQUFBO0FBRTdCLFNBQVMsTUFBTSxDQUFDLE1BQWM7SUFDNUIsT0FBTyxNQUFNLENBQUMsT0FBTyxDQUFDLHFCQUFxQixFQUFFLE1BQU0sQ0FBQyxDQUFBO0FBQ3RELENBQUM7QUFFRCxTQUFTLE1BQU0sQ0FBQyxLQUEwQjtJQUN4QyxPQUFPLEtBQUs7U0FDVCxHQUFHLENBQUMsR0FBRyxDQUFDLEVBQUUsQ0FBQyxDQUFDLE9BQU8sR0FBRyxLQUFLLFFBQVEsQ0FBQyxDQUFDLENBQUMsTUFBTSxDQUFDLEdBQUcsQ0FBQyxJQUFJLEVBQUUsQ0FBQyxDQUFDLENBQUMsQ0FBQyxHQUFHLENBQUMsTUFBTSxDQUFDLENBQUM7U0FDdkUsTUFBTSxDQUFDLE9BQU8sQ0FBQztTQUNmLElBQUksQ0FBQyxHQUFHLENBQUMsQ0FBQTtBQUNkLENBQUM7QUFFRCxTQUFTLGFBQWEsQ0FDcEIsWUFBNkMsRUFDN0MsWUFBb0Q7SUFFcEQsSUFBSSxDQUFDLFlBQVksRUFBRSxDQUFDO1FBQ2xCLE9BQU8sWUFBWSxDQUFBO0lBQ3JCLENBQUM7SUFFRCxNQUFNLHFCQUFxQixHQUFHLE1BQU0sQ0FBQyxZQUFZLENBQUMsQ0FBQTtJQUVsRCxJQUFJLENBQUMsWUFBWSxFQUFFLENBQUM7UUFDbEIsT0FBTyxJQUFJLE1BQU0sQ0FBQyxhQUFhLHFCQUFxQixjQUFjLEVBQUUsR0FBRyxDQUFDLENBQUE7SUFDMUUsQ0FBQztJQUVELE9BQU8sWUFBWSxDQUFDLHFCQUFxQixDQUFDLENBQUE7QUFDNUMsQ0FBQztBQUVELFNBQVMsc0JBQXNCLENBQzdCLGFBQThDLEVBQzlDLDBCQUErQztJQUUvQyxJQUFJLENBQUMsYUFBYSxFQUFFLENBQUM7UUFDbkIsT0FBTyxZQUFZLENBQUE7SUFDckIsQ0FBQztJQUVELE1BQU0sS0FBSyxHQUFHLDBCQUEwQixDQUFDLENBQUMsQ0FBQyxHQUFHLENBQUMsQ0FBQyxDQUFDLElBQUksQ0FBQTtJQUVyRCxPQUFPLElBQUksTUFBTSxDQUFDLG1DQUFtQyxNQUFNLENBQUMsYUFBYSxDQUFDLDhCQUE4QixFQUFFLEtBQUssQ0FBQyxDQUFBO0FBQ2xILENBQUM7QUFFRCxTQUFTLGtCQUFrQixDQUN6QixnQkFBaUQ7SUFFakQsSUFBSSxDQUFDLGdCQUFnQixFQUFFLENBQUM7UUFDdEIscUJBQXFCO1FBQ3JCLE9BQU8sVUFBVSxDQUFBO0lBQ25CLENBQUM7SUFFRCxNQUFNLGNBQWMsR0FBRyxNQUFNLENBQUMsZ0JBQWdCLENBQUMsQ0FBQTtJQUUvQyxPQUFPLElBQUksTUFBTSxDQUFDLElBQUksY0FBYyx1QkFBdUIsY0FBYyxNQUFNLEVBQUUsSUFBSSxDQUFDLENBQUE7QUFDeEYsQ0FBQztBQUVEOzs7O0dBSUc7QUFDSCxNQUFNLFVBQVUsZ0JBQWdCLENBQzlCLFVBQXNJLEVBQUU7SUFFeEksTUFBTSxLQUFLLEdBQUcsYUFBYSxDQUFDLE9BQU8sQ0FBQyxZQUFZLEVBQUUsT0FBTyxDQUFDLFlBQVksQ0FBQyxDQUFBO0lBQ3ZFLE1BQU0sY0FBYyxHQUFHLHNCQUFzQixDQUFDLE9BQU8sQ0FBQyxhQUFhLEVBQUUsT0FBTyxDQUFDLDBCQUEwQixDQUFDLENBQUE7SUFDeEcsTUFBTSxVQUFVLEdBQUcsa0JBQWtCLENBQUMsT0FBTyxDQUFDLGdCQUFnQixDQUFDLENBQUE7SUFFL0QsT0FBTztRQUNMLEtBQUs7UUFDTCxjQUFjO1FBQ2QsVUFBVTtRQUNWLFFBQVEsRUFBRSxZQUFZO1FBQ3RCLEdBQUcsRUFBRSwyREFBMkQ7S0FDakUsQ0FBQTtBQUNILENBQUMifQ==
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoicmVnZXguanMiLCJzb3VyY2VSb290IjoiIiwic291cmNlcyI6WyIuLi9zcmMvcmVnZXgudHMiXSwibmFtZXMiOltdLCJtYXBwaW5ncyI6IkFBS0EsTUFBTSxZQUFZLEdBQUcsUUFBUSxDQUFBO0FBRTdCLFNBQVMsTUFBTSxDQUFDLE1BQWM7SUFDNUIsT0FBTyxNQUFNLENBQUMsT0FBTyxDQUFDLHFCQUFxQixFQUFFLE1BQU0sQ0FBQyxDQUFBO0FBQ3RELENBQUM7QUFFRCxTQUFTLElBQUksQ0FBQyxLQUFlLEVBQUUsTUFBYztJQUMzQyxPQUFPLEtBQUs7U0FDVCxHQUFHLENBQUMsR0FBRyxDQUFDLEVBQUUsQ0FBQyxNQUFNLENBQUMsR0FBRyxDQUFDLElBQUksRUFBRSxDQUFDLENBQUM7U0FDOUIsTUFBTSxDQUFDLE9BQU8sQ0FBQztTQUNmLElBQUksQ0FBQyxNQUFNLENBQUMsQ0FBQTtBQUNqQixDQUFDO0FBRUQsU0FBUyxhQUFhLENBQ3BCLFlBQWtDLEVBQ2xDLFlBQW9EO0lBRXBELElBQUksQ0FBQyxZQUFZLEVBQUUsQ0FBQztRQUNsQixPQUFPLFlBQVksQ0FBQTtJQUNyQixDQUFDO0lBRUQsTUFBTSxxQkFBcUIsR0FBRyxJQUFJLENBQUMsWUFBWSxFQUFFLEdBQUcsQ0FBQyxDQUFBO0lBRXJELElBQUksQ0FBQyxZQUFZLEVBQUUsQ0FBQztRQUNsQixPQUFPLElBQUksTUFBTSxDQUFDLGFBQWEscUJBQXFCLGNBQWMsRUFBRSxHQUFHLENBQUMsQ0FBQTtJQUMxRSxDQUFDO0lBRUQsT0FBTyxZQUFZLENBQUMscUJBQXFCLENBQUMsQ0FBQTtBQUM1QyxDQUFDO0FBRUQsU0FBUyxzQkFBc0IsQ0FDN0IsYUFBbUMsRUFDbkMsMEJBQStDO0lBRS9DLElBQUksQ0FBQyxhQUFhLEVBQUUsQ0FBQztRQUNuQixPQUFPLFlBQVksQ0FBQTtJQUNyQixDQUFDO0lBRUQsTUFBTSxLQUFLLEdBQUcsMEJBQTBCLENBQUMsQ0FBQyxDQUFDLEdBQUcsQ0FBQyxDQUFDLENBQUMsSUFBSSxDQUFBO0lBRXJELE9BQU8sSUFBSSxNQUFNLENBQUMsbUNBQW1DLElBQUksQ0FBQyxhQUFhLEVBQUUsR0FBRyxDQUFDLDhCQUE4QixFQUFFLEtBQUssQ0FBQyxDQUFBO0FBQ3JILENBQUM7QUFFRCxTQUFTLGtCQUFrQixDQUN6QixnQkFBc0M7SUFFdEMsSUFBSSxDQUFDLGdCQUFnQixFQUFFLENBQUM7UUFDdEIscUJBQXFCO1FBQ3JCLE9BQU8sVUFBVSxDQUFBO0lBQ25CLENBQUM7SUFFRCxNQUFNLGNBQWMsR0FBRyxJQUFJLENBQUMsZ0JBQWdCLEVBQUUsR0FBRyxDQUFDLENBQUE7SUFFbEQsT0FBTyxJQUFJLE1BQU0sQ0FBQyxJQUFJLGNBQWMsdUJBQXVCLGNBQWMsTUFBTSxFQUFFLElBQUksQ0FBQyxDQUFBO0FBQ3hGLENBQUM7QUFFRDs7OztHQUlHO0FBQ0gsTUFBTSxVQUFVLGdCQUFnQixDQUM5QixVQUFzSSxFQUFFO0lBRXhJLE1BQU0sS0FBSyxHQUFHLGFBQWEsQ0FBQyxPQUFPLENBQUMsWUFBWSxFQUFFLE9BQU8sQ0FBQyxZQUFZLENBQUMsQ0FBQTtJQUN2RSxNQUFNLGNBQWMsR0FBRyxzQkFBc0IsQ0FBQyxPQUFPLENBQUMsYUFBYSxFQUFFLE9BQU8sQ0FBQywwQkFBMEIsQ0FBQyxDQUFBO0lBQ3hHLE1BQU0sVUFBVSxHQUFHLGtCQUFrQixDQUFDLE9BQU8sQ0FBQyxnQkFBZ0IsQ0FBQyxDQUFBO0lBRS9ELE9BQU87UUFDTCxLQUFLO1FBQ0wsY0FBYztRQUNkLFVBQVU7UUFDVixRQUFRLEVBQUUsWUFBWTtRQUN0QixHQUFHLEVBQUUsMkRBQTJEO0tBQ2pFLENBQUE7QUFDSCxDQUFDIn0=
 ;// CONCATENATED MODULE: ./node_modules/conventional-commits-parser/dist/utils.js
 const SCISSOR = '------------------------ >8 ------------------------';
 /**
@@ -37912,16 +37914,16 @@ const parseClass = (glob, position) => {
 const unescape_unescape = (s, { windowsPathsNoEscape = false, magicalBraces = true, } = {}) => {
     if (magicalBraces) {
         return windowsPathsNoEscape ?
-            s.replace(/\[([^/\\])\]/g, '$1')
+            s.replace(/\[([^\/\\])\]/g, '$1')
             : s
-                .replace(/((?!\\).|^)\[([^/\\])\]/g, '$1$2')
-                .replace(/\\([^/])/g, '$1');
+                .replace(/((?!\\).|^)\[([^\/\\])\]/g, '$1$2')
+                .replace(/\\([^\/])/g, '$1');
     }
     return windowsPathsNoEscape ?
-        s.replace(/\[([^/\\{}])\]/g, '$1')
+        s.replace(/\[([^\/\\{}])\]/g, '$1')
         : s
-            .replace(/((?!\\).|^)\[([^/\\{}])\]/g, '$1$2')
-            .replace(/\\([^/{}])/g, '$1');
+            .replace(/((?!\\).|^)\[([^\/\\{}])\]/g, '$1$2')
+            .replace(/\\([^\/{}])/g, '$1');
 };
 //# sourceMappingURL=unescape.js.map
 ;// CONCATENATED MODULE: ./node_modules/minimatch/dist/esm/ast.js
@@ -38116,14 +38118,15 @@ class AST {
     }
     // reconstructs the pattern
     toString() {
-        return (this.#toString !== undefined ? this.#toString
-            : !this.type ?
-                (this.#toString = this.#parts.map(p => String(p)).join(''))
-                : (this.#toString =
-                    this.type +
-                        '(' +
-                        this.#parts.map(p => String(p)).join('|') +
-                        ')'));
+        if (this.#toString !== undefined)
+            return this.#toString;
+        if (!this.type) {
+            return (this.#toString = this.#parts.map(p => String(p)).join(''));
+        }
+        else {
+            return (this.#toString =
+                this.type + '(' + this.#parts.map(p => String(p)).join('|') + ')');
+        }
     }
     #fillNegs() {
         /* c8 ignore start */
@@ -38403,7 +38406,7 @@ class AST {
     }
     #canUsurpType(c) {
         const m = usurpMap.get(this.type);
-        return !!m?.has(c);
+        return !!(m?.has(c));
     }
     #canUsurp(child) {
         if (!child ||
@@ -38808,7 +38811,7 @@ const minimatch = (p, pattern, options = {}) => {
     return new Minimatch(pattern, options).match(p);
 };
 // Optimized checking for the most common glob patterns.
-const starDotExtRE = /^\*+([^+@!?*[(]*)$/;
+const starDotExtRE = /^\*+([^+@!?\*\[\(]*)$/;
 const starDotExtTest = (ext) => (f) => !f.startsWith('.') && f.endsWith(ext);
 const starDotExtTestDot = (ext) => (f) => f.endsWith(ext);
 const starDotExtTestNocase = (ext) => {
@@ -38827,7 +38830,7 @@ const dotStarTest = (f) => f !== '.' && f !== '..' && f.startsWith('.');
 const starRE = /^\*+$/;
 const starTest = (f) => f.length !== 0 && !f.startsWith('.');
 const starTestDot = (f) => f.length !== 0 && f !== '.' && f !== '..';
-const qmarksRE = /^\?+([^+@!?*[(]*)?$/;
+const qmarksRE = /^\?+([^+@!?\*\[\(]*)?$/;
 const qmarksTestNocase = ([$0, ext = '']) => {
     const noext = qmarksTestNoExt([$0]);
     if (!ext)
@@ -39054,7 +39057,6 @@ class Minimatch {
         // step 2: expand braces
         this.globSet = [...new Set(this.braceExpand())];
         if (options.debug) {
-            //oxlint-disable-next-line no-console
             this.debug = (...args) => console.error(...args);
         }
         this.debug(this.pattern, this.globSet);
@@ -39117,10 +39119,10 @@ class Minimatch {
     preprocess(globParts) {
         // if we're not in globstar mode, then turn ** into *
         if (this.options.noglobstar) {
-            for (const partset of globParts) {
-                for (let j = 0; j < partset.length; j++) {
-                    if (partset[j] === '**') {
-                        partset[j] = '*';
+            for (let i = 0; i < globParts.length; i++) {
+                for (let j = 0; j < globParts[i].length; j++) {
+                    if (globParts[i][j] === '**') {
+                        globParts[i][j] = '*';
                     }
                 }
             }
@@ -39208,11 +39210,7 @@ class Minimatch {
             let dd = 0;
             while (-1 !== (dd = parts.indexOf('..', dd + 1))) {
                 const p = parts[dd - 1];
-                if (p &&
-                    p !== '.' &&
-                    p !== '..' &&
-                    p !== '**' &&
-                    !(this.isWindows && /^[a-z]:$/i.test(p))) {
+                if (p && p !== '.' && p !== '..' && p !== '**') {
                     didSomething = true;
                     parts.splice(dd - 1, 2);
                     dd -= 2;
@@ -39461,17 +39459,15 @@ class Minimatch {
         // split the pattern up into globstar-delimited sections
         // the tail has to be at the end, and the others just have
         // to be found in order from the head.
-        const [head, body, tail] = partial ?
-            [
-                pattern.slice(patternIndex, firstgs),
-                pattern.slice(firstgs + 1),
-                [],
-            ]
-            : [
-                pattern.slice(patternIndex, firstgs),
-                pattern.slice(firstgs + 1, lastgs),
-                pattern.slice(lastgs + 1),
-            ];
+        const [head, body, tail] = partial ? [
+            pattern.slice(patternIndex, firstgs),
+            pattern.slice(firstgs + 1),
+            [],
+        ] : [
+            pattern.slice(patternIndex, firstgs),
+            pattern.slice(firstgs + 1, lastgs),
+            pattern.slice(lastgs + 1),
+        ];
         // check the head, from the current file/pattern index.
         if (head.length) {
             const fileHead = file.slice(fileIndex, fileIndex + head.length);
@@ -39817,7 +39813,7 @@ class Minimatch {
             this.regexp = new RegExp(re, [...flags].join(''));
             /* c8 ignore start */
         }
-        catch {
+        catch (ex) {
             // should be impossible
             this.regexp = false;
         }
@@ -39832,7 +39828,7 @@ class Minimatch {
         if (this.preserveMultipleSlashes) {
             return p.split('/');
         }
-        else if (this.isWindows && /^\/\/[^/]+/.test(p)) {
+        else if (this.isWindows && /^\/\/[^\/]+/.test(p)) {
             // add an extra '' for the one we lose
             return ['', ...p.split(/\/+/)];
         }
@@ -39874,7 +39870,8 @@ class Minimatch {
                 filename = ff[i];
             }
         }
-        for (const pattern of set) {
+        for (let i = 0; i < set.length; i++) {
+            const pattern = set[i];
             let file = ff;
             if (options.matchBase && pattern.length === 1) {
                 file = [filename];
@@ -41655,6 +41652,16 @@ async function addReleasePlanComment(terraformModules, releasesToDelete, tagsToD
             body: commentBody.join('\n').trim(),
         });
         info(`Posted comment ${newComment.id} @ ${newComment.html_url}`);
+        // Minimize the comment if configured and there is nothing to report
+        const hasDeleteWork = config.deleteLegacyTags && (releasesToDelete.length > 0 || tagsToDelete.length > 0);
+        if (config.hideNoChangesPrComment && terraformModulesToRelese.length === 0 && !hasDeleteWork) {
+            await octokit.graphql(`mutation MinimizeComment($id: ID!) {
+          minimizeComment(input: {subjectId: $id, classifier: RESOLVED}) {
+            minimizedComment { isMinimized }
+          }
+        }`, { id: newComment.node_id });
+            info(`Minimized comment ${newComment.id} (no changes to report)`);
+        }
         // Filter out the comments that contain the PR summary marker and are not the current comment
         const { data: allComments } = await octokit.rest.issues.listComments({ issue_number, owner, repo });
         const commentsToDelete = allComments.filter((comment) => comment.body?.includes(PR_SUMMARY_MARKER) && comment.id !== newComment.id);

@@ -53,6 +53,7 @@ export const ACTION_INPUTS: Record<string, ActionInputMetadata> = {
   'wiki-sidebar-changelog-max': requiredNumber('wikiSidebarChangelogMax'),
   'wiki-usage-template': requiredString('wikiUsageTemplate'),
   'disable-branding': requiredBoolean('disableBranding'),
+  'hide-no-changes-pr-comment': requiredBoolean('hideNoChangesPrComment'),
   'module-path-ignore': optionalArray('modulePathIgnore'),
   'module-change-exclude-patterns': optionalArray('moduleChangeExcludePatterns'),
   'module-asset-exclude-patterns': optionalArray('moduleAssetExcludePatterns'),

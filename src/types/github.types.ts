@@ -1,3 +1,4 @@
+import type { graphql as GraphqlFn } from '@octokit/graphql';
 import type { PaginateInterface } from '@octokit/plugin-paginate-rest';
 import type { Api } from '@octokit/plugin-rest-endpoint-methods';
 
@@ -6,9 +7,9 @@ import type { Api } from '@octokit/plugin-rest-endpoint-methods';
  */
 
 /**
- * Custom type that extends Octokit with pagination support
+ * Custom type that extends Octokit with pagination and GraphQL support
  */
-export type OctokitRestApi = Api & { paginate: PaginateInterface };
+export type OctokitRestApi = Api & { paginate: PaginateInterface; graphql: typeof GraphqlFn };
 
 /**
  * GitHub tag information

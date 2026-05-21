@@ -338,6 +338,7 @@ describe('config', () => {
       expect(config.disableWiki).toBe(false);
       expect(config.wikiSidebarChangelogMax).toBe(5);
       expect(config.disableBranding).toBe(false);
+      expect(config.hideNoChangesPrComment).toBe(false);
       expect(config.githubToken).toBe('ghp_test_token_2c6912E7710c838347Ae178B4');
       expect(config.modulePathIgnore).toEqual([]);
       expect(config.moduleChangeExcludePatterns).toEqual(['.gitignore', '*.md', '*.tftest.hcl', 'tests/**']);
@@ -367,6 +368,7 @@ describe('config', () => {
         ['Use Version Prefix: true'],
         ['Module Ref Mode: tag'],
         ['Pre-release: false'],
+        ['Hide No-Changes PR Comment: false'],
       ]);
     });
   });
