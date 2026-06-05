@@ -473,6 +473,61 @@ describe('pull-request', () => {
       );
     });
 
+    it('should minimize comment when hide-no-changes-pr-comment is true and no changes', async () => {
+      const nodeId = 'IC_test_node_id';
+      config.set({ hideNoChangesPrComment: true, deleteLegacyTags: true });
+      stubOctokitReturnData('issues.createComment', {
+        data: { id: 1, node_id: nodeId, html_url: 'https://github.com/org/repo/pull/1#issuecomment-1' },
+      });
+      stubOctokitReturnData('issues.listComments', { data: [] });
+
+      await addReleasePlanComment([], [], [], { status: WIKI_STATUS.SUCCESS });
+
+      expect(context.octokit.graphql).toHaveBeenCalledWith(
+        expect.stringContaining('minimizeComment'),
+        { id: nodeId },
+      );
+      expect(info).toHaveBeenCalledWith(expect.stringContaining('Minimized comment'));
+    });
+
+    it('should not minimize comment when hide-no-changes-pr-comment is true but modules need release', async () => {
+      config.set({ hideNoChangesPrComment: true });
+      stubOctokitReturnData('issues.createComment', {
+        data: { id: 1, node_id: 'IC_node', html_url: 'https://github.com/org/repo/pull/1#issuecomment-1' },
+      });
+      stubOctokitReturnData('issues.listComments', { data: [] });
+
+      await addReleasePlanComment(terraformModules, [], [], { status: WIKI_STATUS.SUCCESS });
+
+      expect(context.octokit.graphql).not.toHaveBeenCalled();
+    });
+
+    it('should not minimize comment when hide-no-changes-pr-comment is true but there are releases to delete', async () => {
+      config.set({ hideNoChangesPrComment: true, deleteLegacyTags: true });
+      stubOctokitReturnData('issues.createComment', {
+        data: { id: 1, node_id: 'IC_node', html_url: 'https://github.com/org/repo/pull/1#issuecomment-1' },
+      });
+      stubOctokitReturnData('issues.listComments', { data: [] });
+
+      await addReleasePlanComment([], [{ id: 99, title: 'old', body: '', tagName: 'old/v1.0.0' }], [], {
+        status: WIKI_STATUS.SUCCESS,
+      });
+
+      expect(context.octokit.graphql).not.toHaveBeenCalled();
+    });
+
+    it('should not minimize comment when hide-no-changes-pr-comment is false', async () => {
+      config.set({ hideNoChangesPrComment: false });
+      stubOctokitReturnData('issues.createComment', {
+        data: { id: 1, node_id: 'IC_node', html_url: 'https://github.com/org/repo/pull/1#issuecomment-1' },
+      });
+      stubOctokitReturnData('issues.listComments', { data: [] });
+
+      await addReleasePlanComment([], [], [], { status: WIKI_STATUS.SUCCESS });
+
+      expect(context.octokit.graphql).not.toHaveBeenCalled();
+    });
+
     it('should include modules to remove when flag enabled', async () => {
       const modulesToRemove = ['legacy-module1', 'legacy-module2'];
 

@@ -347,6 +347,20 @@ export async function addReleasePlanComment(
     });
     info(`Posted comment ${newComment.id} @ ${newComment.html_url}`);
 
+    // Minimize the comment if configured and there is nothing to report
+    const hasDeleteWork = config.deleteLegacyTags && (releasesToDelete.length > 0 || tagsToDelete.length > 0);
+    if (config.hideNoChangesPrComment && terraformModulesToRelese.length === 0 && !hasDeleteWork) {
+      await octokit.graphql(
+        `mutation MinimizeComment($id: ID!) {
+          minimizeComment(input: {subjectId: $id, classifier: RESOLVED}) {
+            minimizedComment { isMinimized }
+          }
+        }`,
+        { id: newComment.node_id },
+      );
+      info(`Minimized comment ${newComment.id} (no changes to report)`);
+    }
+
     // Filter out the comments that contain the PR summary marker and are not the current comment
     const { data: allComments } = await octokit.rest.issues.listComments({ issue_number, owner, repo });
     const commentsToDelete = allComments.filter(

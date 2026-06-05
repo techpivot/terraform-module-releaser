@@ -342,6 +342,7 @@ export function createDefaultOctokitMock(): OctokitRestApi {
         })();
       },
     },
+    graphql: vi.fn().mockResolvedValue({ minimizeComment: { minimizedComment: { isMinimized: true } } }),
   };
 
   // For now, we just emulate and return a Partial OctokitRestApi since this is a mocked version
