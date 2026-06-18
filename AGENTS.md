@@ -32,20 +32,20 @@ npm run update-deps     # Upgrade all dependencies within package.json ranges
 There are four separate Node.js version references in this repository. Each serves a distinct purpose. Always keep them
 consistent and update them together when bumping.
 
-| File | Current value | Purpose |
-| --- | --- | --- |
-| `.node-version` | `26` | Pins the local developer runtime. Read by nvm/fnm and by `node-version-file:` in all CI workflows. This is the version used for development, testing, and building. |
-| `.devcontainer/devcontainer.json` | `"version": "26"` | Devcontainer Node feature installs this version in the container. **Must always match `.node-version`.** Also sets the container `"name"` label for clarity. |
-| `package.json` → `engines.node` | `">=26"` | Documents the minimum runtime required to install/run the package locally. Should be `>=` the value in `.node-version`. |
-| `action.yml` → `using:` | `node24` | **GitHub Actions production runtime.** This is the Node version GitHub uses to execute `dist/index.js` in consumer workflows. GitHub only supports `node20` and `node24` — do not change without a major release. |
+| File                              | Current value     | Purpose                                                                                                                                                                                                           |
+| --------------------------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.node-version`                   | `26`              | Pins the local developer runtime. Read by nvm/fnm and by `node-version-file:` in all CI workflows. This is the version used for development, testing, and building.                                               |
+| `.devcontainer/devcontainer.json` | `"version": "26"` | Devcontainer Node feature installs this version in the container. **Must always match `.node-version`.** Also sets the container `"name"` label for clarity.                                                      |
+| `package.json` → `engines.node`   | `">=24"`          | **Locked at Node 24 support.** Declares the minimum required runtime to prevent Node 25/26 APIs from polluting compilation types, ensuring backward compatibility with consumer runtimes.                         |
+| `action.yml` → `using:`           | `node24`          | **GitHub Actions production runtime.** This is the Node version GitHub uses to execute `dist/index.js` in consumer workflows. GitHub only supports `node20` and `node24` — do not change without a major release. |
 
 ### Bumping the local dev Node version
 
-When upgrading the local Node version (`.node-version` / devcontainer / `package.json`):
+When upgrading the local Node version (`.node-version` / devcontainer):
 
 1. Research latest stable Node LTS or current release at <https://nodejs.org/en/download/releases>
-2. Update `.node-version`, `.devcontainer/devcontainer.json` (`name` label + feature `version`), and
-   `package.json` `engines.node` together
+2. Update `.node-version` and `.devcontainer/devcontainer.json` (`name` label + feature `version`) together. **Do not
+   bump `package.json` `engines.node` past `>=24`** unless raising the baseline runner version.
 3. Update all documentation references (this file, `CONTRIBUTING.md`, `docs/development.md`)
 4. Run `npm run update-deps` to verify all packages are compatible with the new engine
 5. Run the full test suite (`npm test`) before committing
@@ -56,8 +56,8 @@ This is a **breaking change for all consumers** and requires a new major version
 
 1. Check GitHub's supported runtimes:
    <https://docs.github.com/en/actions/creating-actions/metadata-syntax-for-github-actions#runs-for-javascript-actions>
-2. Verify the compiled `dist/` output is valid ECMAScript for the target runtime — review `tsconfig.json` `target`
-   and `lib` fields and adjust if needed
+2. Verify the compiled `dist/` output is valid ECMAScript for the target runtime — review `tsconfig.json` `target` and
+   `lib` fields and adjust if needed
 3. Bump the action major version, tag a release, and announce in release notes
 4. Update `action.yml` `using:` and all documentation references
 

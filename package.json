@@ -39,8 +39,8 @@
     ]
   },
   "scripts": {
-    "check": "biome check . && npx prettier -c \"{*.md,docs/**/*.md,.github/**/*.md}\" \"**/*.yml\"",
-    "check:fix": "biome check --write --unsafe . && npx prettier --list-different -w \"{*.md,docs/**/*.md,.github/**/*.md}\" \"**/*.yml\"",
+    "check": "biome check . && npx prettier -c \"{*.md,{docs,.github,.claude}/**/*.md}\" \"**/*.yml\"",
+    "check:fix": "biome check --write --unsafe . && npx prettier --list-different -w \"{*.md,{docs,.github,.claude}/**/*.md}\" \"**/*.yml\"",
     "dev:parse-modules": "tsx scripts/dev-parse-modules.ts",
     "textlint": "textlint -c .github/linters/.textlintrc **/*.md",
     "textlint:fix": "textlint -c .github/linters/.textlintrc --fix **/*.md",
@@ -52,7 +52,7 @@
     "changelog": "node scripts/changelog.js 10.0.0",
     "coverage": "make-coverage-badge --output-path ./assets/coverage-badge.svg",
     "terraform-docs-version": "gh api repos/terraform-docs/terraform-docs/releases/latest --jq '.tag_name'",
-    "update-deps": "npm update && npm install"
+    "update-deps": "npm update --no-fund && npm install --no-fund"
   },
   "dependencies": {
     "@actions/core": "^3.0.1",
@@ -87,5 +87,8 @@
     "tsx": "^4.22.4",
     "typescript": "^6.0.3",
     "vitest": "^4.0.18"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true
   }
 }

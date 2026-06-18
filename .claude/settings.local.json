@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx vitest:*)",
+      "Bash(npx tsc:*)",
+      "Bash(node -e \" const data = require\\('fs'\\).readFileSync\\('/dev/stdin', 'utf8'\\); const cov = JSON.parse\\(data\\); for \\(const [file, stats] of Object.entries\\(cov\\)\\) { if \\(file === 'total'\\) continue; const name = file.replace\\(/.*\\\\/src\\\\//,'src/'\\); const s = stats.statements, b = stats.branches, l = stats.lines; if \\(s.pct < 100 || b.pct < 100 || l.pct < 100\\) { console.log\\(name, 'stmts:', s.pct, 'branches:', b.pct, 'lines:', l.pct\\); } }\")",
+      "Bash(node -e ':*)",
+      "Bash(grep -v \"❯\\\\|error\\\\|Error\\\\|cause\\\\|fetch\\\\|Auth\\\\|[0-9][0-9][0-9]\\\\|^\\\\s*[0-9]\\\\|node_modules\\\\|^$\")",
+      "Bash(col -b)",
+      "Bash(node -e \"const d=require\\('fs'\\).readFileSync\\('/dev/stdin','utf8'\\); const p=JSON.parse\\(d\\); console.log\\(JSON.stringify\\(p.scripts,null,2\\)\\)\")",
+      "Bash(npm test:*)",
+      "Bash(echo \"Exit: $?\")"
+    ]
+  }
+}
