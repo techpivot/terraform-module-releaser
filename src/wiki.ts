@@ -537,29 +537,30 @@ export async function generateWikiFiles(terraformModules: TerraformModule[]): Pr
     info(`Using parallelism: ${parallelism}`);
 
     const limit = pLimit(parallelism);
-    const updatedFiles: string[] = [];
     const moduleErrors = new Map<string, string>();
-    const tasks = terraformModules.map((module) => {
+    const moduleTasks = terraformModules.map((module) => {
       return limit(() =>
         withBufferedLogs(async () => {
           try {
-            updatedFiles.push(await generateWikiTerraformModule(module));
+            return await generateWikiTerraformModule(module);
           } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
             bufferedError(`[${module.name}] ${message}`);
             moduleErrors.set(module.name, message);
+            return;
           }
         }),
       );
     });
-    await Promise.all(tasks);
 
-    updatedFiles.push(await generateWikiHome(terraformModules));
-    updatedFiles.push(await generateWikiSidebar(terraformModules));
-    const footerFile = await generateWikiFooter();
-    if (footerFile) {
-      updatedFiles.push(footerFile);
-    }
+    const sharedWikiTasks = [
+      limit(async () => await generateWikiHome(terraformModules)),
+      limit(async () => await generateWikiSidebar(terraformModules)),
+      limit(async () => await generateWikiFooter()),
+    ];
+
+    const generatedFiles = await Promise.all([...moduleTasks, ...sharedWikiTasks]);
+    const updatedFiles = generatedFiles.filter((file): file is string => typeof file === 'string');
 
     info('Wiki files generated:');
     info(JSON.stringify(updatedFiles, null, 2));
