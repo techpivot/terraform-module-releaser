@@ -222,8 +222,7 @@ export async function addReleasePlanComment(
       wikiStatus.status === WIKI_STATUS.FAILURE_TERRAFORM_DOCS_RUN ||
       wikiStatus.status === WIKI_STATUS.FAILURE_TERRAFORM_DOCS_INSTALL
     ) {
-      commentBody.push('\n# ⚠️ Release Plan\n');
-      commentBody.push('> ⚠️ **IMPORTANT**: _See Wiki Status error below._\n');
+      commentBody.push('\n# ⚠️ Release Plan\n', '> ⚠️ **IMPORTANT**: _See Wiki Status error below._\n');
     } else {
       commentBody.push('\n# 📋 Release Plan\n');
     }
@@ -287,20 +286,20 @@ export async function addReleasePlanComment(
         break;
 
       case WIKI_STATUS.FAILURE_CHECKOUT:
-        commentBody.push('**⚠️ Failed to checkout wiki:**');
-        commentBody.push('```');
-        commentBody.push(`${wikiStatus.errorMessage}`);
-        commentBody.push('```');
         commentBody.push(
+          '**⚠️ Failed to checkout wiki:**',
+          '```',
+          `${wikiStatus.errorMessage}`,
+          '```',
           `Please consult the [README.md](${PROJECT_URL}/blob/main/README.md#getting-started) for additional information (**Ensure the Wiki is initialized**).`,
         );
         break;
       case WIKI_STATUS.FAILURE_TERRAFORM_DOCS_INSTALL:
-        commentBody.push('**⚠️ terraform-docs installation failed:**');
-        commentBody.push('```');
-        commentBody.push(`${wikiStatus.errorMessage}`);
-        commentBody.push('```');
         commentBody.push(
+          '**⚠️ terraform-docs installation failed:**',
+          '```',
+          `${wikiStatus.errorMessage}`,
+          '```',
           `Please consult the [README.md](${PROJECT_URL}/blob/main/README.md#terraform-docs-installation) for troubleshooting terraform-docs installation on the runner.`,
         );
         break;
@@ -311,7 +310,7 @@ export async function addReleasePlanComment(
         );
         commentBody.push('| Module | Error |', '|--|--|');
         for (const [moduleName, errorMessage] of wikiStatus.terraformDocsErrors ?? []) {
-          const sanitized = errorMessage.replace(/\|/g, '\\|').replace(/\n/g, ' ').trim();
+          const sanitized = errorMessage.replaceAll('|', String.raw`\|`).replaceAll('\n', ' ').trim();
           commentBody.push(`| \`${moduleName}\` | ${sanitized} |`);
         }
         commentBody.push(
