@@ -51,7 +51,8 @@
     "test:parse-modules": "tsx scripts/parse-modules-test.ts",
     "changelog": "node scripts/changelog.js 10.0.0",
     "coverage": "make-coverage-badge --output-path ./assets/coverage-badge.svg",
-    "terraform-docs-version": "gh api repos/terraform-docs/terraform-docs/releases/latest --jq '.tag_name'"
+    "terraform-docs-version": "gh api repos/terraform-docs/terraform-docs/releases/latest --jq '.tag_name'",
+    "update-deps": "npm update && npm install"
   },
   "dependencies": {
     "@actions/core": "^3.0.1",
