@@ -546,7 +546,7 @@ export async function generateWikiFiles(terraformModules: TerraformModule[]): Pr
             updatedFiles.push(await generateWikiTerraformModule(module));
           } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
-            bufferedError(message);
+            bufferedError(`[${module.name}] ${message}`);
             moduleErrors.set(module.name, message);
           }
         }),

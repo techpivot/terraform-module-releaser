@@ -76,7 +76,6 @@
     "@types/which": "^3.0.4",
     "@vercel/ncc": "^0.44.0",
     "@vitest/coverage-v8": "^4.1.8",
-    "js-yaml": "^4.2.0",
     "make-coverage-badge": "^1.2.0",
     "openai": "^6.42.0",
     "prettier": "^3.8.4",

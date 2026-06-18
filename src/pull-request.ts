@@ -326,7 +326,7 @@ export async function addReleasePlanComment(
           terraformDocsValidationLines.push(`| \`${moduleName}\` | ${sanitized} |`);
         }
         terraformDocsValidationLines.push(
-          '\nPlease fix the `.terraform-docs.yml` configuration before merging to avoid broken wiki pages.',
+          '\nPlease fix the terraform-docs errors above (often caused by `.terraform-docs.yml`) before merging to avoid broken wiki pages.',
         );
         commentBody.push(...terraformDocsValidationLines);
         break;

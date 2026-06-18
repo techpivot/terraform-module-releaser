@@ -267,7 +267,13 @@ export async function generateTerraformDocs({ name, directory }: TerraformModule
     output: { file: '', mode: 'inject' },
   };
 
-  log(`Effective config: ${JSON.stringify(mergedConfig)}`);
+  log(
+    `Effective config: ${JSON.stringify({
+      userConfigPath,
+      formatter: mergedConfig.formatter,
+      output: mergedConfig.output,
+    })}`,
+  );
 
   // Write merged config to a temp file, run terraform-docs, then clean up
   const tmpDir = await mkdtemp(join(tmpdir(), 'tfdocs-'));
