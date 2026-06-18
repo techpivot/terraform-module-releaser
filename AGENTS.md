@@ -120,7 +120,7 @@ Key patterns:
 - **Effective change detection**: Commits that modify then revert a file within the same PR are excluded
 - **Tag normalization**: All separator chars (`-`, `_`, `/`, `.`) normalized before tag-to-module matching
 - **Wiki Unicode slugs**: `/` → `∕` (U+2215), `-` → `‒` (U+2012) in wiki page names (GitHub Wiki breaks otherwise)
-- **Pure utilities**: `src/utils/` files must be pure — take all dependencies as parameters, no singleton imports.
+- **Pure utilities**: `src/utils/` files must be pure — avoid importing the `config`/`context` singletons; pass required values as parameters.
   Service-layer files (`wiki.ts`, `releases.ts`, etc.) may use singletons and pass values down.
 - **Naming conventions**: `get*` accessors/lookups · `generate*` producers that may do I/O · `render*` template/string
   assembly
