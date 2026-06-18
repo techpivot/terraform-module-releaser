@@ -9,6 +9,7 @@ import { parseTerraformModules } from '@/parser';
 import * as terraformDocs from '@/terraform-docs';
 import type { ExecSyncError } from '@/types';
 import { WIKI_STATUS } from '@/utils/constants';
+import { removeDirectoryContents } from '@/utils/file';
 
 import { checkoutWiki, commitAndPushWikiChanges, generateWikiFiles, getWikiLink, getWikiStatus } from '@/wiki';
 import { endGroup, info, startGroup } from '@actions/core';
@@ -19,6 +20,14 @@ vi.mock('node:child_process', async () => {
   return {
     ...actual,
     execFileSync: vi.fn(),
+  };
+});
+
+vi.mock('@/utils/file', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/utils/file')>();
+  return {
+    ...actual,
+    removeDirectoryContents: vi.fn().mockImplementation(actual.removeDirectoryContents),
   };
 });
 
@@ -528,10 +537,17 @@ describe('wiki', async () => {
         return originalExecFileSync(...(args as Parameters<typeof originalExecFileSync>));
       });
 
-      const result = await getWikiStatus(terraformModules);
+      // Suppress stdout from re-installing terraform-docs (already installed in generateWikiFiles beforeAll)
+      const installSpy = vi.spyOn(terraformDocs, 'installTerraformDocs').mockImplementation(() => {});
 
-      expect(result.status).toBe(WIKI_STATUS.SUCCESS);
-      expect(result.errorMessage).toBeUndefined();
+      try {
+        const result = await getWikiStatus(terraformModules);
+
+        expect(result.status).toBe(WIKI_STATUS.SUCCESS);
+        expect(result.errorMessage).toBeUndefined();
+      } finally {
+        installSpy.mockRestore();
+      }
     });
 
     it('should return FAILURE_TERRAFORM_DOCS status when generateWikiFiles has module errors', async () => {
@@ -544,16 +560,23 @@ describe('wiki', async () => {
         return originalExecFileSync(...(args as Parameters<typeof originalExecFileSync>));
       });
 
+      // Suppress stdout from re-installing terraform-docs (already installed in generateWikiFiles beforeAll)
+      const installSpy = vi.spyOn(terraformDocs, 'installTerraformDocs').mockImplementation(() => {});
+
       // Force an invalid moduleRefMode to trigger terraform-docs errors
       // @ts-expect-error - Testing invalid moduleRefMode value
       config.set({ moduleRefMode: 'invalid-mode' });
 
-      const result = await getWikiStatus(terraformModules);
+      try {
+        const result = await getWikiStatus(terraformModules);
 
-      expect(result.status).toBe(WIKI_STATUS.FAILURE_TERRAFORM_DOCS_RUN);
-      expect(result.errorMessage).toBeDefined();
-      expect(result.terraformDocsErrors).toBeDefined();
-      expect(result.terraformDocsErrors?.size).toBeGreaterThan(0);
+        expect(result.status).toBe(WIKI_STATUS.FAILURE_TERRAFORM_DOCS_RUN);
+        expect(result.errorMessage).toBeDefined();
+        expect(result.terraformDocsErrors).toBeDefined();
+        expect(result.terraformDocsErrors?.size).toBeGreaterThan(0);
+      } finally {
+        installSpy.mockRestore();
+      }
     });
 
     it('should return singular terraform-docs failure message when exactly one module fails', async () => {
@@ -566,6 +589,9 @@ describe('wiki', async () => {
         return originalExecFileSync(...(args as Parameters<typeof originalExecFileSync>));
       });
 
+      // Suppress stdout from re-installing terraform-docs (already installed in generateWikiFiles beforeAll)
+      const installSpy = vi.spyOn(terraformDocs, 'installTerraformDocs').mockImplementation(() => {});
+
       // Force an invalid moduleRefMode to trigger terraform-docs errors
       // @ts-expect-error - Testing invalid moduleRefMode value
       config.set({ moduleRefMode: 'invalid-mode' });
@@ -575,11 +601,15 @@ describe('wiki', async () => {
         throw new Error('Expected at least one terraform module for this test');
       }
 
-      const result = await getWikiStatus([firstModule]);
+      try {
+        const result = await getWikiStatus([firstModule]);
 
-      expect(result.status).toBe(WIKI_STATUS.FAILURE_TERRAFORM_DOCS_RUN);
-      expect(result.terraformDocsErrors?.size).toBe(1);
-      expect(result.errorMessage).toContain('1 module');
+        expect(result.status).toBe(WIKI_STATUS.FAILURE_TERRAFORM_DOCS_RUN);
+        expect(result.terraformDocsErrors?.size).toBe(1);
+        expect(result.errorMessage).toContain('1 module');
+      } finally {
+        installSpy.mockRestore();
+      }
     });
 
     it('should return FAILURE_TERRAFORM_DOCS_INSTALL status when terraform-docs installation fails', async () => {
@@ -667,6 +697,64 @@ describe('wiki', async () => {
 
       expect(result.status).toBe(WIKI_STATUS.FAILURE_CHECKOUT);
       expect(result.errorMessage).toBe('string error');
+    });
+
+    it('should return FAILURE_TERRAFORM_DOCS_RUN when generateWikiFiles throws unexpectedly', async () => {
+      // Mock git commands as no-ops so checkout succeeds
+      vi.mocked(execFileSync).mockImplementation((...args: unknown[]) => {
+        const [command] = args as [string];
+        if (typeof command === 'string' && basename(command) === 'git') {
+          return Buffer.from('');
+        }
+        return originalExecFileSync(...(args as Parameters<typeof originalExecFileSync>));
+      });
+
+      // Suppress stdout from re-installing terraform-docs
+      const installSpy = vi.spyOn(terraformDocs, 'installTerraformDocs').mockImplementation(() => {});
+
+      // Make removeDirectoryContents throw to cause generateWikiFiles to propagate an unexpected error,
+      // which exercises the catch block (lines 175-176) in getWikiStatus
+      vi.mocked(removeDirectoryContents).mockImplementationOnce(() => {
+        throw new Error('ENOENT: no such file or directory');
+      });
+
+      try {
+        const result = await getWikiStatus([]);
+
+        expect(result.status).toBe(WIKI_STATUS.FAILURE_TERRAFORM_DOCS_RUN);
+        expect(result.errorMessage).toBe('ENOENT: no such file or directory');
+        expect(result.terraformDocsErrors).toBeUndefined();
+      } finally {
+        installSpy.mockRestore();
+      }
+    });
+
+    it('should handle non-Error throws from generateWikiFiles', async () => {
+      // Mock git commands as no-ops so checkout succeeds
+      vi.mocked(execFileSync).mockImplementation((...args: unknown[]) => {
+        const [command] = args as [string];
+        if (typeof command === 'string' && basename(command) === 'git') {
+          return Buffer.from('');
+        }
+        return originalExecFileSync(...(args as Parameters<typeof originalExecFileSync>));
+      });
+
+      const installSpy = vi.spyOn(terraformDocs, 'installTerraformDocs').mockImplementation(() => {});
+
+      // eslint-disable-next-line no-throw-literal
+      vi.mocked(removeDirectoryContents).mockImplementationOnce(() => {
+        throw 'disk quota exceeded'; // eslint-disable-line no-throw-literal
+      });
+
+      try {
+        const result = await getWikiStatus([]);
+
+        expect(result.status).toBe(WIKI_STATUS.FAILURE_TERRAFORM_DOCS_RUN);
+        expect(result.errorMessage).toBe('disk quota exceeded');
+        expect(result.terraformDocsErrors).toBeUndefined();
+      } finally {
+        installSpy.mockRestore();
+      }
     });
   });
 });

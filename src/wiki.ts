@@ -162,12 +162,20 @@ export async function getWikiStatus(terraformModules: TerraformModule[]): Promis
     };
   }
 
-  const { moduleErrors } = await generateWikiFiles(terraformModules);
-  if (moduleErrors.size > 0) {
+  try {
+    const { moduleErrors } = await generateWikiFiles(terraformModules);
+    if (moduleErrors.size > 0) {
+      return {
+        status: WIKI_STATUS.FAILURE_TERRAFORM_DOCS_RUN,
+        errorMessage: `terraform-docs validation failed for ${moduleErrors.size} module${moduleErrors.size > 1 ? 's' : ''}`,
+        terraformDocsErrors: moduleErrors,
+      };
+    }
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : String(err).trim();
     return {
       status: WIKI_STATUS.FAILURE_TERRAFORM_DOCS_RUN,
-      errorMessage: `terraform-docs validation failed for ${moduleErrors.size} module${moduleErrors.size > 1 ? 's' : ''}`,
-      terraformDocsErrors: moduleErrors,
+      errorMessage,
     };
   }
 

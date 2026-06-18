@@ -22,14 +22,15 @@ export interface WikiStatusResult {
 
   /**
    * Human-readable error message set for any failure status.
-   * Present when status is `FAILURE_CHECKOUT` or `FAILURE_TERRAFORM_DOCS`.
+   * Present when status is `FAILURE_CHECKOUT`, `FAILURE_TERRAFORM_DOCS_INSTALL`,
+   * or `FAILURE_TERRAFORM_DOCS_RUN`.
    * Used to fail the GitHub Action after posting the PR comment.
    */
   errorMessage?: string;
 
   /**
    * Map of module names to terraform-docs errors for display in the PR comment.
-   * Only present when status is `FAILURE_TERRAFORM_DOCS`.
+   * Only present when status is `FAILURE_TERRAFORM_DOCS_RUN`.
    */
   terraformDocsErrors?: Map<string, string>;
 }
