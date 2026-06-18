@@ -63,15 +63,16 @@ jobs:
           FIX_TYPESCRIPT_PRETTIER: false # Using biome
           FIX_JAVASCRIPT_PRETTIER: false # Using biome
           VALIDATE_ALL_CODEBASE: true
-          VALIDATE_JAVASCRIPT_STANDARD: false # Using biome
+          VALIDATE_BIOME_FORMAT: false # Super-Linter Biome runtime can lag project Biome config schema. When Super Linter > 8.6.0, likely remove this line to re-enable.
+          VALIDATE_BIOME_LINT: false # Super-Linter Biome runtime can lag project Biome config schema. When Super Linter > 8.6.0, likely remove this line to re-enable.
+          VALIDATE_GITHUB_ACTIONS_ZIZMOR: false # This is new. Will investigate this further
           VALIDATE_JAVASCRIPT_PRETTIER: false # Using biome
+          VALIDATE_JAVASCRIPT_STANDARD: false # Using biome
           VALIDATE_JSON_PRETTIER: false # Using biome
           VALIDATE_JSCPD: false # Using biome
           VALIDATE_MARKDOWN: false # Not needed, using textlint and prettier
           VALIDATE_TERRAFORM_FMT: false # Terraform modules here aren't needed (They're for testing only)
           VALIDATE_TERRAFORM_TFLINT: false # Terraform modules here aren't needed (They're for testing only)
-          VALIDATE_TYPESCRIPT_STANDARD: false # Using biome
           VALIDATE_TYPESCRIPT_ES: false # Using biome
+          VALIDATE_TYPESCRIPT_STANDARD: false # Using biome
           VALIDATE_TYPESCRIPT_PRETTIER: false # Using biome
-          VALIDATE_GITHUB_ACTIONS_ZIZMOR: false # This is new. Will investigate this further
-
