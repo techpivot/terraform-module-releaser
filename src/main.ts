@@ -25,7 +25,8 @@ function initialize(): { config: Config; context: Context } {
 
 /**
  * Handles pull request open/sync events: determines wiki status (including terraform-docs
- * pre-flight validation), posts a release plan comment, and re-throws checkout errors.
+ * pre-flight validation), posts a release plan comment, and re-throws wiki pre-flight
+ * failures when present.
  *
  * @param {TerraformModule[]} terraformModules - List of Terraform modules associated with this workspace.
  * @param {GitHubRelease[]} releasesToDelete - List of Terraform releases to delete.

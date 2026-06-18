@@ -177,9 +177,9 @@ describe('log-buffer', () => {
         bufferedInfo('outer-2');
       });
 
-      // Inner flushes first (within outer's execution), then outer flushes
-      // Inner messages go to the outer buffer since AsyncLocalStorage.run creates a new store
-      // that shadows the outer one — inner flush calls info() which the outer buffer captures
+      // Inner flushes first (within outer's execution), then outer flushes.
+      // Note: inner flushing uses core.info/core.error directly, so it is not captured by the outer buffer
+      // (only bufferedInfo/bufferedError calls are stored).
       expect(callOrder).toContain('inner-1');
       expect(callOrder).toContain('inner-2');
       expect(callOrder).toContain('outer-1');
