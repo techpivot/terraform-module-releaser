@@ -249,8 +249,8 @@ export async function generateTerraformDocs({ name, directory }: TerraformModule
     log(`Using config: ${userConfigPath}`);
     try {
       const rawContent = await readFile(userConfigPath, 'utf-8');
-      const parsed = yaml.load(rawContent);
-      if (parsed && typeof parsed === 'object') {
+      const parsed = yaml.load(rawContent, { schema: yaml.JSON_SCHEMA });
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
         userConfig = parsed as Record<string, unknown>;
       }
     } catch (error) {

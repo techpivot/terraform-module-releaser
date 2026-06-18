@@ -514,60 +514,63 @@ export async function generateWikiFiles(terraformModules: TerraformModule[]): Pr
   const startTime = performance.now();
   startGroup('Generating wiki files');
 
-  // Clears the contents of the Wiki directory to ensure no stale content remains,
-  // as the Wiki is fully regenerated during each run.
-  //
-  // This process:
-  // - Logs the cleanup action for tracking purposes.
-  // - Removes all files and directories within `WIKI_DIRECTORY` except `.git`,
-  //   which is preserved to maintain version control and Git history.
-  //
-  // This approach supports:
-  // - Ensuring the Wiki remains up-to-date without leftover or outdated files.
-  // - Avoiding conflicts or unexpected results due to stale data.
-  info('Removing existing wiki files...');
-  removeDirectoryContents(join(context.workspaceDir, WIKI_SUBDIRECTORY_NAME), ['.git']);
+  try {
+    // Clears the contents of the Wiki directory to ensure no stale content remains,
+    // as the Wiki is fully regenerated during each run.
+    //
+    // This process:
+    // - Logs the cleanup action for tracking purposes.
+    // - Removes all files and directories within `WIKI_DIRECTORY` except `.git`,
+    //   which is preserved to maintain version control and Git history.
+    //
+    // This approach supports:
+    // - Ensuring the Wiki remains up-to-date without leftover or outdated files.
+    // - Avoiding conflicts or unexpected results due to stale data.
+    info('Removing existing wiki files...');
+    removeDirectoryContents(join(context.workspaceDir, WIKI_SUBDIRECTORY_NAME), ['.git']);
 
-  // Set parallelism to slightly more than the number of CPU cores to ensure
-  // CPU-bound tasks (e.g., regex) and I/O-bound tasks (file writing)
-  // are handled efficiently, keeping the pipeline saturated.
-  const parallelism = cpus().length + 2;
+    // Set parallelism to slightly more than the number of CPU cores to ensure
+    // CPU-bound tasks (e.g., regex) and I/O-bound tasks (file writing)
+    // are handled efficiently, keeping the pipeline saturated.
+    const parallelism = cpus().length + 2;
 
-  info(`Using parallelism: ${parallelism}`);
+    info(`Using parallelism: ${parallelism}`);
 
-  const limit = pLimit(parallelism);
-  const updatedFiles: string[] = [];
-  const moduleErrors = new Map<string, string>();
-  const tasks = terraformModules.map((module) => {
-    return limit(() =>
-      withBufferedLogs(async () => {
-        try {
-          updatedFiles.push(await generateWikiTerraformModule(module));
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          bufferedError(message);
-          moduleErrors.set(module.name, message);
-        }
-      }),
-    );
-  });
-  await Promise.all(tasks);
+    const limit = pLimit(parallelism);
+    const updatedFiles: string[] = [];
+    const moduleErrors = new Map<string, string>();
+    const tasks = terraformModules.map((module) => {
+      return limit(() =>
+        withBufferedLogs(async () => {
+          try {
+            updatedFiles.push(await generateWikiTerraformModule(module));
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            bufferedError(message);
+            moduleErrors.set(module.name, message);
+          }
+        }),
+      );
+    });
+    await Promise.all(tasks);
 
-  updatedFiles.push(await generateWikiHome(terraformModules));
-  updatedFiles.push(await generateWikiSidebar(terraformModules));
-  const footerFile = await generateWikiFooter();
-  if (footerFile) {
-    updatedFiles.push(footerFile);
+    updatedFiles.push(await generateWikiHome(terraformModules));
+    updatedFiles.push(await generateWikiSidebar(terraformModules));
+    const footerFile = await generateWikiFooter();
+    if (footerFile) {
+      updatedFiles.push(footerFile);
+    }
+
+    info('Wiki files generated:');
+    info(JSON.stringify(updatedFiles, null, 2));
+
+    const totalElapsed = ((performance.now() - startTime) / 1000).toFixed(2);
+    info(`Total wiki generation time: ${totalElapsed}s`);
+
+    return { updatedFiles, moduleErrors };
+  } finally {
+    endGroup();
   }
-
-  info('Wiki files generated:');
-  info(JSON.stringify(updatedFiles, null, 2));
-
-  const totalElapsed = ((performance.now() - startTime) / 1000).toFixed(2);
-  info(`Total wiki generation time: ${totalElapsed}s`);
-  endGroup();
-
-  return { updatedFiles, moduleErrors };
 }
 
 /**
