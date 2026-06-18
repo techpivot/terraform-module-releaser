@@ -645,7 +645,12 @@ describe('pull-request', () => {
         },
         {
           status: WIKI_STATUS.FAILURE_TERRAFORM_DOCS_RUN,
-          expectedContent: 'terraform-docs validation failed for **0** module',
+          errorMessage: 'unexpected wiki generation failure',
+          expectedContent: '**⚠️ terraform-docs validation failed:**',
+        },
+        {
+          status: WIKI_STATUS.FAILURE_TERRAFORM_DOCS_RUN,
+          expectedContent: 'Unknown terraform-docs validation failure.',
         },
       ];
 
@@ -666,6 +671,14 @@ describe('pull-request', () => {
             body: expect.stringContaining(testCase.expectedContent),
           }),
         );
+
+        if (testCase.errorMessage) {
+          expect(context.octokit.rest.issues.createComment).toHaveBeenCalledWith(
+            expect.objectContaining({
+              body: expect.stringContaining(testCase.errorMessage),
+            }),
+          );
+        }
       }
     });
 

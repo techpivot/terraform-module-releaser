@@ -304,14 +304,25 @@ export async function addReleasePlanComment(
         );
         break;
       case WIKI_STATUS.FAILURE_TERRAFORM_DOCS_RUN: {
-        const count = wikiStatus.terraformDocsErrors?.size ?? 0;
+        const terraformDocsErrors = wikiStatus.terraformDocsErrors;
+        if (!terraformDocsErrors || terraformDocsErrors.size === 0) {
+          const errorMessage = wikiStatus.errorMessage ?? 'Unknown terraform-docs validation failure.';
+          commentBody.push('**⚠️ terraform-docs validation failed:**', '```', errorMessage, '```');
+          break;
+        }
+
+        const count = terraformDocsErrors.size;
         const terraformDocsValidationLines = [
           `⚠️ Wiki enabled, but terraform-docs validation failed for **${count}** module${count > 1 ? 's' : ''}:\n`,
           '| Module | Error |',
           '|--|--|',
         ];
-        for (const [moduleName, errorMessage] of wikiStatus.terraformDocsErrors ?? []) {
-          const sanitized = errorMessage.replaceAll('|', String.raw`\|`).replaceAll('\n', ' ').trim();
+        for (const [moduleName, errorMessage] of terraformDocsErrors) {
+          const sanitized = errorMessage
+            .replaceAll('|', String.raw`\|`)
+            .replaceAll('\r', ' ')
+            .replaceAll('\n', ' ')
+            .trim();
           terraformDocsValidationLines.push(`| \`${moduleName}\` | ${sanitized} |`);
         }
         terraformDocsValidationLines.push(
