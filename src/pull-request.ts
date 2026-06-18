@@ -305,17 +305,19 @@ export async function addReleasePlanComment(
         break;
       case WIKI_STATUS.FAILURE_TERRAFORM_DOCS_RUN: {
         const count = wikiStatus.terraformDocsErrors?.size ?? 0;
-        commentBody.push(
+        const terraformDocsValidationLines = [
           `⚠️ Wiki enabled, but terraform-docs validation failed for **${count}** module${count > 1 ? 's' : ''}:\n`,
-        );
-        commentBody.push('| Module | Error |', '|--|--|');
+          '| Module | Error |',
+          '|--|--|',
+        ];
         for (const [moduleName, errorMessage] of wikiStatus.terraformDocsErrors ?? []) {
           const sanitized = errorMessage.replaceAll('|', String.raw`\|`).replaceAll('\n', ' ').trim();
-          commentBody.push(`| \`${moduleName}\` | ${sanitized} |`);
+          terraformDocsValidationLines.push(`| \`${moduleName}\` | ${sanitized} |`);
         }
-        commentBody.push(
+        terraformDocsValidationLines.push(
           '\nPlease fix the `.terraform-docs.yml` configuration before merging to avoid broken wiki pages.',
         );
+        commentBody.push(...terraformDocsValidationLines);
         break;
       }
     }
@@ -340,8 +342,8 @@ export async function addReleasePlanComment(
 
         commentBody.push(
           `**⚠️ The following ${releaseText} no longer referenced by any source Terraform modules. ${pronounText} will be automatically deleted.**`,
+          ` - ${releaseList}`,
         );
-        commentBody.push(` - ${releaseList}`);
       }
 
       if (tagsToDelete.length > 0) {
@@ -356,8 +358,8 @@ export async function addReleasePlanComment(
 
         commentBody.push(
           `**⚠️ The following ${tagText} no longer referenced by any source Terraform modules. ${pronounText} will be automatically deleted.**`,
+          ` - ${tagList}`,
         );
-        commentBody.push(` - ${tagList}`);
       }
     }
 
