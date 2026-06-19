@@ -145,7 +145,12 @@ export async function getWikiStatus(terraformModules: TerraformModule[]): Promis
   try {
     checkoutWiki();
   } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : String(err).trim();
+    const stderr = (err as { stderr?: Buffer | string } | undefined)?.stderr;
+    const stderrText = typeof stderr === 'string' ? stderr : stderr?.toString('utf8');
+    const errorMessage = [err instanceof Error ? err.message : String(err), stderrText]
+      .filter(Boolean)
+      .join('\n')
+      .trim();
     return {
       status: WIKI_STATUS.FAILURE_CHECKOUT,
       errorMessage,
@@ -155,7 +160,12 @@ export async function getWikiStatus(terraformModules: TerraformModule[]): Promis
   try {
     installTerraformDocs(config.terraformDocsVersion);
   } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : String(err).trim();
+    const stderr = (err as { stderr?: Buffer | string } | undefined)?.stderr;
+    const stderrText = typeof stderr === 'string' ? stderr : stderr?.toString('utf8');
+    const errorMessage = [err instanceof Error ? err.message : String(err), stderrText]
+      .filter(Boolean)
+      .join('\n')
+      .trim();
     return {
       status: WIKI_STATUS.FAILURE_TERRAFORM_DOCS_INSTALL,
       errorMessage,

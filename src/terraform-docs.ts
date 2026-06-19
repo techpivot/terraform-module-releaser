@@ -261,10 +261,15 @@ export async function generateTerraformDocs({ name, directory }: TerraformModule
   }
 
   // Merge: spread all user settings, then override the keys we control
+  const userOutput =
+    userConfig.output && typeof userConfig.output === 'object' && !Array.isArray(userConfig.output)
+      ? (userConfig.output as Record<string, unknown>)
+      : {};
+
   const mergedConfig: Record<string, unknown> = {
     ...userConfig,
     formatter: 'markdown table',
-    output: { file: '', mode: 'inject' },
+    output: { ...userOutput, file: '', mode: 'inject' },
   };
 
   log(

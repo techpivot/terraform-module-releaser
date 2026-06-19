@@ -104,3 +104,17 @@ When updating the repo's development environment, execute the following protocol
 - Compile the output using `npm run package`.
 - Run tests (`npm run test`) to ensure the compiled output works perfectly across all mock scenarios.
 - Run linters (`npm run check` and `npm run textlint`) to verify pristine formatting.
+
+---
+
+## 5. Bumping the GitHub Actions Runtime (`action.yml`)
+
+This is a **breaking change for all consumers** and requires a new major version release.
+
+1. Check GitHub's supported runtimes:
+   <https://docs.github.com/en/actions/creating-actions/metadata-syntax-for-github-actions#runs-for-javascript-actions>
+2. Verify the compiled `dist/` output is valid ECMAScript for the target runtime — review `tsconfig.json` `target` and
+   `lib` fields and adjust if needed.
+3. Update `action.yml` `runs.using:` to the new runtime value (e.g. `node24` → `node26`).
+4. Bump the action major version, tag a release, and announce in release notes.
+5. Update all documentation references (`README.md`, `CONTRIBUTING.md`, `docs/development.md`, `AGENTS.md`).
