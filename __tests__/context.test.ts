@@ -2,7 +2,11 @@ import { existsSync, readFileSync } from 'node:fs';
 import { clearContextForTesting, context, getContext } from '@/context';
 import { createPullRequestMock } from '@/mocks/context';
 import { info, startGroup } from '@actions/core';
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+// The global setup auto-mocks @/context; unmock it here so this test suite
+// exercises the real implementation.
+vi.unmock('@/context');
 
 // Mock node:fs required for reading pull-request file information (Note: Appears we can't spy on functions via node:fs)
 vi.mock('node:fs', async () => {
@@ -26,13 +30,6 @@ describe('context', () => {
     'GITHUB_SERVER_URL',
     'GITHUB_WORKSPACE',
   ];
-
-  beforeAll(() => {
-    // We globally mock context to facilitate majority of testing; however,
-    // this test case needs to explicitly test core functionality so we reset the
-    // mock implementation for this test.
-    vi.unmock('@/context');
-  });
 
   beforeEach(() => {
     clearContextForTesting();

@@ -39,8 +39,8 @@
     ]
   },
   "scripts": {
-    "check": "biome check . && npx prettier -c \"{*.md,docs/**/*.md,.github/**/*.md}\" \"**/*.yml\"",
-    "check:fix": "biome check --write --unsafe . && npx prettier --list-different -w \"{*.md,docs/**/*.md,.github/**/*.md}\" \"**/*.yml\"",
+    "check": "biome check . && npx prettier -c \"{*.md,{docs,.github,.claude}/**/*.md}\" \"**/*.yml\"",
+    "check:fix": "biome check --write --unsafe . && npx prettier --list-different -w \"{*.md,{docs,.github,.claude}/**/*.md}\" \"**/*.yml\"",
     "dev:parse-modules": "tsx scripts/dev-parse-modules.ts",
     "textlint": "textlint -c .github/linters/.textlintrc **/*.md",
     "textlint:fix": "textlint -c .github/linters/.textlintrc --fix **/*.md",
@@ -51,7 +51,8 @@
     "test:parse-modules": "tsx scripts/parse-modules-test.ts",
     "changelog": "node scripts/changelog.js 10.0.0",
     "coverage": "make-coverage-badge --output-path ./assets/coverage-badge.svg",
-    "terraform-docs-version": "gh api repos/terraform-docs/terraform-docs/releases/latest --jq '.tag_name'"
+    "terraform-docs-version": "gh api repos/terraform-docs/terraform-docs/releases/latest --jq '.tag_name'",
+    "update-deps": "npm update --no-fund && npm install --no-fund"
   },
   "dependencies": {
     "@actions/core": "^3.0.1",
@@ -60,6 +61,7 @@
     "@octokit/plugin-rest-endpoint-methods": "^17.0.0",
     "@octokit/request-error": "^7.1.0",
     "conventional-commits-parser": "^6.3.0",
+    "js-yaml": "^4.1.1",
     "minimatch": "^10.2.4",
     "p-limit": "^7.3.0",
     "which": "^7.0.0"
@@ -74,7 +76,6 @@
     "@types/which": "^3.0.4",
     "@vercel/ncc": "^0.44.0",
     "@vitest/coverage-v8": "^4.1.8",
-    "js-yaml": "^4.2.0",
     "make-coverage-badge": "^1.2.0",
     "openai": "^6.42.0",
     "prettier": "^3.8.4",
@@ -85,5 +86,8 @@
     "tsx": "^4.22.4",
     "typescript": "^6.0.3",
     "vitest": "^4.0.18"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true
   }
 }

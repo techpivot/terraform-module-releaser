@@ -11,16 +11,13 @@ import {
 } from '@/tests/helpers/inputs';
 import { VALID_TAG_DIRECTORY_SEPARATORS } from '@/utils/constants';
 import { endGroup, getBooleanInput, getInput, info, startGroup } from '@actions/core';
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+// The global setup auto-mocks @/config; unmock it here so this test suite
+// exercises the real implementation.
+vi.unmock('@/config');
 
 describe('config', () => {
-  beforeAll(() => {
-    // We globally mock context to facilitate majority of testing; however,
-    // this test case needs to explicitly test core functionality so we reset the
-    // mock implementation for this test.
-    vi.unmock('@/config');
-  });
-
   beforeEach(() => {
     // The config is cached. To ensure each test starts with a clean slate, we implicitly clear it.
     // We don't do this globally in setup as it's not necessary for all tests.

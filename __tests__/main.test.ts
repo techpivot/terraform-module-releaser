@@ -5,10 +5,10 @@ import { parseTerraformModules } from '@/parser';
 import { addPostReleaseComment, addReleasePlanComment, getPullRequestCommits, hasReleaseComment } from '@/pull-request';
 import { createTaggedReleases, deleteReleases, getAllReleases } from '@/releases';
 import { deleteTags, getAllTags } from '@/tags';
-import { ensureTerraformDocsConfigDoesNotExist, installTerraformDocs } from '@/terraform-docs';
+import { installTerraformDocs } from '@/terraform-docs';
 import { TerraformModule } from '@/terraform-module';
 import { createMockTerraformModule } from '@/tests/helpers/terraform-module';
-import type { ExecSyncError, GitHubRelease } from '@/types';
+import type { GitHubRelease } from '@/types';
 import { WIKI_STATUS } from '@/utils/constants';
 import { checkoutWiki, commitAndPushWikiChanges, generateWikiFiles, getWikiStatus } from '@/wiki';
 import { info, setFailed, setOutput } from '@actions/core';
@@ -73,7 +73,8 @@ describe('main', () => {
     vi.spyOn(TerraformModule, 'getReleasesToDelete').mockReturnValue([]);
     vi.spyOn(TerraformModule, 'getTagsToDelete').mockReturnValue([]);
     vi.spyOn(TerraformModule, 'getModulesNeedingRelease').mockReturnValue([]);
-    vi.mocked(getWikiStatus).mockReturnValue({ status: WIKI_STATUS.SUCCESS });
+    vi.mocked(getWikiStatus).mockResolvedValue({ status: WIKI_STATUS.SUCCESS });
+    vi.mocked(generateWikiFiles).mockResolvedValue({ updatedFiles: [], moduleErrors: new Map() });
   });
 
   it('should exit early if release comment exists', async () => {
@@ -229,7 +230,7 @@ describe('main', () => {
     });
 
     it('should handle non-merge event (pull request event)', async () => {
-      vi.mocked(getWikiStatus).mockReturnValue({ status: WIKI_STATUS.SUCCESS });
+      vi.mocked(getWikiStatus).mockResolvedValue({ status: WIKI_STATUS.SUCCESS });
 
       await run();
 
@@ -243,41 +244,32 @@ describe('main', () => {
       expect(addPostReleaseComment).not.toHaveBeenCalled();
       expect(deleteReleases).not.toHaveBeenCalled();
       expect(deleteTags).not.toHaveBeenCalled();
-      expect(installTerraformDocs).not.toHaveBeenCalled();
       expect(checkoutWiki).not.toHaveBeenCalled();
+      expect(commitAndPushWikiChanges).not.toHaveBeenCalled();
+
+      // Should call getWikiStatus for pre-flight validation
+      expect(getWikiStatus).toHaveBeenCalledWith([mockTerraformModule]);
 
       // Should still set outputs
       expect(setOutput).toHaveBeenCalled();
     });
 
     it('should handle wiki checkout errors and add release plan comment', async () => {
-      const mockError: ExecSyncError = Object.assign(new Error('Wiki checkout failed\nAdditional error details'), {
-        name: 'ExecSyncError',
-        pid: 12345,
-        status: 1,
-        stdout: Buffer.from(''),
-        stderr: Buffer.from('Wiki checkout failed\nAdditional error details'),
-        signal: null,
-        error: new Error('Wiki checkout failed'),
-      });
-
-      vi.mocked(getWikiStatus).mockReturnValue({
-        status: WIKI_STATUS.FAILURE,
-        error: mockError,
-        errorSummary: 'Wiki checkout failed',
+      vi.mocked(getWikiStatus).mockResolvedValue({
+        status: WIKI_STATUS.FAILURE_CHECKOUT,
+        errorMessage: 'Wiki checkout failed',
       });
 
       await run();
 
       // Should call addReleasePlanComment with the error status
       expect(addReleasePlanComment).toHaveBeenCalledWith([mockTerraformModule], [], [], {
-        status: WIKI_STATUS.FAILURE,
-        error: mockError,
-        errorSummary: 'Wiki checkout failed',
+        status: WIKI_STATUS.FAILURE_CHECKOUT,
+        errorMessage: 'Wiki checkout failed',
       });
 
       // Should call setFailed with the error message after the error is thrown from handlePullRequestEvent
-      expect(setFailed).toHaveBeenCalledWith('Wiki checkout failed\nAdditional error details');
+      expect(setFailed).toHaveBeenCalledWith('Wiki checkout failed');
     });
   });
 
@@ -307,7 +299,6 @@ describe('main', () => {
       expect(deleteReleases).toHaveBeenCalledWith([]);
       expect(deleteTags).toHaveBeenCalledWith([]);
       expect(installTerraformDocs).toHaveBeenCalledWith(config.terraformDocsVersion);
-      expect(ensureTerraformDocsConfigDoesNotExist).toHaveBeenCalled();
       expect(checkoutWiki).toHaveBeenCalled();
       expect(generateWikiFiles).toHaveBeenCalledWith([mockTerraformModule]);
       expect(commitAndPushWikiChanges).toHaveBeenCalled();
@@ -326,7 +317,6 @@ describe('main', () => {
       expect(deleteReleases).toHaveBeenCalledWith([]);
       expect(deleteTags).toHaveBeenCalledWith([]);
       expect(installTerraformDocs).not.toHaveBeenCalled();
-      expect(ensureTerraformDocsConfigDoesNotExist).not.toHaveBeenCalled();
       expect(checkoutWiki).not.toHaveBeenCalled();
       expect(generateWikiFiles).not.toHaveBeenCalled();
       expect(commitAndPushWikiChanges).not.toHaveBeenCalled();
@@ -334,6 +324,33 @@ describe('main', () => {
 
       // Should still set outputs
       expect(setOutput).toHaveBeenCalled();
+    });
+
+    it('should handle merge event with terraform-docs generation errors', async () => {
+      config.disableWiki = false;
+      vi.mocked(generateWikiFiles).mockResolvedValue({
+        updatedFiles: [],
+        moduleErrors: new Map([
+          ['vpc-endpoint', 'Invalid module_ref_mode'],
+          ['kms', 'terraform-docs failed'],
+        ]),
+      });
+
+      await run();
+
+      expect(setFailed).toHaveBeenCalledWith('terraform-docs generation failed for 2 modules (see errors above)');
+    });
+
+    it('should handle merge event with a single terraform-docs generation error', async () => {
+      config.disableWiki = false;
+      vi.mocked(generateWikiFiles).mockResolvedValue({
+        updatedFiles: [],
+        moduleErrors: new Map([['vpc-endpoint', 'Invalid module_ref_mode']]),
+      });
+
+      await run();
+
+      expect(setFailed).toHaveBeenCalledWith('terraform-docs generation failed for 1 module (see errors above)');
     });
 
     it('should handle merge event with delete legacy tags disabled', async () => {

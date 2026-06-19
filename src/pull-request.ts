@@ -217,9 +217,12 @@ export async function addReleasePlanComment(
     // Initialize the comment body as an array of strings with appropriate header based on wiki status
     const commentBody: string[] = [PR_SUMMARY_MARKER];
 
-    if (wikiStatus.status === WIKI_STATUS.FAILURE) {
-      commentBody.push('\n# ⚠️ Release Plan\n');
-      commentBody.push('> ⚠️ **IMPORTANT**: _See Wiki Status error below._\n');
+    if (
+      wikiStatus.status === WIKI_STATUS.FAILURE_CHECKOUT ||
+      wikiStatus.status === WIKI_STATUS.FAILURE_TERRAFORM_DOCS_RUN ||
+      wikiStatus.status === WIKI_STATUS.FAILURE_TERRAFORM_DOCS_INSTALL
+    ) {
+      commentBody.push('\n# ⚠️ Release Plan\n', '> ⚠️ **IMPORTANT**: _See Wiki Status error below._\n');
     } else {
       commentBody.push('\n# 📋 Release Plan\n');
     }
@@ -281,15 +284,53 @@ export async function addReleasePlanComment(
       case WIKI_STATUS.SUCCESS:
         commentBody.push('✅ Enabled');
         break;
-      case WIKI_STATUS.FAILURE:
-        commentBody.push('**⚠️ Failed to checkout wiki:**');
-        commentBody.push('```');
-        commentBody.push(`${wikiStatus.errorSummary}`);
-        commentBody.push('```');
+
+      case WIKI_STATUS.FAILURE_CHECKOUT:
         commentBody.push(
+          '**⚠️ Failed to checkout wiki:**',
+          '```',
+          `${wikiStatus.errorMessage}`,
+          '```',
           `Please consult the [README.md](${PROJECT_URL}/blob/main/README.md#getting-started) for additional information (**Ensure the Wiki is initialized**).`,
         );
         break;
+      case WIKI_STATUS.FAILURE_TERRAFORM_DOCS_INSTALL:
+        commentBody.push(
+          '**⚠️ terraform-docs installation failed:**',
+          '```',
+          `${wikiStatus.errorMessage}`,
+          '```',
+          `Please consult the [README.md](${PROJECT_URL}/blob/main/README.md#terraform-docs-installation) for troubleshooting terraform-docs installation on the runner.`,
+        );
+        break;
+      case WIKI_STATUS.FAILURE_TERRAFORM_DOCS_RUN: {
+        const terraformDocsErrors = wikiStatus.terraformDocsErrors;
+        if (!terraformDocsErrors || terraformDocsErrors.size === 0) {
+          const errorMessage = wikiStatus.errorMessage ?? 'Unknown terraform-docs validation failure.';
+          commentBody.push('**⚠️ terraform-docs validation failed:**', '```', errorMessage, '```');
+          break;
+        }
+
+        const count = terraformDocsErrors.size;
+        const terraformDocsValidationLines = [
+          `⚠️ Wiki enabled, but terraform-docs validation failed for **${count}** module${count > 1 ? 's' : ''}:\n`,
+          '| Module | Error |',
+          '|--|--|',
+        ];
+        for (const [moduleName, errorMessage] of terraformDocsErrors) {
+          const sanitized = errorMessage
+            .replaceAll('|', String.raw`\|`)
+            .replaceAll('\r', ' ')
+            .replaceAll('\n', ' ')
+            .trim();
+          terraformDocsValidationLines.push(`| \`${moduleName}\` | ${sanitized} |`);
+        }
+        terraformDocsValidationLines.push(
+          '\nPlease fix the terraform-docs errors above (often caused by `.terraform-docs.yml`) before merging to avoid broken wiki pages.',
+        );
+        commentBody.push(...terraformDocsValidationLines);
+        break;
+      }
     }
 
     // Automated Tag Cleanup
@@ -312,8 +353,8 @@ export async function addReleasePlanComment(
 
         commentBody.push(
           `**⚠️ The following ${releaseText} no longer referenced by any source Terraform modules. ${pronounText} will be automatically deleted.**`,
+          ` - ${releaseList}`,
         );
-        commentBody.push(` - ${releaseList}`);
       }
 
       if (tagsToDelete.length > 0) {
@@ -328,8 +369,8 @@ export async function addReleasePlanComment(
 
         commentBody.push(
           `**⚠️ The following ${tagText} no longer referenced by any source Terraform modules. ${pronounText} will be automatically deleted.**`,
+          ` - ${tagList}`,
         );
-        commentBody.push(` - ${tagList}`);
       }
     }
 

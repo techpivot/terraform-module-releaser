@@ -1,5 +1,5 @@
 {
-  "name": "node:25",
+  "name": "node:26",
   "image": "mcr.microsoft.com/devcontainers/base:trixie",
   "mounts": [
     "source=${localWorkspaceFolderBasename}-node_modules,target=${containerWorkspaceFolder}/node_modules,type=volume"
@@ -53,7 +53,7 @@
   "features": {
     "ghcr.io/devcontainers/features/github-cli:1": {},
     "ghcr.io/devcontainers/features/node:1": {
-      "version": "25"
+      "version": "26"
     }
   }
 }

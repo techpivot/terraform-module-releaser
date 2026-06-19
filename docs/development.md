@@ -9,7 +9,7 @@ Releaser project.
 
 The repository includes a pre-configured devcontainer with:
 
-- **Base image**: `mcr.microsoft.com/devcontainers/base:trixie` with Node.js 25 feature
+- **Base image**: `mcr.microsoft.com/devcontainers/base:trixie` with Node.js 26 feature
 - **Named volume**: `node_modules` volume persists across container rebuilds
 - **Post-create script**: Sets Git safe directory, fixes node_modules ownership, runs `npm install`
 - **Visual Studio Code extensions**: Biome, Prettier, GitHub Actions, Markdown tools, GitHub PR extension
@@ -18,7 +18,7 @@ The repository includes a pre-configured devcontainer with:
 
 ### Manual Setup
 
-1. Install Node.js 25+ (see `.node-version`)
+1. Install Node.js 26+ (see `.node-version`)
 2. Run `npm ci --no-fund`
 3. Export `GITHUB_TOKEN` for integration tests
 
@@ -31,12 +31,12 @@ The repository includes a pre-configured devcontainer with:
 3. Add or update tests in `__tests__/`
 4. Run validation:
 
-```bash
-npm run check:fix       # Biome lint/format + Prettier (md/yml)
-npm run textlint:fix    # Prose linting for markdown
-npm run typecheck       # TypeScript strict compilation check
-npm run test            # Full test suite with coverage
-```
+   ```bash
+   npm run check:fix       # Biome lint/format + Prettier (md/yml)
+   npm run textlint:fix    # Prose linting for markdown
+   npm run typecheck       # TypeScript strict compilation check
+   npm run test            # Full test suite with coverage
+   ```
 
 5. Commit using Conventional Commits format
 
