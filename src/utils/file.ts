@@ -175,11 +175,12 @@ export function findTerraformModuleDirectories(workspaceDir: string, modulePathI
  * Gets the relative path of the Terraform module directory associated with a specified file.
  *
  * Traverses upward from the file's directory to locate the nearest Terraform module directory.
- * Returns the module's path relative to the current working directory.
+ * Returns the module's path relative to the provided workspace directory.
  *
  * @param {string} filePath - The absolute or relative path of the file to analyze.
- * @returns {string | null} Relative path to the associated Terraform module directory, or null
- *                          if no directory is found.
+ * @param {string} workspaceDir - The workspace root directory used as the base for relative paths.
+ * @returns {string | null} Relative path to the associated Terraform module directory from
+ *                          workspaceDir, or null if no directory is found.
  */
 export function getRelativeTerraformModulePathFromFilePath(filePath: string, workspaceDir: string): string | null {
   const rootDir = resolve(workspaceDir);
