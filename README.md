@@ -507,8 +507,9 @@ a module, it searches for a `.terraform-docs.yml` file in the following order:
 4. The workspace root directory and its `.config/` subdirectory
 
 The first config file found wins — closest to the module takes precedence. If found, user settings are preserved (e.g.,
-`content`, `sections`, `settings`). However, `formatter` and `output` are always overridden to ensure consistent
-Markdown table output for the wiki. If no config file is found, sensible defaults are used.
+`content`, `sections`, `settings`). However, `formatter` is always set to `markdown table` and `output.file` and
+`output.mode` are always overridden to ensure consistent output routing for the wiki. Other `output` keys (such as
+`template`) are preserved from your config. If no config file is found, sensible defaults are used.
 
 ## Parsing Behavior
 
