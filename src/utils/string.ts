@@ -116,3 +116,32 @@ export function getModuleSource(repoUrl: string, useSSH: boolean): string {
 
   return `git::${repoUrl}.git`;
 }
+
+/**
+ * Extracts a human-readable error message from an unknown thrown value, including any
+ * stderr output captured from child process errors.
+ *
+ * Handles three cases for the primary message:
+ * - `Error` instances: uses `err.message`
+ * - Anything else: coerces via `String(err)`
+ *
+ * If the thrown value has a `stderr` property (as produced by `execFileSync` with `stdio: 'pipe'`),
+ * its text is appended to the message. `stderr` may be a `Buffer` (decoded as UTF-8) or a `string`.
+ *
+ * @param {unknown} err - The caught error value.
+ * @returns {string} A trimmed, newline-joined message combining the error message and any stderr text.
+ *
+ * @example
+ * getExecErrorMessage(new Error('git clone failed'))
+ * // Returns: 'git clone failed'
+ *
+ * @example
+ * const err = Object.assign(new Error('Command failed'), { stderr: Buffer.from('fatal: not a git repo') });
+ * getExecErrorMessage(err)
+ * // Returns: 'Command failed\nfatal: not a git repo'
+ */
+export function getExecErrorMessage(err: unknown): string {
+  const stderr = (err as { stderr?: Buffer | string } | undefined)?.stderr;
+  const stderrText = typeof stderr === 'string' ? stderr : stderr?.toString('utf8');
+  return [err instanceof Error ? err.message : String(err), stderrText].filter(Boolean).join('\n').trim();
+}

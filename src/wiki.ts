@@ -7,7 +7,7 @@ import { join, resolve } from 'node:path';
 import { getTerraformModuleFullReleaseChangelog } from '@/changelog';
 import { config } from '@/config';
 import { context } from '@/context';
-import { getModuleSource, renderTemplate } from '@/utils/string';
+import { getExecErrorMessage, getModuleSource, renderTemplate } from '@/utils/string';
 import { generateTerraformDocs, installTerraformDocs } from '@/terraform-docs';
 import type { TerraformModule } from '@/terraform-module';
 import type { WikiGenerationResult, WikiStatusResult } from '@/types';
@@ -145,31 +145,13 @@ export async function getWikiStatus(terraformModules: TerraformModule[]): Promis
   try {
     checkoutWiki();
   } catch (err) {
-    const stderr = (err as { stderr?: Buffer | string } | undefined)?.stderr;
-    const stderrText = typeof stderr === 'string' ? stderr : stderr?.toString('utf8');
-    const errorMessage = [err instanceof Error ? err.message : String(err), stderrText]
-      .filter(Boolean)
-      .join('\n')
-      .trim();
-    return {
-      status: WIKI_STATUS.FAILURE_CHECKOUT,
-      errorMessage,
-    };
+    return { status: WIKI_STATUS.FAILURE_CHECKOUT, errorMessage: getExecErrorMessage(err) };
   }
 
   try {
     installTerraformDocs(config.terraformDocsVersion);
   } catch (err) {
-    const stderr = (err as { stderr?: Buffer | string } | undefined)?.stderr;
-    const stderrText = typeof stderr === 'string' ? stderr : stderr?.toString('utf8');
-    const errorMessage = [err instanceof Error ? err.message : String(err), stderrText]
-      .filter(Boolean)
-      .join('\n')
-      .trim();
-    return {
-      status: WIKI_STATUS.FAILURE_TERRAFORM_DOCS_INSTALL,
-      errorMessage,
-    };
+    return { status: WIKI_STATUS.FAILURE_TERRAFORM_DOCS_INSTALL, errorMessage: getExecErrorMessage(err) };
   }
 
   try {

@@ -1,4 +1,10 @@
-import { getModuleSource, removeLeadingCharacters, removeTrailingCharacters, renderTemplate } from '@/utils/string';
+import {
+  getExecErrorMessage,
+  getModuleSource,
+  removeLeadingCharacters,
+  removeTrailingCharacters,
+  renderTemplate,
+} from '@/utils/string';
 import { describe, expect, it } from 'vitest';
 
 describe('utils/string', () => {
@@ -260,6 +266,47 @@ describe('utils/string', () => {
       expect(getModuleSource('https://github.techpivot.com/owner/repo', false)).toBe(
         'git::https://github.techpivot.com/owner/repo.git',
       );
+    });
+  });
+
+  describe('getExecErrorMessage()', () => {
+    it('should return message from an Error instance', () => {
+      expect(getExecErrorMessage(new Error('git clone failed'))).toBe('git clone failed');
+    });
+
+    it('should coerce non-Error values to string', () => {
+      expect(getExecErrorMessage('string error')).toBe('string error');
+      expect(getExecErrorMessage(42)).toBe('42');
+    });
+
+    it('should append stderr string when present', () => {
+      const err = Object.assign(new Error('Command failed'), { stderr: 'fatal: not a git repo' });
+      expect(getExecErrorMessage(err)).toBe('Command failed\nfatal: not a git repo');
+    });
+
+    it('should decode stderr Buffer and append it', () => {
+      const err = Object.assign(new Error('Command failed'), { stderr: Buffer.from('fatal: repository not found') });
+      expect(getExecErrorMessage(err)).toBe('Command failed\nfatal: repository not found');
+    });
+
+    it('should omit stderr when it is an empty string', () => {
+      const err = Object.assign(new Error('Command failed'), { stderr: '' });
+      expect(getExecErrorMessage(err)).toBe('Command failed');
+    });
+
+    it('should omit stderr when it is an empty Buffer', () => {
+      const err = Object.assign(new Error('Command failed'), { stderr: Buffer.from('') });
+      expect(getExecErrorMessage(err)).toBe('Command failed');
+    });
+
+    it('should handle errors with no stderr property', () => {
+      const err = new Error('Repository not found');
+      expect(getExecErrorMessage(err)).toBe('Repository not found');
+    });
+
+    it('should trim the resulting message', () => {
+      const err = Object.assign(new Error('Command failed'), { stderr: Buffer.from('  stderr output  ') });
+      expect(getExecErrorMessage(err)).toBe('Command failed\n  stderr output');
     });
   });
 });
