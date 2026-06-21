@@ -344,6 +344,7 @@ describe('config', () => {
       expect(config.useVersionPrefix).toBe(true);
       expect(config.moduleRefMode).toBe('tag');
       expect(config.preRelease).toBe(false);
+      expect(config.hideNoChangesPrComment).toBe(false);
 
       expect(startGroup).toHaveBeenCalledWith('Initializing Config');
       expect(startGroup).toHaveBeenCalledTimes(1);
@@ -364,6 +365,7 @@ describe('config', () => {
         ['Use Version Prefix: true'],
         ['Module Ref Mode: tag'],
         ['Pre-release: false'],
+        ['Hide No Changes PR Comment: false'],
       ]);
     });
   });

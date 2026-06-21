@@ -6,7 +6,7 @@ import { stubOctokitImplementation, stubOctokitReturnData } from '@/tests/helper
 import { createMockTerraformModule } from '@/tests/helpers/terraform-module';
 import type { GitHubRelease } from '@/types';
 import { BRANDING_COMMENT, PR_RELEASE_MARKER, PR_SUMMARY_MARKER, WIKI_STATUS } from '@/utils/constants';
-import { debug, endGroup, info, startGroup } from '@actions/core';
+import { debug, endGroup, info, startGroup, warning } from '@actions/core';
 import { RequestError } from '@octokit/request-error';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -860,6 +860,160 @@ describe('pull-request', () => {
         expect((error as Error).message).toBe(expectedErrorString);
         expect((error as Error).cause instanceof Error).toBe(true);
       }
+    });
+  });
+
+  describe('addReleasePlanComment() - hide-no-changes-pr-comment', () => {
+    const changedModules: TerraformModule[] = [
+      createMockTerraformModule({
+        directory: '/module1',
+        tags: ['module1/v1.0.0'],
+        commits: [{ sha: 'abc123', message: 'feat: change', files: ['file1.tf'] }],
+      }),
+    ];
+
+    const existingSummaryComment = {
+      id: 99,
+      node_id: 'MDEyOklzc3VlQ29tbWVudDk5',
+      body: `${PR_SUMMARY_MARKER}\n# 📋 Release Plan\n\nPrevious plan`,
+      created_at: '2024-01-01T00:00:00Z',
+    };
+
+    beforeEach(() => {
+      context.useMockOctokit();
+      vi.clearAllMocks();
+      stubOctokitReturnData('issues.createComment', {
+        data: { id: 1, html_url: 'https://github.com/org/repo/pull/1#issuecomment-1' },
+      });
+    });
+
+    it('posts nothing when flag is on, nothing to report, and no existing comment exists', async () => {
+      config.set({ hideNoChangesPrComment: true });
+      stubOctokitReturnData('issues.listComments', { data: [] });
+
+      await addReleasePlanComment([], [], [], { status: WIKI_STATUS.SUCCESS });
+
+      expect(context.octokit.rest.issues.createComment).not.toHaveBeenCalled();
+      expect(context.octokit.rest.issues.updateComment).not.toHaveBeenCalled();
+      expect(context.octokit.graphql).not.toHaveBeenCalled();
+      expect(info).toHaveBeenCalledWith(
+        'Hide no-changes PR comment enabled and nothing to report. Skipping comment creation.',
+      );
+    });
+
+    it('updates and minimizes the existing comment instead of recreating it', async () => {
+      config.set({ hideNoChangesPrComment: true });
+      stubOctokitReturnData('issues.listComments', { data: [existingSummaryComment] });
+
+      await addReleasePlanComment([], [], [], { status: WIKI_STATUS.SUCCESS });
+
+      expect(context.octokit.rest.issues.createComment).not.toHaveBeenCalled();
+      expect(context.octokit.rest.issues.updateComment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          comment_id: existingSummaryComment.id,
+          body: expect.stringContaining('No terraform modules updated in this pull request.'),
+        }),
+      );
+      expect(context.octokit.graphql).toHaveBeenCalledWith(expect.any(String), { id: existingSummaryComment.node_id });
+    });
+
+    it('deletes older duplicate summary comments, keeping and minimizing the most recent', async () => {
+      config.set({ hideNoChangesPrComment: true });
+      const older = {
+        id: 50,
+        node_id: 'older-node',
+        body: `${PR_SUMMARY_MARKER}\nold`,
+        created_at: '2023-01-01T00:00:00Z',
+      };
+      stubOctokitReturnData('issues.listComments', { data: [older, existingSummaryComment] });
+
+      await addReleasePlanComment([], [], [], { status: WIKI_STATUS.SUCCESS });
+
+      expect(context.octokit.rest.issues.updateComment).toHaveBeenCalledWith(
+        expect.objectContaining({ comment_id: existingSummaryComment.id }),
+      );
+      expect(context.octokit.graphql).toHaveBeenCalledWith(expect.any(String), { id: existingSummaryComment.node_id });
+      expect(context.octokit.rest.issues.deleteComment).toHaveBeenCalledTimes(1);
+      expect(context.octokit.rest.issues.deleteComment).toHaveBeenCalledWith(
+        expect.objectContaining({ comment_id: older.id }),
+      );
+    });
+
+    it('posts a normal visible comment when cleanup is pending (nothing-to-report is false)', async () => {
+      config.set({ hideNoChangesPrComment: true, deleteLegacyTags: true });
+      stubOctokitReturnData('issues.listComments', { data: [] });
+
+      await addReleasePlanComment([], [], ['legacy/v1.0.0'], { status: WIKI_STATUS.SUCCESS });
+
+      expect(context.octokit.rest.issues.createComment).toHaveBeenCalled();
+      expect(context.octokit.rest.issues.updateComment).not.toHaveBeenCalled();
+      expect(context.octokit.graphql).not.toHaveBeenCalled();
+    });
+
+    it('posts a normal visible comment when the wiki check failed (nothing-to-report is false)', async () => {
+      config.set({ hideNoChangesPrComment: true });
+      stubOctokitReturnData('issues.listComments', { data: [] });
+
+      await addReleasePlanComment([], [], [], { status: WIKI_STATUS.FAILURE_CHECKOUT, errorMessage: 'boom' });
+
+      expect(context.octokit.rest.issues.createComment).toHaveBeenCalled();
+      expect(context.octokit.rest.issues.updateComment).not.toHaveBeenCalled();
+    });
+
+    it('posts a normal delete+recreate comment when modules need a release (even with flag on)', async () => {
+      config.set({ hideNoChangesPrComment: true });
+      stubOctokitReturnData('issues.listComments', { data: [existingSummaryComment] });
+
+      await addReleasePlanComment(changedModules, [], [], { status: WIKI_STATUS.SUCCESS });
+
+      expect(context.octokit.rest.issues.createComment).toHaveBeenCalled();
+      expect(context.octokit.rest.issues.updateComment).not.toHaveBeenCalled();
+      expect(context.octokit.graphql).not.toHaveBeenCalled();
+      // The previous summary comment is removed (delete+recreate moves the comment to the bottom).
+      expect(context.octokit.rest.issues.deleteComment).toHaveBeenCalledWith(
+        expect.objectContaining({ comment_id: existingSummaryComment.id }),
+      );
+    });
+
+    it('posts a normal visible "no changes" comment when the flag is off (default behavior)', async () => {
+      config.set({ hideNoChangesPrComment: false });
+      stubOctokitReturnData('issues.listComments', { data: [] });
+
+      await addReleasePlanComment([], [], [], { status: WIKI_STATUS.SUCCESS });
+
+      expect(context.octokit.rest.issues.createComment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: expect.stringContaining('No terraform modules updated in this pull request.'),
+        }),
+      );
+      expect(context.octokit.rest.issues.updateComment).not.toHaveBeenCalled();
+    });
+
+    it('is non-fatal when update and minimize fail with Error objects', async () => {
+      config.set({ hideNoChangesPrComment: true });
+      stubOctokitReturnData('issues.listComments', { data: [existingSummaryComment] });
+      vi.mocked(context.octokit.rest.issues.updateComment).mockRejectedValueOnce(new Error('update failed'));
+      vi.mocked(context.octokit.graphql).mockRejectedValueOnce(new Error('minimize failed'));
+
+      await expect(addReleasePlanComment([], [], [], { status: WIKI_STATUS.SUCCESS })).resolves.toBeUndefined();
+
+      // Both steps are attempted (independent try/catch) and neither failure is fatal.
+      expect(warning).toHaveBeenCalledWith('Failed to update release plan comment 99: update failed');
+      expect(warning).toHaveBeenCalledWith('Failed to minimize release plan comment 99: minimize failed');
+      expect(context.octokit.rest.issues.createComment).not.toHaveBeenCalled();
+    });
+
+    it('is non-fatal when update and minimize fail with non-Error values', async () => {
+      config.set({ hideNoChangesPrComment: true });
+      stubOctokitReturnData('issues.listComments', { data: [existingSummaryComment] });
+      vi.mocked(context.octokit.rest.issues.updateComment).mockRejectedValueOnce('update boom');
+      vi.mocked(context.octokit.graphql).mockRejectedValueOnce('minimize boom');
+
+      await expect(addReleasePlanComment([], [], [], { status: WIKI_STATUS.SUCCESS })).resolves.toBeUndefined();
+
+      // Non-Error rejections are coerced via String(error).
+      expect(warning).toHaveBeenCalledWith('Failed to update release plan comment 99: update boom');
+      expect(warning).toHaveBeenCalledWith('Failed to minimize release plan comment 99: minimize boom');
     });
   });
 

@@ -6,8 +6,25 @@ import type { CommitDetails, GitHubRelease, WikiStatusResult } from '@/types';
 import { BRANDING_COMMENT, PROJECT_URL, PR_RELEASE_MARKER, PR_SUMMARY_MARKER, WIKI_STATUS } from '@/utils/constants';
 
 import { getWikiLink } from '@/wiki';
-import { debug, endGroup, info, startGroup } from '@actions/core';
+import { debug, endGroup, info, startGroup, warning } from '@actions/core';
 import { RequestError } from '@octokit/request-error';
+
+/**
+ * GraphQL mutation to minimize (collapse) an issue/pull request comment as outdated.
+ *
+ * The GitHub REST API does not expose a way to collapse a comment, so we use the GraphQL
+ * `minimizeComment` mutation. Minimizing edits the existing comment in place (it does not send a
+ * new email notification) and keeps the comment expandable.
+ */
+const MINIMIZE_COMMENT_MUTATION = `
+  mutation MinimizeComment($id: ID!) {
+    minimizeComment(input: { classifier: OUTDATED, subjectId: $id }) {
+      minimizedComment {
+        isMinimized
+      }
+    }
+  }
+`;
 
 /**
  * Checks whether the pull request already has a comment containing the release marker.
@@ -377,6 +394,61 @@ export async function addReleasePlanComment(
     // Branding
     if (config.disableBranding === false) {
       commentBody.push(`\n${BRANDING_COMMENT}`);
+    }
+
+    // When `hide-no-changes-pr-comment` is enabled and this pull request has nothing to report,
+    // avoid spamming reviewers with a "Release Plan" comment. A pull request has "nothing to report"
+    // when no modules need a release, no tag/release cleanup is pending, and the wiki check did not fail.
+    const wikiCheckFailed =
+      wikiStatus.status === WIKI_STATUS.FAILURE_CHECKOUT ||
+      wikiStatus.status === WIKI_STATUS.FAILURE_TERRAFORM_DOCS_RUN ||
+      wikiStatus.status === WIKI_STATUS.FAILURE_TERRAFORM_DOCS_INSTALL;
+    const hasPendingCleanup = config.deleteLegacyTags && (releasesToDelete.length > 0 || tagsToDelete.length > 0);
+    const nothingToReport = terraformModulesToRelese.length === 0 && !hasPendingCleanup && !wikiCheckFailed;
+
+    if (config.hideNoChangesPrComment && nothingToReport) {
+      const { data: allComments } = await octokit.rest.issues.listComments({ issue_number, owner, repo });
+      const existingSummaryComments = allComments.filter((comment) => comment.body?.includes(PR_SUMMARY_MARKER));
+
+      // No existing Release Plan comment: post nothing (no comment, no email notification).
+      if (existingSummaryComments.length === 0) {
+        info('Hide no-changes PR comment enabled and nothing to report. Skipping comment creation.');
+        return;
+      }
+
+      // An existing Release Plan comment is present (e.g. an earlier push had changes that were later
+      // removed). Update it in place and minimize/collapse it. Editing rather than recreating avoids
+      // sending a new email notification while keeping the comment expandable. Keep the most recent
+      // comment and remove any older duplicates.
+      const commentToKeep = existingSummaryComments[existingSummaryComments.length - 1];
+      const body = commentBody.join('\n').trim();
+      info(
+        `Hide no-changes PR comment enabled and nothing to report. Minimizing existing comment ${commentToKeep.id}.`,
+      );
+
+      // Best-effort: update + minimize should never fail the action.
+      try {
+        await octokit.rest.issues.updateComment({ owner, repo, comment_id: commentToKeep.id, body });
+      } catch (error) {
+        warning(
+          `Failed to update release plan comment ${commentToKeep.id}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+      try {
+        await octokit.graphql(MINIMIZE_COMMENT_MUTATION, { id: commentToKeep.node_id });
+      } catch (error) {
+        warning(
+          `Failed to minimize release plan comment ${commentToKeep.id}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+
+      // Remove any older summary comments so only the single minimized comment remains.
+      for (const comment of existingSummaryComments.slice(0, -1)) {
+        info(`Deleting previous PR comment from ${comment.created_at}`);
+        await octokit.rest.issues.deleteComment({ comment_id: comment.id, owner, repo });
+      }
+
+      return;
     }
 
     // Create new PR comment (Requires permission > pull-requests: write)

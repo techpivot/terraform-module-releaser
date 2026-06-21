@@ -28,6 +28,7 @@ describe('utils/metadata', () => {
         'use-version-prefix',
         'module-ref-mode',
         'pre-release',
+        'hide-no-changes-pr-comment',
       ];
 
       expect(Object.keys(ACTION_INPUTS)).toEqual(expect.arrayContaining(expectedInputs));
@@ -63,6 +64,7 @@ describe('utils/metadata', () => {
         'use-ssh-source-format',
         'use-version-prefix',
         'pre-release',
+        'hide-no-changes-pr-comment',
       ];
 
       for (const inputName of booleanInputs) {
@@ -141,6 +143,7 @@ describe('utils/metadata', () => {
         'use-version-prefix': 'useVersionPrefix',
         'module-ref-mode': 'moduleRefMode',
         'pre-release': 'preRelease',
+        'hide-no-changes-pr-comment': 'hideNoChangesPrComment',
       };
 
       expect(Object.keys(expectedMappings)).toHaveLength(Object.keys(ACTION_INPUTS).length);

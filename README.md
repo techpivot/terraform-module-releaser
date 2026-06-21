@@ -212,6 +212,7 @@ configuring the following optional input parameters as needed.
 | `use-version-prefix`             | Whether to include the 'v' prefix on version tags (e.g., v1.2.3 vs 1.2.3)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `true`                                                                                                 |
 | `module-ref-mode`                | Controls how module usage examples reference versions in generated documentation. Valid values: `tag` or `sha`. When `tag` (default), examples use tag names (e.g., `?ref=aws/vpc-endpoint/v1.1.3`). When `sha`, examples use commit SHAs with tag as comment (e.g., `?ref=abc123def456 # aws/vpc-endpoint/v1.1.3`). Useful with Renovate for handling module removal scenarios where tags might be deleted. Note: Only affects documentation; tag/release creation unchanged.                                                                              | `tag`                                                                                                  |
 | `pre-release`                    | Whether to mark created GitHub releases as pre-releases. When `true`, Terraform Module releases are flagged as pre-releases on GitHub, excluding them from being considered the "latest" release. Useful in monorepos where per-module releases may conflict with other release tooling that determines the latest release via the GitHub API.                                                                                                                                                                                                              | `false`                                                                                                |
+| `hide-no-changes-pr-comment`     | Whether to suppress the "Release Plan" pull request comment when the pull request has nothing to report (no module changes, no pending tag/release cleanup, and the wiki check did not fail). When `true`, a fresh no-change pull request gets no comment (and therefore no email); an existing comment is updated in place and minimized/collapsed (an edit, so no new email). When the pull request has changes, the comment is posted as usual. <br><sub>[Read more here](#hiding-the-no-changes-release-plan-comment)</sub>                             | `false`                                                                                                |
 
 ### Conventional Commits Mode
 
@@ -385,6 +386,29 @@ You can use the following dynamic variables in your template:
 
 <!-- markdownlint-enable MD038 -->
 
+### Hiding the No-Changes Release Plan Comment
+
+By default, every open pull request run posts a "Release Plan" comment, even when the pull request does not change any
+Terraform modules. In repositories where many pull requests never touch a module, this can be noisy for reviewers.
+
+Set `hide-no-changes-pr-comment: true` to suppress this comment when the pull request has **nothing to report**. A pull
+request has nothing to report when all of the following are true:
+
+- No Terraform modules need a release.
+- No tag/release cleanup is pending (only relevant when `delete-legacy-tags` is enabled).
+- The wiki status check did not fail.
+
+When the flag is enabled and the pull request has nothing to report:
+
+- **No comment exists yet** — nothing is posted, so reviewers receive no comment and no email notification.
+- **A comment already exists** (for example, an earlier push had module changes that were later removed) — the existing
+  comment is updated in place and minimized/collapsed. Because this is an edit to an existing comment rather than a new
+  one, GitHub does not send a new email notification, and the comment remains expandable.
+
+When the pull request **does** have changes, the Release Plan comment is posted exactly as before (recreated at the
+bottom of the timeline to signal a fresh run). This setting only affects the open-pull-request Release Plan comment; the
+post-merge release comment is unaffected.
+
 ### Example Usage with Inputs
 
 ````yml
@@ -424,6 +448,7 @@ jobs:
           use-version-prefix: true
           module-ref-mode: tag
           pre-release: false
+          hide-no-changes-pr-comment: false
           wiki-usage-template: |
             This is a custom wiki usage block that supports markdown.
 

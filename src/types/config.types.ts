@@ -205,4 +205,21 @@ export interface Config {
    * being considered the "latest" release by the GitHub API.
    */
   preRelease: boolean;
+
+  /**
+   * Whether to suppress the "Release Plan" pull request comment when the pull request has nothing
+   * to report (no modules to release, no pending tag/release cleanup, and the wiki check did not fail).
+   *
+   * By default this is false, preserving the existing behavior where a Release Plan comment is always
+   * posted on every open pull request run.
+   *
+   * When true and a pull request has nothing to report:
+   * - If no Release Plan comment exists yet, none is created (no comment, no email notification).
+   * - If a Release Plan comment already exists, it is updated in place and minimized/collapsed. Since
+   *   this is an edit to an existing comment, no new email notification is sent.
+   *
+   * When the pull request does have changes, the comment is posted exactly as before. This setting only
+   * affects the open-pull-request Release Plan comment; the post-merge release comment is unaffected.
+   */
+  hideNoChangesPrComment: boolean;
 }

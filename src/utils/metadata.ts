@@ -62,6 +62,7 @@ export const ACTION_INPUTS: Record<string, ActionInputMetadata> = {
   'use-version-prefix': requiredBoolean('useVersionPrefix'),
   'module-ref-mode': requiredString('moduleRefMode'),
   'pre-release': requiredBoolean('preRelease'),
+  'hide-no-changes-pr-comment': requiredBoolean('hideNoChangesPrComment'),
 } as const;
 
 /**
