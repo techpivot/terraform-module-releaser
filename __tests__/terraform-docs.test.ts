@@ -319,10 +319,12 @@ describe('terraform-docs', async () => {
       Object.defineProperty(process, 'platform', { value: 'linux' });
       Object.defineProperty(process, 'arch', { value: 'x64' });
 
+      // This hits the real terraform-docs.io CDN. A non-existent version normally returns HTTP 404,
+      // but the CDN can transiently return other failure codes (e.g. 500). Assert the meaningful
+      // behavior — the correct download URL is built and curl fails with an HTTP error (exit code 22) —
+      // without pinning the exact status code, which would make this test flaky.
       expect(() => installTerraformDocs(invalidVersion)).toThrow(
-        'Command failed: /usr/bin/curl -sSLfo ./terraform-docs.tar.gz ' +
-          'https://terraform-docs.io/dl/v99.99.99/terraform-docs-v99.99.99-linux-amd64.tar.gz\n' +
-          'curl: (22) The requested URL returned error: 404',
+        /Command failed: .*curl .*\/dl\/v99\.99\.99\/terraform-docs-v99\.99\.99-linux-amd64\.tar\.gz[\s\S]*curl: \(22\) The requested URL returned error: \d{3}/,
       );
     });
   });

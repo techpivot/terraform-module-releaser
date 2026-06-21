@@ -199,6 +199,26 @@ inputs:
       release tooling (e.g., auto shipit) that determines the latest release via the GitHub API.
     required: true
     default: "false"
+  hide-no-changes-pr-comment:
+    description: >
+      Whether to suppress the "Release Plan" pull request comment when the pull request has nothing
+      to report. A pull request has "nothing to report" when it changes no Terraform modules, has no
+      pending tag/release cleanup (when delete-legacy-tags is enabled), and the wiki check did not
+      fail. By default this is false, preserving the existing behavior where a "Release Plan" comment
+      is always posted on every open pull request run.
+
+      When set to true and a pull request has nothing to report:
+        - If no Release Plan comment exists yet, none is created (and therefore no email notification
+          is sent).
+        - If a Release Plan comment already exists (e.g. an earlier push had changes that were later
+          removed), it is updated in place and minimized/collapsed. Because this is an edit to an
+          existing comment, GitHub does not send a new email notification.
+
+      When the pull request does have changes, the Release Plan comment is posted exactly as before
+      (recreated at the bottom of the timeline to signal a fresh run). This setting only affects the
+      open-pull-request Release Plan comment; the post-merge release comment is unaffected.
+    required: true
+    default: "false"
 
 outputs:
   changed-module-names:

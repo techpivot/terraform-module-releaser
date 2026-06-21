@@ -127,6 +127,7 @@ function initializeConfig(): Config {
     info(`Use Version Prefix: ${configInstance.useVersionPrefix}`);
     info(`Module Ref Mode: ${configInstance.moduleRefMode}`);
     info(`Pre-release: ${configInstance.preRelease}`);
+    info(`Hide No Changes PR Comment: ${configInstance.hideNoChangesPrComment}`);
 
     return configInstance;
   } finally {

@@ -16,7 +16,7 @@ type DeepPartial<T> = T extends object
 // Names of the supported endpoints across different namespaces (e.g., git, issues, pulls, repos).
 type EndpointNames = {
   git: 'createTag' | 'deleteRef';
-  issues: 'createComment' | 'deleteComment' | 'listComments';
+  issues: 'createComment' | 'deleteComment' | 'listComments' | 'updateComment';
   pulls: 'listCommits' | 'listFiles';
   repos: 'getCommit' | 'listTags' | 'listReleases' | 'createRelease' | 'deleteRelease';
   users: 'getByUsername';
@@ -97,6 +97,12 @@ export function resetMockStore() {
         },
         deleteComment: {
           status: 204,
+          url: 'https://api.github.com/repos/techpivot/terraform-module-releaser/issues/comments',
+          headers: {},
+        },
+        updateComment: {
+          data: {},
+          status: 200,
           url: 'https://api.github.com/repos/techpivot/terraform-module-releaser/issues/comments',
           headers: {},
         },
@@ -304,6 +310,7 @@ export function createDefaultOctokitMock(): OctokitRestApi {
       issues: {
         createComment: vi.fn().mockImplementation(() => getMockResponse('issues.createComment')),
         deleteComment: vi.fn().mockImplementation(() => getMockResponse('issues.deleteComment')),
+        updateComment: vi.fn().mockImplementation(() => getMockResponse('issues.updateComment')),
         listComments: createPaginatedMockImplementation('issues.listComments', '/issues/comments'),
       },
       pulls: {
@@ -321,6 +328,7 @@ export function createDefaultOctokitMock(): OctokitRestApi {
         getByUsername: vi.fn().mockImplementation((params) => getMockResponse('users.getByUsername', params)),
       },
     },
+    graphql: vi.fn().mockResolvedValue({ minimizeComment: { minimizedComment: { isMinimized: true } } }),
     paginate: {
       iterator: <T>(
         fn: (options: EndpointOptions) => Promise<OctokitResponse<{ data: T[] }>>,

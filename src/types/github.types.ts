@@ -1,3 +1,4 @@
+import type { Octokit } from '@octokit/core';
 import type { PaginateInterface } from '@octokit/plugin-paginate-rest';
 import type { Api } from '@octokit/plugin-rest-endpoint-methods';
 
@@ -6,9 +7,13 @@ import type { Api } from '@octokit/plugin-rest-endpoint-methods';
  */
 
 /**
- * Custom type that extends Octokit with pagination support
+ * Custom type that extends Octokit with pagination support and GraphQL access.
+ *
+ * The `graphql` method is provided by the base `@octokit/core` client and is required for
+ * operations that the REST API does not expose (e.g. minimizing/collapsing a comment via the
+ * `minimizeComment` mutation).
  */
-export type OctokitRestApi = Api & { paginate: PaginateInterface };
+export type OctokitRestApi = Api & { paginate: PaginateInterface; graphql: Octokit['graphql'] };
 
 /**
  * GitHub tag information
