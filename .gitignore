@@ -104,3 +104,6 @@ __tests__/runner/*
 .idea
 .vscode
 *.code-workspace
+
+# AI
+settings.local.json
