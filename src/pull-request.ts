@@ -410,8 +410,10 @@ export async function addReleasePlanComment(
       const { data: allComments } = await octokit.rest.issues.listComments({ issue_number, owner, repo });
       const existingSummaryComments = allComments.filter((comment) => comment.body?.includes(PR_SUMMARY_MARKER));
 
-      // No existing Release Plan comment: post nothing (no comment, no email notification).
-      if (existingSummaryComments.length === 0) {
+      // Keep the most recent existing Release Plan comment, if any. `.at(-1)` returns undefined when
+      // none exist, in which case we post nothing (no comment, no email notification).
+      const commentToKeep = existingSummaryComments.at(-1);
+      if (!commentToKeep) {
         info('Hide no-changes PR comment enabled and nothing to report. Skipping comment creation.');
         return;
       }
@@ -420,7 +422,6 @@ export async function addReleasePlanComment(
       // removed). Update it in place and minimize/collapse it. Editing rather than recreating avoids
       // sending a new email notification while keeping the comment expandable. Keep the most recent
       // comment and remove any older duplicates.
-      const commentToKeep = existingSummaryComments[existingSummaryComments.length - 1];
       const body = commentBody.join('\n').trim();
       info(
         `Hide no-changes PR comment enabled and nothing to report. Minimizing existing comment ${commentToKeep.id}.`,
