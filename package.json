@@ -72,7 +72,7 @@
     "@octokit/webhooks-types": "^7.6.1",
     "@types/conventional-commits-parser": "^5.0.2",
     "@types/js-yaml": "^4.0.9",
-    "@types/node": "^25.9.3",
+    "@types/node": "^26.0.0",
     "@types/which": "^3.0.4",
     "@vercel/ncc": "^0.44.0",
     "@vitest/coverage-v8": "^4.1.8",
