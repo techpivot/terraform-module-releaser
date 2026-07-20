@@ -67,7 +67,7 @@
     "which": "^7.0.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.3",
+    "@biomejs/biome": "^2.5.4",
     "@octokit/types": "^16.0.0",
     "@octokit/webhooks-types": "^7.6.1",
     "@types/conventional-commits-parser": "^5.0.2",
@@ -77,13 +77,13 @@
     "@vercel/ncc": "^0.44.1",
     "@vitest/coverage-v8": "^4.1.10",
     "make-coverage-badge": "^1.2.0",
-    "openai": "^6.46.0",
+    "openai": "^6.48.0",
     "prettier": "^3.9.5",
     "textlint": "^15.7.1",
     "textlint-filter-rule-comments": "^1.3.0",
     "textlint-rule-terminology": "^5.2.16",
     "ts-deepmerge": "^8.0.0",
-    "tsx": "^4.23.0",
+    "tsx": "^4.23.1",
     "typescript": "^6.0.3",
     "vitest": "^4.0.18"
   },
