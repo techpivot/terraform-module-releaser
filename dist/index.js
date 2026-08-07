@@ -4377,8 +4377,6 @@ function defaultFactory (origin, opts) {
 
 class Agent extends DispatcherBase {
   constructor ({ factory = defaultFactory, maxRedirections = 0, connect, ...options } = {}) {
-    super()
-
     if (typeof factory !== 'function') {
       throw new InvalidArgumentError('factory must be a function.')
     }
@@ -4390,6 +4388,8 @@ class Agent extends DispatcherBase {
     if (!Number.isInteger(maxRedirections) || maxRedirections < 0) {
       throw new InvalidArgumentError('maxRedirections must be a positive number')
     }
+
+    super(options)
 
     if (connect && typeof connect !== 'function') {
       connect = { ...connect }
@@ -4762,6 +4762,9 @@ const EMPTY_BUF = Buffer.alloc(0)
 const FastBuffer = Buffer[Symbol.species]
 const addListener = util.addListener
 const removeAllListeners = util.removeAllListeners
+const kIdleSocketValidation = Symbol('kIdleSocketValidation')
+const kIdleSocketValidationTimeout = Symbol('kIdleSocketValidationTimeout')
+const kSocketUsed = Symbol('kSocketUsed')
 
 let extractBody
 
@@ -4984,27 +4987,69 @@ class Parser {
 
       const offset = llhttp.llhttp_get_error_pos(this.ptr) - currentBufferPtr
 
-      if (ret === constants.ERROR.PAUSED_UPGRADE) {
-        this.onUpgrade(data.slice(offset))
-      } else if (ret === constants.ERROR.PAUSED) {
-        this.paused = true
-        socket.unshift(data.slice(offset))
-      } else if (ret !== constants.ERROR.OK) {
-        const ptr = llhttp.llhttp_get_error_reason(this.ptr)
-        let message = ''
-        /* istanbul ignore else: difficult to make a test case for */
-        if (ptr) {
-          const len = new Uint8Array(llhttp.memory.buffer, ptr).indexOf(0)
-          message =
-            'Response does not match the HTTP/1.1 protocol (' +
-            Buffer.from(llhttp.memory.buffer, ptr, len).toString() +
-            ')'
+      if (ret !== constants.ERROR.OK) {
+        const body = data.subarray(offset)
+
+        if (ret === constants.ERROR.PAUSED_UPGRADE) {
+          this.onUpgrade(body)
+        } else if (ret === constants.ERROR.PAUSED) {
+          this.paused = true
+          socket.unshift(body)
+        } else {
+          throw this.createError(ret, body)
         }
-        throw new HTTPParserError(message, constants.ERROR[ret], data.slice(offset))
       }
     } catch (err) {
       util.destroy(socket, err)
     }
+  }
+
+  finish () {
+    assert(currentParser === null)
+    assert(this.ptr != null)
+    assert(!this.paused)
+
+    const { llhttp } = this
+
+    let ret
+
+    try {
+      currentParser = this
+      ret = llhttp.llhttp_finish(this.ptr)
+    } finally {
+      currentParser = null
+    }
+
+    if (ret === constants.ERROR.OK) {
+      return null
+    }
+
+    if (ret === constants.ERROR.PAUSED || ret === constants.ERROR.PAUSED_UPGRADE) {
+      this.paused = true
+      return null
+    }
+
+    return this.createError(ret, EMPTY_BUF)
+  }
+
+  createError (ret, data) {
+    const { llhttp, contentLength, bytesRead } = this
+
+    if (contentLength && bytesRead !== parseInt(contentLength, 10)) {
+      return new ResponseContentLengthMismatchError()
+    }
+
+    const ptr = llhttp.llhttp_get_error_reason(this.ptr)
+    let message = ''
+    if (ptr) {
+      const len = new Uint8Array(llhttp.memory.buffer, ptr).indexOf(0)
+      message =
+        'Response does not match the HTTP/1.1 protocol (' +
+        Buffer.from(llhttp.memory.buffer, ptr, len).toString() +
+        ')'
+    }
+
+    return new HTTPParserError(message, constants.ERROR[ret], data)
   }
 
   destroy () {
@@ -5031,6 +5076,11 @@ class Parser {
 
     /* istanbul ignore next: difficult to make a test case for */
     if (socket.destroyed) {
+      return -1
+    }
+
+    if (client[kRunning] === 0) {
+      util.destroy(socket, new SocketError('bad response', util.getSocketInfo(socket)))
       return -1
     }
 
@@ -5134,6 +5184,11 @@ class Parser {
 
     /* istanbul ignore next: difficult to make a test case for */
     if (socket.destroyed) {
+      return -1
+    }
+
+    if (client[kRunning] === 0) {
+      util.destroy(socket, new SocketError('bad response', util.getSocketInfo(socket)))
       return -1
     }
 
@@ -5310,6 +5365,7 @@ class Parser {
     request.onComplete(headers)
 
     client[kQueue][client[kRunningIdx]++] = null
+    socket[kSocketUsed] = true
 
     if (socket[kWriting]) {
       assert(client[kRunning] === 0)
@@ -5368,6 +5424,9 @@ async function connectH1 (client, socket) {
   socket[kWriting] = false
   socket[kReset] = false
   socket[kBlocking] = false
+  socket[kIdleSocketValidation] = 0
+  socket[kIdleSocketValidationTimeout] = null
+  socket[kSocketUsed] = false
   socket[kParser] = new Parser(client, socket, llhttpInstance)
 
   addListener(socket, 'error', function (err) {
@@ -5378,8 +5437,11 @@ async function connectH1 (client, socket) {
     // On Mac OS, we get an ECONNRESET even if there is a full body to be forwarded
     // to the user.
     if (err.code === 'ECONNRESET' && parser.statusCode && !parser.shouldKeepAlive) {
-      // We treat all incoming data so for as a valid response.
-      parser.onMessageComplete()
+      const parserErr = parser.finish()
+      if (parserErr) {
+        this[kError] = parserErr
+        this[kClient][kOnError](parserErr)
+      }
       return
     }
 
@@ -5398,8 +5460,10 @@ async function connectH1 (client, socket) {
     const parser = this[kParser]
 
     if (parser.statusCode && !parser.shouldKeepAlive) {
-      // We treat all incoming data so far as a valid response.
-      parser.onMessageComplete()
+      const parserErr = parser.finish()
+      if (parserErr) {
+        util.destroy(this, parserErr)
+      }
       return
     }
 
@@ -5409,10 +5473,11 @@ async function connectH1 (client, socket) {
     const client = this[kClient]
     const parser = this[kParser]
 
+    clearIdleSocketValidation(this)
+
     if (parser) {
       if (!this[kError] && parser.statusCode && !parser.shouldKeepAlive) {
-        // We treat all incoming data so far as a valid response.
-        parser.onMessageComplete()
+        this[kError] = parser.finish() || this[kError]
       }
 
       this[kParser].destroy()
@@ -5475,7 +5540,7 @@ async function connectH1 (client, socket) {
       return socket.destroyed
     },
     busy (request) {
-      if (socket[kWriting] || socket[kReset] || socket[kBlocking]) {
+      if (socket[kWriting] || socket[kReset] || socket[kBlocking] || socket[kIdleSocketValidation] === 1) {
         return true
       }
 
@@ -5513,6 +5578,31 @@ async function connectH1 (client, socket) {
   }
 }
 
+function clearIdleSocketValidation (socket) {
+  if (socket[kIdleSocketValidationTimeout]) {
+    clearTimeout(socket[kIdleSocketValidationTimeout])
+    socket[kIdleSocketValidationTimeout] = null
+  }
+
+  socket[kIdleSocketValidation] = 0
+}
+
+function scheduleIdleSocketValidation (client, socket) {
+  socket[kIdleSocketValidation] = 1
+  socket[kIdleSocketValidationTimeout] = setTimeout(() => {
+    socket[kIdleSocketValidationTimeout] = null
+    socket[kIdleSocketValidation] = 2
+
+    if (client[kSocket] === socket && !socket.destroyed) {
+      client[kResume]()
+    }
+  }, 0)
+  socket[kIdleSocketValidationTimeout].unref?.()
+}
+
+/**
+ * @param {import('./client.js')} client
+ */
 function resumeH1 (client) {
   const socket = client[kSocket]
 
@@ -5525,6 +5615,32 @@ function resumeH1 (client) {
     } else if (socket[kNoRef] && socket.ref) {
       socket.ref()
       socket[kNoRef] = false
+    }
+
+    if (client[kRunning] === 0 && client[kPending] > 0 && socket[kSocketUsed]) {
+      if (socket[kIdleSocketValidation] === 0) {
+        scheduleIdleSocketValidation(client, socket)
+        socket[kParser].readMore()
+        if (socket.destroyed) {
+          return
+        }
+        return
+      }
+
+      if (socket[kIdleSocketValidation] === 1) {
+        socket[kParser].readMore()
+        if (socket.destroyed) {
+          return
+        }
+        return
+      }
+    }
+
+    if (client[kRunning] === 0) {
+      socket[kParser].readMore()
+      if (socket.destroyed) {
+        return
+      }
     }
 
     if (client[kSize] === 0) {
@@ -5620,6 +5736,7 @@ function writeH1 (client, request) {
   }
 
   const socket = client[kSocket]
+  clearIdleSocketValidation(socket)
 
   const abort = (err) => {
     if (request.aborted || request.completed) {
@@ -6939,9 +7056,10 @@ class Client extends DispatcherBase {
     autoSelectFamilyAttemptTimeout,
     // h2
     maxConcurrentStreams,
-    allowH2
+    allowH2,
+    webSocket
   } = {}) {
-    super()
+    super({ webSocket })
 
     if (keepAlive !== undefined) {
       throw new InvalidArgumentError('unsupported keepAlive, use pipelining=0 instead')
@@ -7473,15 +7591,24 @@ const { kDestroy, kClose, kClosed, kDestroyed, kDispatch, kInterceptors } = __nc
 const kOnDestroyed = Symbol('onDestroyed')
 const kOnClosed = Symbol('onClosed')
 const kInterceptedDispatch = Symbol('Intercepted Dispatch')
+const kWebSocketOptions = Symbol('webSocketOptions')
 
 class DispatcherBase extends Dispatcher {
-  constructor () {
+  constructor (opts) {
     super()
 
     this[kDestroyed] = false
     this[kOnDestroyed] = null
     this[kClosed] = false
     this[kOnClosed] = []
+    this[kWebSocketOptions] = opts?.webSocket ?? {}
+  }
+
+  get webSocketOptions () {
+    return {
+      maxFragments: this[kWebSocketOptions].maxFragments ?? 131072,
+      maxPayloadSize: this[kWebSocketOptions].maxPayloadSize ?? 128 * 1024 * 1024
+    }
   }
 
   get destroyed () {
@@ -8041,8 +8168,8 @@ const kRemoveClient = Symbol('remove client')
 const kStats = Symbol('stats')
 
 class PoolBase extends DispatcherBase {
-  constructor () {
-    super()
+  constructor (opts) {
+    super(opts)
 
     this[kQueue] = new FixedQueue()
     this[kClients] = []
@@ -8301,8 +8428,6 @@ class Pool extends PoolBase {
     allowH2,
     ...options
   } = {}) {
-    super()
-
     if (connections != null && (!Number.isFinite(connections) || connections < 0)) {
       throw new InvalidArgumentError('invalid connections')
     }
@@ -8326,6 +8451,8 @@ class Pool extends PoolBase {
         ...connect
       })
     }
+
+    super(options)
 
     this[kInterceptors] = options.interceptors?.Pool && Array.isArray(options.interceptors.Pool)
       ? options.interceptors.Pool
@@ -13379,32 +13506,25 @@ function parseUnparsedAttributes (unparsedAttributes, cookieAttributeList = {}) 
     // If the attribute-name case-insensitively matches the string
     // "SameSite", the user agent MUST process the cookie-av as follows:
 
-    // 1. Let enforcement be "Default".
-    let enforcement = 'Default'
-
     const attributeValueLowercase = attributeValue.toLowerCase()
-    // 2. If cookie-av's attribute-value is a case-insensitive match for
-    //    "None", set enforcement to "None".
-    if (attributeValueLowercase.includes('none')) {
-      enforcement = 'None'
-    }
 
-    // 3. If cookie-av's attribute-value is a case-insensitive match for
-    //    "Strict", set enforcement to "Strict".
-    if (attributeValueLowercase.includes('strict')) {
-      enforcement = 'Strict'
+    // 1. If cookie-av's attribute-value is a case-insensitive match for
+    //    "None", append an attribute to the cookie-attribute-list with an
+    //    attribute-name of "SameSite" and an attribute-value of "None".
+    if (attributeValueLowercase === 'none') {
+      cookieAttributeList.sameSite = 'None'
+    } else if (attributeValueLowercase === 'strict') {
+      // 2. If cookie-av's attribute-value is a case-insensitive match for
+      //    "Strict", append an attribute to the cookie-attribute-list with
+      //    an attribute-name of "SameSite" and an attribute-value of
+      //    "Strict".
+      cookieAttributeList.sameSite = 'Strict'
+    } else if (attributeValueLowercase === 'lax') {
+      // 3. If cookie-av's attribute-value is a case-insensitive match for
+      //    "Lax", append an attribute to the cookie-attribute-list with an
+      //    attribute-name of "SameSite" and an attribute-value of "Lax".
+      cookieAttributeList.sameSite = 'Lax'
     }
-
-    // 4. If cookie-av's attribute-value is a case-insensitive match for
-    //    "Lax", set enforcement to "Lax".
-    if (attributeValueLowercase.includes('lax')) {
-      enforcement = 'Lax'
-    }
-
-    // 5. Append an attribute to the cookie-attribute-list with an
-    //    attribute-name of "SameSite" and an attribute-value of
-    //    enforcement.
-    cookieAttributeList.sameSite = enforcement
   } else {
     cookieAttributeList.unparsed ??= []
 
@@ -26081,40 +26201,35 @@ const tail = Buffer.from([0x00, 0x00, 0xff, 0xff])
 const kBuffer = Symbol('kBuffer')
 const kLength = Symbol('kLength')
 
-// Default maximum decompressed message size: 4 MB
-const kDefaultMaxDecompressedSize = 4 * 1024 * 1024
-
 class PerMessageDeflate {
   /** @type {import('node:zlib').InflateRaw} */
   #inflate
 
   #options = {}
 
-  /** @type {boolean} */
-  #aborted = false
-
-  /** @type {Function|null} */
-  #currentCallback = null
+  #maxPayloadSize = 0
 
   /**
    * @param {Map<string, string>} extensions
    */
-  constructor (extensions) {
+  constructor (extensions, options) {
     this.#options.serverNoContextTakeover = extensions.has('server_no_context_takeover')
     this.#options.serverMaxWindowBits = extensions.get('server_max_window_bits')
+
+    this.#maxPayloadSize = options.maxPayloadSize
   }
 
+  /**
+   * Decompress a compressed payload.
+   * @param {Buffer} chunk Compressed data
+   * @param {boolean} fin Final fragment flag
+   * @param {Function} callback Callback function
+   */
   decompress (chunk, fin, callback) {
     // An endpoint uses the following algorithm to decompress a message.
     // 1.  Append 4 octets of 0x00 0x00 0xff 0xff to the tail end of the
     //     payload of the message.
     // 2.  Decompress the resulting data using DEFLATE.
-
-    if (this.#aborted) {
-      callback(new MessageSizeExceededError())
-      return
-    }
-
     if (!this.#inflate) {
       let windowBits = Z_DEFAULT_WINDOWBITS
 
@@ -26137,23 +26252,12 @@ class PerMessageDeflate {
       this.#inflate[kLength] = 0
 
       this.#inflate.on('data', (data) => {
-        if (this.#aborted) {
-          return
-        }
-
         this.#inflate[kLength] += data.length
 
-        if (this.#inflate[kLength] > kDefaultMaxDecompressedSize) {
-          this.#aborted = true
+        if (this.#maxPayloadSize > 0 && this.#inflate[kLength] > this.#maxPayloadSize) {
+          callback(new MessageSizeExceededError())
           this.#inflate.removeAllListeners()
-          this.#inflate.destroy()
           this.#inflate = null
-
-          if (this.#currentCallback) {
-            const cb = this.#currentCallback
-            this.#currentCallback = null
-            cb(new MessageSizeExceededError())
-          }
           return
         }
 
@@ -26166,14 +26270,13 @@ class PerMessageDeflate {
       })
     }
 
-    this.#currentCallback = callback
     this.#inflate.write(chunk)
     if (fin) {
       this.#inflate.write(tail)
     }
 
     this.#inflate.flush(() => {
-      if (this.#aborted || !this.#inflate) {
+      if (!this.#inflate) {
         return
       }
 
@@ -26181,7 +26284,6 @@ class PerMessageDeflate {
 
       this.#inflate[kBuffer].length = 0
       this.#inflate[kLength] = 0
-      this.#currentCallback = null
 
       callback(null, full)
     })
@@ -26216,6 +26318,12 @@ const {
 const { WebsocketFrameSend } = __nccwpck_require__(3264)
 const { closeWebSocketConnection } = __nccwpck_require__(6897)
 const { PerMessageDeflate } = __nccwpck_require__(9469)
+const { MessageSizeExceededError } = __nccwpck_require__(8707)
+
+function failWebsocketConnectionWithCode (ws, code, reason) {
+  closeWebSocketConnection(ws, code, reason, Buffer.byteLength(reason))
+  failWebsocketConnection(ws, reason)
+}
 
 // This code was influenced by ws released under the MIT license.
 // Copyright (c) 2011 Einar Otto Stangvik <einaros@gmail.com>
@@ -26224,6 +26332,7 @@ const { PerMessageDeflate } = __nccwpck_require__(9469)
 
 class ByteParser extends Writable {
   #buffers = []
+  #fragmentsBytes = 0
   #byteOffset = 0
   #loop = false
 
@@ -26235,18 +26344,27 @@ class ByteParser extends Writable {
   /** @type {Map<string, PerMessageDeflate>} */
   #extensions
 
+  /** @type {number} */
+  #maxFragments
+
+  /** @type {number} */
+  #maxPayloadSize
+
   /**
    * @param {import('./websocket').WebSocket} ws
    * @param {Map<string, string>|null} extensions
+   * @param {{ maxFragments?: number, maxPayloadSize?: number }} [options]
    */
-  constructor (ws, extensions) {
+  constructor (ws, extensions, options = {}) {
     super()
 
     this.ws = ws
     this.#extensions = extensions == null ? new Map() : extensions
+    this.#maxFragments = options.maxFragments ?? 0
+    this.#maxPayloadSize = options.maxPayloadSize ?? 0
 
     if (this.#extensions.has('permessage-deflate')) {
-      this.#extensions.set('permessage-deflate', new PerMessageDeflate(extensions))
+      this.#extensions.set('permessage-deflate', new PerMessageDeflate(extensions, options))
     }
   }
 
@@ -26260,6 +26378,19 @@ class ByteParser extends Writable {
     this.#loop = true
 
     this.run(callback)
+  }
+
+  #validatePayloadLength () {
+    if (
+      this.#maxPayloadSize > 0 &&
+      !isControlFrame(this.#info.opcode) &&
+      this.#info.payloadLength + this.#fragmentsBytes > this.#maxPayloadSize
+    ) {
+      failWebsocketConnectionWithCode(this.ws, 1009, 'Payload size exceeds maximum allowed size')
+      return false
+    }
+
+    return true
   }
 
   /**
@@ -26350,6 +26481,10 @@ class ByteParser extends Writable {
         if (payloadLength <= 125) {
           this.#info.payloadLength = payloadLength
           this.#state = parserStates.READ_DATA
+
+          if (!this.#validatePayloadLength()) {
+            return
+          }
         } else if (payloadLength === 126) {
           this.#state = parserStates.PAYLOADLENGTH_16
         } else if (payloadLength === 127) {
@@ -26374,6 +26509,10 @@ class ByteParser extends Writable {
 
         this.#info.payloadLength = buffer.readUInt16BE(0)
         this.#state = parserStates.READ_DATA
+
+        if (!this.#validatePayloadLength()) {
+          return
+        }
       } else if (this.#state === parserStates.PAYLOADLENGTH_64) {
         if (this.#byteOffset < 8) {
           return callback()
@@ -26396,6 +26535,10 @@ class ByteParser extends Writable {
 
         this.#info.payloadLength = lower
         this.#state = parserStates.READ_DATA
+
+        if (!this.#validatePayloadLength()) {
+          return
+        }
       } else if (this.#state === parserStates.READ_DATA) {
         if (this.#byteOffset < this.#info.payloadLength) {
           return callback()
@@ -26408,42 +26551,58 @@ class ByteParser extends Writable {
           this.#state = parserStates.INFO
         } else {
           if (!this.#info.compressed) {
-            this.#fragments.push(body)
+            if (!this.writeFragments(body)) {
+              return
+            }
+
+            if (this.#maxPayloadSize > 0 && this.#fragmentsBytes > this.#maxPayloadSize) {
+              failWebsocketConnectionWithCode(this.ws, 1009, new MessageSizeExceededError().message)
+              return
+            }
 
             // If the frame is not fragmented, a message has been received.
             // If the frame is fragmented, it will terminate with a fin bit set
             // and an opcode of 0 (continuation), therefore we handle that when
             // parsing continuation frames, not here.
             if (!this.#info.fragmented && this.#info.fin) {
-              const fullMessage = Buffer.concat(this.#fragments)
-              websocketMessageReceived(this.ws, this.#info.binaryType, fullMessage)
-              this.#fragments.length = 0
+              websocketMessageReceived(this.ws, this.#info.binaryType, this.consumeFragments())
             }
 
             this.#state = parserStates.INFO
           } else {
-            this.#extensions.get('permessage-deflate').decompress(body, this.#info.fin, (error, data) => {
-              if (error) {
-                failWebsocketConnection(this.ws, error.message)
-                return
-              }
+            this.#extensions.get('permessage-deflate').decompress(
+              body,
+              this.#info.fin,
+              (error, data) => {
+                if (error) {
+                  const code = error instanceof MessageSizeExceededError ? 1009 : 1007
+                  failWebsocketConnectionWithCode(this.ws, code, error.message)
+                  return
+                }
 
-              this.#fragments.push(data)
+                if (!this.writeFragments(data)) {
+                  return
+                }
 
-              if (!this.#info.fin) {
-                this.#state = parserStates.INFO
+                if (this.#maxPayloadSize > 0 && this.#fragmentsBytes > this.#maxPayloadSize) {
+                  failWebsocketConnectionWithCode(this.ws, 1009, new MessageSizeExceededError().message)
+                  return
+                }
+
+                if (!this.#info.fin) {
+                  this.#state = parserStates.INFO
+                  this.#loop = true
+                  this.run(callback)
+                  return
+                }
+
+                websocketMessageReceived(this.ws, this.#info.binaryType, this.consumeFragments())
+
                 this.#loop = true
+                this.#state = parserStates.INFO
                 this.run(callback)
-                return
               }
-
-              websocketMessageReceived(this.ws, this.#info.binaryType, Buffer.concat(this.#fragments))
-
-              this.#loop = true
-              this.#state = parserStates.INFO
-              this.#fragments.length = 0
-              this.run(callback)
-            })
+            )
 
             this.#loop = false
             break
@@ -26493,6 +26652,35 @@ class ByteParser extends Writable {
     this.#byteOffset -= n
 
     return buffer
+  }
+
+  writeFragments (fragment) {
+    if (
+      this.#maxFragments > 0 &&
+      this.#fragments.length === this.#maxFragments
+    ) {
+      failWebsocketConnectionWithCode(this.ws, 1008, 'Too many message fragments')
+      return false
+    }
+
+    this.#fragmentsBytes += fragment.length
+    this.#fragments.push(fragment)
+    return true
+  }
+
+  consumeFragments () {
+    const fragments = this.#fragments
+
+    if (fragments.length === 1) {
+      this.#fragmentsBytes = 0
+      return fragments.shift()
+    }
+
+    const output = Buffer.concat(fragments, this.#fragmentsBytes)
+    this.#fragments = []
+    this.#fragmentsBytes = 0
+
+    return output
   }
 
   parseCloseBody (data) {
@@ -27526,7 +27714,14 @@ class WebSocket extends EventTarget {
     // once this happens, the connection is open
     this[kResponse] = response
 
-    const parser = new ByteParser(this, parsedExtensions)
+    const webSocketOptions = this[kController]?.dispatcher?.webSocketOptions
+    const maxFragments = webSocketOptions?.maxFragments
+    const maxPayloadSize = webSocketOptions?.maxPayloadSize
+
+    const parser = new ByteParser(this, parsedExtensions, {
+      maxFragments,
+      maxPayloadSize
+    })
     parser.on('drain', onParserDrain)
     parser.on('error', onParserError.bind(this))
 
@@ -28023,180 +28218,180 @@ module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("util");
 
 /***/ }),
 
-/***/ 1120:
-/***/ ((module) => {
+/***/ 4649:
+/***/ ((__unused_webpack_module, exports) => {
 
 var __webpack_unused_export__;
 
-
-const NullObject = function NullObject () { }
-NullObject.prototype = Object.create(null)
-
-/**
- * RegExp to match *( ";" parameter ) in RFC 7231 sec 3.1.1.1
- *
- * parameter     = token "=" ( token / quoted-string )
- * token         = 1*tchar
- * tchar         = "!" / "#" / "$" / "%" / "&" / "'" / "*"
- *               / "+" / "-" / "." / "^" / "_" / "`" / "|" / "~"
- *               / DIGIT / ALPHA
- *               ; any VCHAR, except delimiters
- * quoted-string = DQUOTE *( qdtext / quoted-pair ) DQUOTE
- * qdtext        = HTAB / SP / %x21 / %x23-5B / %x5D-7E / obs-text
- * obs-text      = %x80-FF
- * quoted-pair   = "\" ( HTAB / SP / VCHAR / obs-text )
+/*!
+ * content-type
+ * Copyright(c) 2015 Douglas Christopher Wilson
+ * MIT Licensed
  */
-const paramRE = /; *([!#$%&'*+.^\w`|~-]+)=("(?:[\v\u0020\u0021\u0023-\u005b\u005d-\u007e\u0080-\u00ff]|\\[\v\u0020-\u00ff])*"|[!#$%&'*+.^\w`|~-]+) */gu
-
+__webpack_unused_export__ = ({ value: true });
+__webpack_unused_export__ = format;
+exports.qg = parse;
+const TEXT_REGEXP = /^[\u0009\u0020-\u007e\u0080-\u00ff]*$/;
+const TOKEN_REGEXP = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 /**
- * RegExp to match quoted-pair in RFC 7230 sec 3.2.6
- *
- * quoted-pair = "\" ( HTAB / SP / VCHAR / obs-text )
- * obs-text    = %x80-FF
+ * RegExp to match chars that must be quoted-pair in RFC 9110 sec 5.6.4
  */
-const quotedPairRE = /\\([\v\u0020-\u00ff])/gu
-
+const QUOTE_REGEXP = /[\\"]/g;
 /**
- * RegExp to match type in RFC 7231 sec 3.1.1.1
+ * RegExp to match type in RFC 9110 sec 8.3.1
  *
  * media-type = type "/" subtype
  * type       = token
  * subtype    = token
  */
-const mediaTypeRE = /^[!#$%&'*+.^\w|~-]+\/[!#$%&'*+.^\w|~-]+$/u
-
-// default ContentType to prevent repeated object creation
-const defaultContentType = { type: '', parameters: new NullObject() }
-Object.freeze(defaultContentType.parameters)
-Object.freeze(defaultContentType)
-
+const TYPE_REGEXP = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+\/[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 /**
- * Parse media type to object.
- *
- * @param {string|object} header
- * @return {Object}
- * @public
+ * Null object perf optimization. Faster than `Object.create(null)` and `{ __proto__: null }`.
  */
-
-function parse (header) {
-  if (typeof header !== 'string') {
-    throw new TypeError('argument header is required and must be a string')
-  }
-
-  let index = header.indexOf(';')
-  const type = index !== -1
-    ? header.slice(0, index).trim()
-    : header.trim()
-
-  if (mediaTypeRE.test(type) === false) {
-    throw new TypeError('invalid media type')
-  }
-
-  const result = {
-    type: type.toLowerCase(),
-    parameters: new NullObject()
-  }
-
-  // parse parameters
-  if (index === -1) {
-    return result
-  }
-
-  let key
-  let match
-  let value
-
-  paramRE.lastIndex = index
-
-  while ((match = paramRE.exec(header))) {
-    if (match.index !== index) {
-      throw new TypeError('invalid parameter format')
+const NullObject = /* @__PURE__ */ (() => {
+    const C = function () { };
+    C.prototype = Object.create(null);
+    return C;
+})();
+/**
+ * Format an object into a `Content-Type` header.
+ */
+function format(obj) {
+    const { type, parameters } = obj;
+    if (!type || !TYPE_REGEXP.test(type)) {
+        throw new TypeError(`Invalid type: ${type}`);
     }
-
-    index += match[0].length
-    key = match[1].toLowerCase()
-    value = match[2]
-
-    if (value[0] === '"') {
-      // remove quotes and escapes
-      value = value
-        .slice(1, value.length - 1)
-
-      quotedPairRE.test(value) && (value = value.replace(quotedPairRE, '$1'))
+    let result = type;
+    if (parameters) {
+        for (const param of Object.keys(parameters)) {
+            if (!TOKEN_REGEXP.test(param)) {
+                throw new TypeError(`Invalid parameter name: ${param}`);
+            }
+            result += `; ${param}=${qstring(parameters[param])}`;
+        }
     }
-
-    result.parameters[key] = value
-  }
-
-  if (index !== header.length) {
-    throw new TypeError('invalid parameter format')
-  }
-
-  return result
+    return result;
 }
-
-function safeParse (header) {
-  if (typeof header !== 'string') {
-    return defaultContentType
-  }
-
-  let index = header.indexOf(';')
-  const type = index !== -1
-    ? header.slice(0, index).trim()
-    : header.trim()
-
-  if (mediaTypeRE.test(type) === false) {
-    return defaultContentType
-  }
-
-  const result = {
-    type: type.toLowerCase(),
-    parameters: new NullObject()
-  }
-
-  // parse parameters
-  if (index === -1) {
-    return result
-  }
-
-  let key
-  let match
-  let value
-
-  paramRE.lastIndex = index
-
-  while ((match = paramRE.exec(header))) {
-    if (match.index !== index) {
-      return defaultContentType
-    }
-
-    index += match[0].length
-    key = match[1].toLowerCase()
-    value = match[2]
-
-    if (value[0] === '"') {
-      // remove quotes and escapes
-      value = value
-        .slice(1, value.length - 1)
-
-      quotedPairRE.test(value) && (value = value.replace(quotedPairRE, '$1'))
-    }
-
-    result.parameters[key] = value
-  }
-
-  if (index !== header.length) {
-    return defaultContentType
-  }
-
-  return result
+/**
+ * Parse a `Content-Type` header.
+ */
+function parse(header, options) {
+    const len = header.length;
+    let index = skipOWS(header, 0, len);
+    const valueStart = index;
+    index = skipValue(header, index, len);
+    const valueEnd = trailingOWS(header, valueStart, index);
+    const type = header.slice(valueStart, valueEnd).toLowerCase();
+    const parameters = options?.parameters === false
+        ? new NullObject()
+        : parseParameters(header, index, len);
+    return { type, parameters };
 }
-
-__webpack_unused_export__ = { parse, safeParse }
-__webpack_unused_export__ = parse
-module.exports.xL = safeParse
-__webpack_unused_export__ = defaultContentType
-
+const SP = 32; // " "
+const HTAB = 9; // "\t"
+const SEMI = 59; // ";"
+const EQ = 61; // "="
+const DQUOTE = 34; // '"'
+const BSLASH = 92; // "\\"
+/**
+ * Parses the parameters of a `Content-Type` header starting at the given index.
+ */
+function parseParameters(header, index, len) {
+    const parameters = new NullObject();
+    parameter: while (index < len) {
+        index = skipOWS(header, index + 1 /* Skip over ; */, len);
+        const keyStart = index;
+        while (index < len) {
+            const code = header.charCodeAt(index);
+            if (code === SEMI)
+                continue parameter;
+            if (code === EQ) {
+                const keyEnd = trailingOWS(header, keyStart, index);
+                const key = header.slice(keyStart, keyEnd).toLowerCase();
+                index = skipOWS(header, index + 1, len);
+                if (index < len && header.charCodeAt(index) === DQUOTE) {
+                    index++;
+                    let value = "";
+                    while (index < len) {
+                        const code = header.charCodeAt(index++);
+                        if (code === DQUOTE) {
+                            index = skipValue(header, index, len);
+                            if (parameters[key] === undefined)
+                                parameters[key] = value;
+                            break;
+                        }
+                        if (code === BSLASH && index < len) {
+                            value += header[index++];
+                            continue;
+                        }
+                        value += String.fromCharCode(code);
+                    }
+                    continue parameter;
+                }
+                const valueStart = index;
+                index = skipValue(header, index, len);
+                if (parameters[key] === undefined) {
+                    const valueEnd = trailingOWS(header, valueStart, index);
+                    parameters[key] = header.slice(valueStart, valueEnd);
+                }
+                continue parameter;
+            }
+            index++;
+        }
+    }
+    return parameters;
+}
+/**
+ * Skip over characters until a semicolon.
+ */
+function skipValue(str, index, len) {
+    while (index < len) {
+        const char = str.charCodeAt(index);
+        if (char === SEMI)
+            break;
+        index++;
+    }
+    return index;
+}
+/**
+ * Skip optional whitespace (OWS) in an HTTP header value.
+ *
+ * OWS is defined in RFC 9110 sec 5.6.3 as SP (" ") or HTAB ("\t").
+ */
+function skipOWS(header, index, len) {
+    while (index < len) {
+        const char = header.charCodeAt(index);
+        if (char !== SP && char !== HTAB)
+            break;
+        index++;
+    }
+    return index;
+}
+/**
+ * Trim optional whitespace (OWS) from the end of a substring.
+ *
+ * OWS is defined in RFC 9110 sec 5.6.3 as SP (" ") or HTAB ("\t").
+ */
+function trailingOWS(header, start, end) {
+    while (end > start) {
+        const char = header.charCodeAt(end - 1);
+        if (char !== SP && char !== HTAB)
+            break;
+        end--;
+    }
+    return end;
+}
+/**
+ * Serialize a parameter value.
+ */
+function qstring(str) {
+    if (TOKEN_REGEXP.test(str))
+        return str;
+    if (TEXT_REGEXP.test(str))
+        return `"${str.replace(QUOTE_REGEXP, "\\$&")}"`;
+    throw new TypeError(`Invalid parameter value: ${str}`);
+}
+//# sourceMappingURL=index.js.map
 
 /***/ }),
 
@@ -28278,6 +28473,8 @@ var a=(t,e)=>()=>(e||t((e={exports:{}}).exports,e),e.exports);var _=a(i=>{"use s
 /************************************************************************/
 var __webpack_exports__ = {};
 
+// EXTERNAL MODULE: external "node:path"
+var external_node_path_ = __nccwpck_require__(6760);
 ;// CONCATENATED MODULE: ./src/utils/constants.ts
 /**
  * Defines valid separator characters for tag directory paths in Terraform module releases.
@@ -28354,7 +28551,9 @@ const RELEASE_REASON = {
  */
 const WIKI_STATUS = {
     SUCCESS: 'SUCCESS',
-    FAILURE: 'FAILURE',
+    FAILURE_CHECKOUT: 'FAILURE_CHECKOUT',
+    FAILURE_TERRAFORM_DOCS_INSTALL: 'FAILURE_TERRAFORM_DOCS_INSTALL',
+    FAILURE_TERRAFORM_DOCS_RUN: 'FAILURE_TERRAFORM_DOCS_RUN',
     DISABLED: 'DISABLED',
 };
 const WIKI_HOME_FILENAME = 'Home.md';
@@ -28363,7 +28562,27 @@ const WIKI_FOOTER_FILENAME = '_Footer.md';
 const GITHUB_ACTIONS_BOT_NAME = 'GitHub Actions';
 const GITHUB_ACTIONS_BOT_USERNAME = 'github-actions[bot]';
 const PR_SUMMARY_MARKER = '<!-- techpivot/terraform-module-releaser — pr-summary-marker -->';
-const PR_RELEASE_MARKER = '<!-- techpivot/terraform-module-releaser — release-marker -->';
+/**
+ * Current post-release comment identity marker (written and read by this version of the action). The
+ * schema digit makes future changes detectable, and it is intentionally distinct from
+ * {@link LEGACY_PR_RELEASE_COMMENT_MARKER} so new and legacy post-release comments are trivially distinguishable.
+ */
+const PR_RELEASE_COMMENT_MARKER = '<!-- techpivot/terraform-module-releaser:release:1 -->';
+/**
+ * The previous (pre-marker-scheme) post-release comment marker. READ-ONLY: never written by current
+ * code. The legacy gate in `createTaggedReleases` uses it to recognize pull requests that completed
+ * their release under an older version of the action, preserving the old "don't double-release"
+ * behavior without parsing editable release-note text.
+ */
+const LEGACY_PR_RELEASE_COMMENT_MARKER = '<!-- techpivot/terraform-module-releaser — release-marker -->';
+/**
+ * Hidden, schema-versioned marker embedded in each release BODY this action creates, tying the release
+ * to the pull request that produced it. This is the durable idempotency key for self-healing releases:
+ * `createTaggedReleases` scans release bodies for it (version-agnostically) to decide what to (re)create.
+ * See `buildPrMarker` / `matchesPrMarker` in `src/utils/markers.ts`.
+ */
+const RELEASE_BODY_PR_MARKER_PREFIX = '<!-- techpivot/terraform-module-releaser:release-pr:';
+const RELEASE_BODY_PR_MARKER_SCHEMA = 1;
 const PROJECT_URL = 'https://github.com/techpivot/terraform-module-releaser';
 const BRANDING_COMMENT = `<h4 align="center"><sub align="middle">Powered by:&nbsp;&nbsp;<a href="${PROJECT_URL}"><img src="https://raw.githubusercontent.com/techpivot/terraform-module-releaser/refs/heads/main/assets/octicons-mark-github.svg" height="12" width="12" align="center" /></a> <a href="${PROJECT_URL}">techpivot/terraform-module-releaser</a></sub></h4>`;
 const BRANDING_WIKI = `<h3 align="center">Powered by:&nbsp;&nbsp;<a href="${PROJECT_URL}"><img src="https://raw.githubusercontent.com/techpivot/terraform-module-releaser/refs/heads/main/assets/octicons-mark-github.svg" height="14" width="14" align="center" /></a> <a href="${PROJECT_URL}">techpivot/terraform-module-releaser</a></h3>`;
@@ -28423,6 +28642,13 @@ const SEMVER_MODE = {
  * Valid semver mode values for the `semver-mode` input.
  */
 const VALID_SEMVER_MODES = [SEMVER_MODE.KEYWORDS, SEMVER_MODE.CONVENTIONAL_COMMITS];
+/**
+ * The terraform-docs configuration filename supported by this action.
+ *
+ * We intentionally align with the current terraform-docs-supported `.terraform-docs.yml`
+ * filename and use it for module-level discovery.
+ */
+const TERRAFORM_DOCS_CONFIG_FILENAME = '.terraform-docs.yml';
 
 ;// CONCATENATED MODULE: external "os"
 const external_os_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("os");
@@ -31267,7 +31493,7 @@ function error(message, properties = {}) {
  * @param properties optional properties to add to the annotation.
  */
 function warning(message, properties = {}) {
-    issueCommand('warning', toCommandProperties(properties), message instanceof Error ? message.toString() : message);
+    command_issueCommand('warning', utils_toCommandProperties(properties), message instanceof Error ? message.toString() : message);
 }
 /**
  * Adds a notice issue
@@ -31427,6 +31653,7 @@ const ACTION_INPUTS = {
     'use-version-prefix': requiredBoolean('useVersionPrefix'),
     'module-ref-mode': requiredString('moduleRefMode'),
     'pre-release': requiredBoolean('preRelease'),
+    'hide-no-changes-pr-comment': requiredBoolean('hideNoChangesPrComment'),
 };
 /**
  * Creates a config object by reading inputs using GitHub Actions API and converting them
@@ -31572,6 +31799,7 @@ function initializeConfig() {
         info(`Use Version Prefix: ${configInstance.useVersionPrefix}`);
         info(`Module Ref Mode: ${configInstance.moduleRefMode}`);
         info(`Pre-release: ${configInstance.preRelease}`);
+        info(`Hide No Changes PR Comment: ${configInstance.hideNoChangesPrComment}`);
         return configInstance;
     }
     finally {
@@ -32097,8 +32325,8 @@ function withDefaults(oldDefaults, newDefaults) {
 var endpoint = withDefaults(null, DEFAULTS);
 
 
-// EXTERNAL MODULE: ./node_modules/fast-content-type-parse/index.js
-var fast_content_type_parse = __nccwpck_require__(1120);
+// EXTERNAL MODULE: ./node_modules/content-type/dist/index.js
+var dist = __nccwpck_require__(4649);
 ;// CONCATENATED MODULE: ./node_modules/json-with-bigint/json-with-bigint.js
 const intRegex = /^-?\d+$/;
 const noiseValue = /^-?\d+n+$/; // Noise - strings that match the custom format before being converted to it
@@ -32365,7 +32593,7 @@ class RequestError extends Error {
 
 
 // pkg/dist-src/version.js
-var dist_bundle_VERSION = "10.0.8";
+var dist_bundle_VERSION = "10.0.10";
 
 // pkg/dist-src/defaults.js
 var defaults_default = {
@@ -32494,7 +32722,7 @@ async function getResponseData(response) {
   if (!contentType) {
     return response.text().catch(noop);
   }
-  const mimetype = (0,fast_content_type_parse/* safeParse */.xL)(contentType);
+  const mimetype = (0,dist/* parse */.qg)(contentType);
   if (isJSONResponse(mimetype)) {
     let text = "";
     try {
@@ -35746,7 +35974,7 @@ legacyRestEndpointMethods.VERSION = dist_src_version_VERSION;
 //# sourceMappingURL=index.js.map
 
 ;// CONCATENATED MODULE: ./package.json
-const package_namespaceObject = /*#__PURE__*/JSON.parse('{"rE":"2.1.0","TB":"https://github.com/techpivot/terraform-module-releaser"}');
+const package_namespaceObject = /*#__PURE__*/JSON.parse('{"rE":"2.2.0","TB":"https://github.com/techpivot/terraform-module-releaser"}');
 ;// CONCATENATED MODULE: ./src/context.ts
 
 
@@ -35787,6 +36015,8 @@ function isPullRequestEvent(payload) {
         typeof payload.pull_request.title === 'string' &&
         (payload.pull_request.body === null ||
             typeof payload.pull_request.body === 'string') &&
+        typeof payload.pull_request.base === 'object' &&
+        typeof payload.pull_request.base.ref === 'string' &&
         'repository' in payload &&
         typeof payload.repository === 'object' &&
         typeof payload.repository.full_name === 'string');
@@ -35861,6 +36091,8 @@ function initializeContext() {
             prBody: payload.pull_request.body ?? '',
             issueNumber: payload.pull_request.number,
             workspaceDir,
+            baseRef: payload.pull_request.base.ref,
+            mergeCommitSha: payload.pull_request.merge_commit_sha ?? null,
             isPrMergeEvent: payload.action === 'closed' && payload.pull_request.merged === true,
         };
         const truncatedBody = contextInstance.prBody?.length > 60 ? `${contextInstance.prBody.slice(0, 57)}...` : contextInstance.prBody;
@@ -35874,6 +36106,8 @@ function initializeContext() {
         info(`Pull Request Body: ${truncatedBody}`);
         info(`Issue Number: ${contextInstance.issueNumber}`);
         info(`Workspace Directory: ${contextInstance.workspaceDir}`);
+        info(`Base Ref: ${contextInstance.baseRef}`);
+        info(`Merge Commit SHA: ${contextInstance.mergeCommitSha ?? '(none)'}`);
         info(`Is Pull Request Merge Event: ${contextInstance.isPrMergeEvent}`);
         return contextInstance;
     }
@@ -35892,8 +36126,6 @@ const context = new Proxy({}, {
     },
 });
 
-// EXTERNAL MODULE: external "node:path"
-var external_node_path_ = __nccwpck_require__(6760);
 ;// CONCATENATED MODULE: ./node_modules/conventional-commits-parser/dist/regex.js
 const nomatchRegex = /(?!.*)/;
 function regex_escape(string) {
@@ -35920,7 +36152,7 @@ function getReferencePartsRegex(issuePrefixes, issuePrefixesCaseSensitive) {
         return nomatchRegex;
     }
     const flags = issuePrefixesCaseSensitive ? 'g' : 'gi';
-    return new RegExp(`(?:.*?)??\\s*([\\w-\\.\\/]*?)??(${joinOr(issuePrefixes)})([\\w-]+)(?=\\s|$|[,;)\\]])`, flags);
+    return new RegExp(`(?:.*?)??\\s*([\\w-\\.\\/]*?)??(${joinOr(issuePrefixes)})([\\w-]+)(?=\\s|$|[,;.)\\]])`, flags);
 }
 function getReferencesRegex(referenceActions) {
     if (!referenceActions) {
@@ -35929,6 +36161,12 @@ function getReferencesRegex(referenceActions) {
     }
     const joinedKeywords = joinOr(referenceActions);
     return new RegExp(`(${joinedKeywords})(?:\\s+(.*?))(?=(?:${joinedKeywords})|$)`, 'gi');
+}
+function getFooterTokenRegex(issuePrefixes) {
+    const issuePrefixSeparator = issuePrefixes
+        ? `|\\s+(?:${joinOr(issuePrefixes)})`
+        : '';
+    return new RegExp(`^\\s*(?:BREAKING CHANGE|[\\w-]+)(?::\\s+${issuePrefixSeparator}).+`, 'i');
 }
 /**
  * Make the regexes used to parse a commit.
@@ -35939,15 +36177,17 @@ function getParserRegexes(options = {}) {
     const notes = getNotesRegex(options.noteKeywords, options.notesPattern);
     const referenceParts = getReferencePartsRegex(options.issuePrefixes, options.issuePrefixesCaseSensitive);
     const references = getReferencesRegex(options.referenceActions);
+    const footerToken = getFooterTokenRegex(options.issuePrefixes);
     return {
         notes,
         referenceParts,
         references,
+        footerToken,
         mentions: /@([\w-]+)/g,
         url: /\b(?:https?):\/\/(?:www\.)?([-a-zA-Z0-9@:%_+.~#?&//=])+\b/
     };
 }
-//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoicmVnZXguanMiLCJzb3VyY2VSb290IjoiIiwic291cmNlcyI6WyIuLi9zcmMvcmVnZXgudHMiXSwibmFtZXMiOltdLCJtYXBwaW5ncyI6IkFBS0EsTUFBTSxZQUFZLEdBQUcsUUFBUSxDQUFBO0FBRTdCLFNBQVMsTUFBTSxDQUFDLE1BQWM7SUFDNUIsT0FBTyxNQUFNLENBQUMsT0FBTyxDQUFDLHFCQUFxQixFQUFFLE1BQU0sQ0FBQyxDQUFBO0FBQ3RELENBQUM7QUFFRCxTQUFTLE1BQU0sQ0FBQyxLQUEwQjtJQUN4QyxPQUFPLEtBQUs7U0FDVCxHQUFHLENBQUMsR0FBRyxDQUFDLEVBQUUsQ0FBQyxDQUFDLE9BQU8sR0FBRyxLQUFLLFFBQVEsQ0FBQyxDQUFDLENBQUMsTUFBTSxDQUFDLEdBQUcsQ0FBQyxJQUFJLEVBQUUsQ0FBQyxDQUFDLENBQUMsQ0FBQyxHQUFHLENBQUMsTUFBTSxDQUFDLENBQUM7U0FDdkUsTUFBTSxDQUFDLE9BQU8sQ0FBQztTQUNmLElBQUksQ0FBQyxHQUFHLENBQUMsQ0FBQTtBQUNkLENBQUM7QUFFRCxTQUFTLGFBQWEsQ0FDcEIsWUFBNkMsRUFDN0MsWUFBb0Q7SUFFcEQsSUFBSSxDQUFDLFlBQVksRUFBRSxDQUFDO1FBQ2xCLE9BQU8sWUFBWSxDQUFBO0lBQ3JCLENBQUM7SUFFRCxNQUFNLHFCQUFxQixHQUFHLE1BQU0sQ0FBQyxZQUFZLENBQUMsQ0FBQTtJQUVsRCxJQUFJLENBQUMsWUFBWSxFQUFFLENBQUM7UUFDbEIsT0FBTyxJQUFJLE1BQU0sQ0FBQyxhQUFhLHFCQUFxQixjQUFjLEVBQUUsR0FBRyxDQUFDLENBQUE7SUFDMUUsQ0FBQztJQUVELE9BQU8sWUFBWSxDQUFDLHFCQUFxQixDQUFDLENBQUE7QUFDNUMsQ0FBQztBQUVELFNBQVMsc0JBQXNCLENBQzdCLGFBQThDLEVBQzlDLDBCQUErQztJQUUvQyxJQUFJLENBQUMsYUFBYSxFQUFFLENBQUM7UUFDbkIsT0FBTyxZQUFZLENBQUE7SUFDckIsQ0FBQztJQUVELE1BQU0sS0FBSyxHQUFHLDBCQUEwQixDQUFDLENBQUMsQ0FBQyxHQUFHLENBQUMsQ0FBQyxDQUFDLElBQUksQ0FBQTtJQUVyRCxPQUFPLElBQUksTUFBTSxDQUFDLG1DQUFtQyxNQUFNLENBQUMsYUFBYSxDQUFDLDhCQUE4QixFQUFFLEtBQUssQ0FBQyxDQUFBO0FBQ2xILENBQUM7QUFFRCxTQUFTLGtCQUFrQixDQUN6QixnQkFBaUQ7SUFFakQsSUFBSSxDQUFDLGdCQUFnQixFQUFFLENBQUM7UUFDdEIscUJBQXFCO1FBQ3JCLE9BQU8sVUFBVSxDQUFBO0lBQ25CLENBQUM7SUFFRCxNQUFNLGNBQWMsR0FBRyxNQUFNLENBQUMsZ0JBQWdCLENBQUMsQ0FBQTtJQUUvQyxPQUFPLElBQUksTUFBTSxDQUFDLElBQUksY0FBYyx1QkFBdUIsY0FBYyxNQUFNLEVBQUUsSUFBSSxDQUFDLENBQUE7QUFDeEYsQ0FBQztBQUVEOzs7O0dBSUc7QUFDSCxNQUFNLFVBQVUsZ0JBQWdCLENBQzlCLFVBQXNJLEVBQUU7SUFFeEksTUFBTSxLQUFLLEdBQUcsYUFBYSxDQUFDLE9BQU8sQ0FBQyxZQUFZLEVBQUUsT0FBTyxDQUFDLFlBQVksQ0FBQyxDQUFBO0lBQ3ZFLE1BQU0sY0FBYyxHQUFHLHNCQUFzQixDQUFDLE9BQU8sQ0FBQyxhQUFhLEVBQUUsT0FBTyxDQUFDLDBCQUEwQixDQUFDLENBQUE7SUFDeEcsTUFBTSxVQUFVLEdBQUcsa0JBQWtCLENBQUMsT0FBTyxDQUFDLGdCQUFnQixDQUFDLENBQUE7SUFFL0QsT0FBTztRQUNMLEtBQUs7UUFDTCxjQUFjO1FBQ2QsVUFBVTtRQUNWLFFBQVEsRUFBRSxZQUFZO1FBQ3RCLEdBQUcsRUFBRSwyREFBMkQ7S0FDakUsQ0FBQTtBQUNILENBQUMifQ==
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoicmVnZXguanMiLCJzb3VyY2VSb290IjoiIiwic291cmNlcyI6WyIuLi9zcmMvcmVnZXgudHMiXSwibmFtZXMiOltdLCJtYXBwaW5ncyI6IkFBS0EsTUFBTSxZQUFZLEdBQUcsUUFBUSxDQUFBO0FBRTdCLFNBQVMsTUFBTSxDQUFDLE1BQWM7SUFDNUIsT0FBTyxNQUFNLENBQUMsT0FBTyxDQUFDLHFCQUFxQixFQUFFLE1BQU0sQ0FBQyxDQUFBO0FBQ3RELENBQUM7QUFFRCxTQUFTLE1BQU0sQ0FBQyxLQUEwQjtJQUN4QyxPQUFPLEtBQUs7U0FDVCxHQUFHLENBQUMsR0FBRyxDQUFDLEVBQUUsQ0FBQyxDQUFDLE9BQU8sR0FBRyxLQUFLLFFBQVEsQ0FBQyxDQUFDLENBQUMsTUFBTSxDQUFDLEdBQUcsQ0FBQyxJQUFJLEVBQUUsQ0FBQyxDQUFDLENBQUMsQ0FBQyxHQUFHLENBQUMsTUFBTSxDQUFDLENBQUM7U0FDdkUsTUFBTSxDQUFDLE9BQU8sQ0FBQztTQUNmLElBQUksQ0FBQyxHQUFHLENBQUMsQ0FBQTtBQUNkLENBQUM7QUFFRCxTQUFTLGFBQWEsQ0FDcEIsWUFBNkMsRUFDN0MsWUFBb0Q7SUFFcEQsSUFBSSxDQUFDLFlBQVksRUFBRSxDQUFDO1FBQ2xCLE9BQU8sWUFBWSxDQUFBO0lBQ3JCLENBQUM7SUFFRCxNQUFNLHFCQUFxQixHQUFHLE1BQU0sQ0FBQyxZQUFZLENBQUMsQ0FBQTtJQUVsRCxJQUFJLENBQUMsWUFBWSxFQUFFLENBQUM7UUFDbEIsT0FBTyxJQUFJLE1BQU0sQ0FBQyxhQUFhLHFCQUFxQixjQUFjLEVBQUUsR0FBRyxDQUFDLENBQUE7SUFDMUUsQ0FBQztJQUVELE9BQU8sWUFBWSxDQUFDLHFCQUFxQixDQUFDLENBQUE7QUFDNUMsQ0FBQztBQUVELFNBQVMsc0JBQXNCLENBQzdCLGFBQThDLEVBQzlDLDBCQUErQztJQUUvQyxJQUFJLENBQUMsYUFBYSxFQUFFLENBQUM7UUFDbkIsT0FBTyxZQUFZLENBQUE7SUFDckIsQ0FBQztJQUVELE1BQU0sS0FBSyxHQUFHLDBCQUEwQixDQUFDLENBQUMsQ0FBQyxHQUFHLENBQUMsQ0FBQyxDQUFDLElBQUksQ0FBQTtJQUVyRCxPQUFPLElBQUksTUFBTSxDQUFDLG1DQUFtQyxNQUFNLENBQUMsYUFBYSxDQUFDLCtCQUErQixFQUFFLEtBQUssQ0FBQyxDQUFBO0FBQ25ILENBQUM7QUFFRCxTQUFTLGtCQUFrQixDQUN6QixnQkFBaUQ7SUFFakQsSUFBSSxDQUFDLGdCQUFnQixFQUFFLENBQUM7UUFDdEIscUJBQXFCO1FBQ3JCLE9BQU8sVUFBVSxDQUFBO0lBQ25CLENBQUM7SUFFRCxNQUFNLGNBQWMsR0FBRyxNQUFNLENBQUMsZ0JBQWdCLENBQUMsQ0FBQTtJQUUvQyxPQUFPLElBQUksTUFBTSxDQUFDLElBQUksY0FBYyx1QkFBdUIsY0FBYyxNQUFNLEVBQUUsSUFBSSxDQUFDLENBQUE7QUFDeEYsQ0FBQztBQUVELFNBQVMsbUJBQW1CLENBQzFCLGFBQThDO0lBRTlDLE1BQU0sb0JBQW9CLEdBQUcsYUFBYTtRQUN4QyxDQUFDLENBQUMsV0FBVyxNQUFNLENBQUMsYUFBYSxDQUFDLEdBQUc7UUFDckMsQ0FBQyxDQUFDLEVBQUUsQ0FBQTtJQUVOLE9BQU8sSUFBSSxNQUFNLENBQUMsMkNBQTJDLG9CQUFvQixLQUFLLEVBQUUsR0FBRyxDQUFDLENBQUE7QUFDOUYsQ0FBQztBQUVEOzs7O0dBSUc7QUFDSCxNQUFNLFVBQVUsZ0JBQWdCLENBQzlCLE9BQU8sR0FBK0gsRUFBRTtJQUV4SSxNQUFNLEtBQUssR0FBRyxhQUFhLENBQUMsT0FBTyxDQUFDLFlBQVksRUFBRSxPQUFPLENBQUMsWUFBWSxDQUFDLENBQUE7SUFDdkUsTUFBTSxjQUFjLEdBQUcsc0JBQXNCLENBQUMsT0FBTyxDQUFDLGFBQWEsRUFBRSxPQUFPLENBQUMsMEJBQTBCLENBQUMsQ0FBQTtJQUN4RyxNQUFNLFVBQVUsR0FBRyxrQkFBa0IsQ0FBQyxPQUFPLENBQUMsZ0JBQWdCLENBQUMsQ0FBQTtJQUMvRCxNQUFNLFdBQVcsR0FBRyxtQkFBbUIsQ0FBQyxPQUFPLENBQUMsYUFBYSxDQUFDLENBQUE7SUFFOUQsT0FBTztRQUNMLEtBQUs7UUFDTCxjQUFjO1FBQ2QsVUFBVTtRQUNWLFdBQVc7UUFDWCxRQUFRLEVBQUUsWUFBWTtRQUN0QixHQUFHLEVBQUUsMkRBQTJEO0tBQ2pFLENBQUE7QUFDSCxDQUFDIn0=
 ;// CONCATENATED MODULE: ./node_modules/conventional-commits-parser/dist/utils.js
 const SCISSOR = '------------------------ >8 ------------------------';
 /**
@@ -36229,7 +36469,7 @@ class CommitParser_CommitParser {
             return false;
         }
         const matches = this.currentLine().match(regexes.notes);
-        let references = [];
+        let isFooterToken;
         if (matches) {
             const note = {
                 title: matches[1],
@@ -36245,16 +36485,14 @@ class CommitParser_CommitParser {
                 if (this.parseNotes()) {
                     return true;
                 }
-                references = this.parseReferences(this.currentLine());
-                if (references.length) {
-                    commit.references.push(...references);
-                }
-                else {
+                isFooterToken = regexes.footerToken.test(this.currentLine());
+                commit.references.push(...this.parseReferences(this.currentLine()));
+                if (!isFooterToken) {
                     note.text = appendLine(note.text, this.currentLine());
                 }
                 commit.footer = appendLine(commit.footer, this.currentLine());
                 this.nextLine();
-                if (references.length) {
+                if (isFooterToken) {
                     break;
                 }
             }
@@ -36263,17 +36501,17 @@ class CommitParser_CommitParser {
         return false;
     }
     parseBodyAndFooter(isBody) {
-        const { commit } = this;
+        const { commit, regexes } = this;
         if (!this.isLineAvailable()) {
             return isBody;
         }
-        const references = this.parseReferences(this.currentLine());
-        const isStillBody = !references.length && isBody;
+        const isFooterToken = regexes.footerToken.test(this.currentLine());
+        const isStillBody = !isFooterToken && isBody;
+        commit.references.push(...this.parseReferences(this.currentLine()));
         if (isStillBody) {
             commit.body = appendLine(commit.body, this.currentLine());
         }
         else {
-            commit.references.push(...references);
             commit.footer = appendLine(commit.footer, this.currentLine());
         }
         this.nextLine();
@@ -36315,12 +36553,8 @@ class CommitParser_CommitParser {
     }
     cleanupCommit() {
         const { commit } = this;
-        if (commit.body) {
-            commit.body = trimNewLines(commit.body);
-        }
-        if (commit.footer) {
-            commit.footer = trimNewLines(commit.footer);
-        }
+        commit.body &&= trimNewLines(commit.body);
+        commit.footer &&= trimNewLines(commit.footer);
         commit.notes.forEach((note) => {
             note.text = trimNewLines(note.text);
         });
@@ -36375,7 +36609,7 @@ class CommitParser_CommitParser {
         return commit;
     }
 }
-//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiQ29tbWl0UGFyc2VyLmpzIiwic291cmNlUm9vdCI6IiIsInNvdXJjZXMiOlsiLi4vc3JjL0NvbW1pdFBhcnNlci50cyJdLCJuYW1lcyI6W10sIm1hcHBpbmdzIjoiQUFPQSxPQUFPLEVBQUUsZ0JBQWdCLEVBQUUsTUFBTSxZQUFZLENBQUE7QUFDN0MsT0FBTyxFQUNMLFlBQVksRUFDWixVQUFVLEVBQ1YsZ0JBQWdCLEVBQ2hCLFNBQVMsRUFDVCxpQkFBaUIsRUFDakIsMkJBQTJCLEVBQzVCLE1BQU0sWUFBWSxDQUFBO0FBQ25CLE9BQU8sRUFBRSxjQUFjLEVBQUUsTUFBTSxjQUFjLENBQUE7QUFFN0M7Ozs7R0FJRztBQUNILE1BQU0sVUFBVSxrQkFBa0IsQ0FBQyxjQUErQixFQUFFO0lBQ2xFLGtKQUFrSjtJQUNsSixPQUFPO1FBQ0wsS0FBSyxFQUFFLElBQUk7UUFDWCxNQUFNLEVBQUUsSUFBSTtRQUNaLE1BQU0sRUFBRSxJQUFJO1FBQ1osSUFBSSxFQUFFLElBQUk7UUFDVixNQUFNLEVBQUUsSUFBSTtRQUNaLEtBQUssRUFBRSxFQUFFO1FBQ1QsUUFBUSxFQUFFLEVBQUU7UUFDWixVQUFVLEVBQUUsRUFBRTtRQUNkLEdBQUcsV0FBVztLQUNmLENBQUE7QUFDSCxDQUFDO0FBRUQ7O0dBRUc7QUFDSCxNQUFNLE9BQU8sWUFBWTtJQUNOLE9BQU8sQ0FBZTtJQUN0QixPQUFPLENBQWU7SUFDL0IsS0FBSyxHQUFhLEVBQUUsQ0FBQTtJQUNwQixTQUFTLEdBQUcsQ0FBQyxDQUFBO0lBQ2IsTUFBTSxHQUFHLGtCQUFrQixFQUFFLENBQUE7SUFFckMsWUFBWSxVQUF5QixFQUFFO1FBQ3JDLElBQUksQ0FBQyxPQUFPLEdBQUc7WUFDYixHQUFHLGNBQWM7WUFDakIsR0FBRyxPQUFPO1NBQ1gsQ0FBQTtRQUNELElBQUksQ0FBQyxPQUFPLEdBQUcsZ0JBQWdCLENBQUMsSUFBSSxDQUFDLE9BQU8sQ0FBQyxDQUFBO0lBQy9DLENBQUM7SUFFTyxXQUFXO1FBQ2pCLE9BQU8sSUFB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
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiQ29tbWl0UGFyc2VyLmpzIiwic291cmNlUm9vdCI6IiIsInNvdXJjZXMiOlsiLi4vc3JjL0NvbW1pdFBhcnNlci50cyJdLCJuYW1lcyI6W10sIm1hcHBpbmdzIjoiQUFPQSxPQUFPLEVBQUUsZ0JBQWdCLEVBQUUsTUFBTSxZQUFZLENBQUE7QUFDN0MsT0FBTyxFQUNMLFlBQVksRUFDWixVQUFVLEVBQ1YsZ0JBQWdCLEVBQ2hCLFNBQVMsRUFDVCxpQkFBaUIsRUFDakIsMkJBQTJCLEVBQzVCLE1BQU0sWUFBWSxDQUFBO0FBQ25CLE9BQU8sRUFBRSxjQUFjLEVBQUUsTUFBTSxjQUFjLENBQUE7QUFFN0M7Ozs7R0FJRztBQUNILE1BQU0sVUFBVSxrQkFBa0IsQ0FBQyxXQUFXLEdBQW9CLEVBQUU7SUFDbEUsa0pBQWtKO0lBQ2xKLE9BQU87UUFDTCxLQUFLLEVBQUUsSUFBSTtRQUNYLE1BQU0sRUFBRSxJQUFJO1FBQ1osTUFBTSxFQUFFLElBQUk7UUFDWixJQUFJLEVBQUUsSUFBSTtRQUNWLE1BQU0sRUFBRSxJQUFJO1FBQ1osS0FBSyxFQUFFLEVBQUU7UUFDVCxRQUFRLEVBQUUsRUFBRTtRQUNaLFVBQVUsRUFBRSxFQUFFO1FBQ2QsR0FBRyxXQUFXO0tBQ2YsQ0FBQTtBQUNILENBQUM7QUFFRDs7R0FFRztBQUNILE1BQU0sT0FBTyxZQUFZO0lBQ04sT0FBTyxDQUFlO0lBQ3RCLE9BQU8sQ0FBZTtJQUMvQixLQUFLLEdBQWEsRUFBRSxDQUFBO0lBQ3BCLFNBQVMsR0FBRyxDQUFDLENBQUE7SUFDYixNQUFNLEdBQUcsa0JBQWtCLEVBQUUsQ0FBQTtJQUVyQyxZQUFZLE9BQU8sR0FBa0IsRUFBRTtRQUNyQyxJQUFJLENBQUMsT0FBTyxHQUFHO1lBQ2IsR0FBRyxjQUFjO1lBQ2pCLEdBQUcsT0FBTztTQUNYLENBQUE7UUFDRCxJQUFJLENBQUMsT0FBTyxHQUFHLGdCQUFnQixDQUFDLElBQUksQ0FBQyxPQUFPLENBQUMsQ0FBQTtJQUMvQyxDQUFDO0lBRU8sV0FBVztRQUNq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
 ;// CONCATENATED MODULE: external "stream"
 const external_stream_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("stream");
 ;// CONCATENATED MODULE: ./node_modules/conventional-commits-parser/dist/stream.js
@@ -36416,12 +36650,11 @@ function parseCommits(options = {}) {
 function parseCommitsStream(options = {}) {
     return Transform.from(parseCommits(options));
 }
-//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoic3RyZWFtLmpzIiwic291cmNlUm9vdCI6IiIsInNvdXJjZXMiOlsiLi4vc3JjL3N0cmVhbS50cyJdLCJuYW1lcyI6W10sIm1hcHBpbmdzIjoiQUFBQSxPQUFPLEVBQUUsU0FBUyxFQUFFLE1BQU0sUUFBUSxDQUFBO0FBRWxDLE9BQU8sRUFBRSxZQUFZLEVBQUUsTUFBTSxtQkFBbUIsQ0FBQTtBQUVoRDs7OztHQUlHO0FBQ0gsTUFBTSxVQUFVLFlBQVksQ0FDMUIsVUFBK0IsRUFBRTtJQUVqQyxNQUFNLFVBQVUsR0FBRyxPQUFPLENBQUMsSUFBSSxDQUFBO0lBQy9CLE1BQU0sSUFBSSxHQUFHLFVBQVUsS0FBSyxJQUFJO1FBQzlCLENBQUMsQ0FBQyxDQUFDLEdBQVUsRUFBRSxFQUFFO1lBQ2YsTUFBTSxHQUFHLENBQUE7UUFDWCxDQUFDO1FBQ0QsQ0FBQyxDQUFDLFVBQVU7WUFDVixDQUFDLENBQUMsQ0FBQyxHQUFVLEVBQUUsRUFBRSxDQUFDLFVBQVUsQ0FBQyxHQUFHLENBQUMsUUFBUSxFQUFFLENBQUM7WUFDNUMsQ0FBQyxDQUFDLEdBQUcsRUFBRSxHQUFjLENBQUMsQ0FBQTtJQUUxQixPQUFPLEtBQUssU0FBUyxDQUFDLENBQUMsS0FBSyxDQUMxQixVQUFzRTtRQUV0RSxNQUFNLE1BQU0sR0FBRyxJQUFJLFlBQVksQ0FBQyxPQUFPLENBQUMsQ0FBQTtRQUN4QyxJQUFJLFNBQTBCLENBQUE7UUFFOUIsSUFBSSxLQUFLLEVBQUUsU0FBUyxJQUFJLFVBQVUsRUFBRSxDQUFDO1lBQ25DLElBQUksQ0FBQztnQkFDSCxNQUFNLE1BQU0sQ0FBQyxLQUFLLENBQUMsU0FBUyxDQUFDLFFBQVEsRUFBRSxDQUFDLENBQUE7WUFDMUMsQ0FBQztZQUFDLE9BQU8sR0FBRyxFQUFFLENBQUM7Z0JBQ2IsSUFBSSxDQUFDLEdBQVksQ0FBQyxDQUFBO1lBQ3BCLENBQUM7UUFDSCxDQUFDO0lBQ0gsQ0FBQyxDQUFBO0FBQ0gsQ0FBQztBQUVEOzs7O0dBSUc7QUFDSCxNQUFNLFVBQVUsa0JBQWtCLENBQUMsVUFBK0IsRUFBRTtJQUNsRSxPQUFPLFNBQVMsQ0FBQyxJQUFJLENBQUMsWUFBWSxDQUFDLE9BQU8sQ0FBQyxDQUFDLENBQUE7QUFDOUMsQ0FBQyJ9
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoic3RyZWFtLmpzIiwic291cmNlUm9vdCI6IiIsInNvdXJjZXMiOlsiLi4vc3JjL3N0cmVhbS50cyJdLCJuYW1lcyI6W10sIm1hcHBpbmdzIjoiQUFBQSxPQUFPLEVBQUUsU0FBUyxFQUFFLE1BQU0sUUFBUSxDQUFBO0FBRWxDLE9BQU8sRUFBRSxZQUFZLEVBQUUsTUFBTSxtQkFBbUIsQ0FBQTtBQUVoRDs7OztHQUlHO0FBQ0gsTUFBTSxVQUFVLFlBQVksQ0FDMUIsT0FBTyxHQUF3QixFQUFFO0lBRWpDLE1BQU0sVUFBVSxHQUFHLE9BQU8sQ0FBQyxJQUFJLENBQUE7SUFDL0IsTUFBTSxJQUFJLEdBQUcsVUFBVSxLQUFLLElBQUk7UUFDOUIsQ0FBQyxDQUFDLENBQUMsR0FBVSxFQUFFLEVBQUU7WUFDZixNQUFNLEdBQUcsQ0FBQTtRQUNYLENBQUM7UUFDRCxDQUFDLENBQUMsVUFBVTtZQUNWLENBQUMsQ0FBQyxDQUFDLEdBQVUsRUFBRSxFQUFFLENBQUMsVUFBVSxDQUFDLEdBQUcsQ0FBQyxRQUFRLEVBQUUsQ0FBQztZQUM1QyxDQUFDLENBQUMsR0FBRyxFQUFFLEdBQWMsQ0FBQyxDQUFBO0lBRTFCLE9BQU8sS0FBSyxTQUFTLENBQUMsQ0FBQyxLQUFLLENBQzFCLFVBQXNFO1FBRXRFLE1BQU0sTUFBTSxHQUFHLElBQUksWUFBWSxDQUFDLE9BQU8sQ0FBQyxDQUFBO1FBQ3hDLElBQUksU0FBMEIsQ0FBQTtRQUU5QixJQUFJLEtBQUssRUFBRSxTQUFTLElBQUksVUFBVSxFQUFFLENBQUM7WUFDbkMsSUFBSSxDQUFDO2dCQUNILE1BQU0sTUFBTSxDQUFDLEtBQUssQ0FBQyxTQUFTLENBQUMsUUFBUSxFQUFFLENBQUMsQ0FBQTtZQUMxQyxDQUFDO1lBQUMsT0FBTyxHQUFHLEVBQUUsQ0FBQztnQkFDYixJQUFJLENBQUMsR0FBWSxDQUFDLENBQUE7WUFDcEIsQ0FBQztRQUNILENBQUM7SUFDSCxDQUFDLENBQUE7QUFDSCxDQUFDO0FBRUQ7Ozs7R0FJRztBQUNILE1BQU0sVUFBVSxrQkFBa0IsQ0FBQyxPQUFPLEdBQXdCLEVBQUU7SUFDbEUsT0FBTyxTQUFTLENBQUMsSUFBSSxDQUFDLFlBQVksQ0FBQyxPQUFPLENBQUMsQ0FBQyxDQUFBO0FBQzlDLENBQUMifQ==
 ;// CONCATENATED MODULE: ./node_modules/conventional-commits-parser/dist/index.js
 
 
-
-//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiaW5kZXguanMiLCJzb3VyY2VSb290IjoiIiwic291cmNlcyI6WyIuLi9zcmMvaW5kZXgudHMiXSwibmFtZXMiOltdLCJtYXBwaW5ncyI6IkFBQUEsY0FBYyxZQUFZLENBQUE7QUFDMUIsY0FBYyxtQkFBbUIsQ0FBQTtBQUNqQyxjQUFjLGFBQWEsQ0FBQSJ9
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiaW5kZXguanMiLCJzb3VyY2VSb290IjoiIiwic291cmNlcyI6WyIuLi9zcmMvaW5kZXgudHMiXSwibmFtZXMiOltdLCJtYXBwaW5ncyI6IkFBQ0EsY0FBYyxtQkFBbUIsQ0FBQTtBQUNqQyxjQUFjLGFBQWEsQ0FBQSJ9
 ;// CONCATENATED MODULE: ./src/commit-analyzer.ts
 
 
@@ -36766,6 +36999,62 @@ function renderTemplate(template, variables) {
         return value !== undefined && value !== null ? value : placeholder;
     });
 }
+/**
+ * Formats a repository URL as a Terraform module source URL.
+ *
+ * Converts repository URLs to the appropriate format for Terraform module sourcing:
+ * - SSH format: git::ssh://git@hostname/path.git
+ * - HTTPS format: git::https://hostname/path.git
+ *
+ * @param repoUrl - The repository URL (must be a valid HTTPS URL)
+ * @param useSSH - Whether to use SSH format instead of HTTPS
+ * @returns The formatted source URL for the module with git:: prefix
+ * @throws {TypeError} When repoUrl is not a valid URL that can be parsed
+ *
+ * @example
+ * ```typescript
+ * getModuleSource('https://github.com/owner/repo', false)
+ * // Returns: 'git::https://github.com/owner/repo.git'
+ *
+ * getModuleSource('https://github.techpivot.com/owner/repo', true)
+ * // Returns: 'git::ssh://git@github.techpivot.com/owner/repo.git'
+ * ```
+ */
+function getModuleSource(repoUrl, useSSH) {
+    if (useSSH) {
+        const url = new URL(repoUrl);
+        return `git::ssh://git@${url.hostname}${url.pathname}.git`;
+    }
+    return `git::${repoUrl}.git`;
+}
+/**
+ * Extracts a human-readable error message from an unknown thrown value, including any
+ * stderr output captured from child process errors.
+ *
+ * Handles three cases for the primary message:
+ * - `Error` instances: uses `err.message`
+ * - Anything else: coerces via `String(err)`
+ *
+ * If the thrown value has a `stderr` property (as produced by `execFileSync` with `stdio: 'pipe'`),
+ * its text is appended to the message. `stderr` may be a `Buffer` (decoded as UTF-8) or a `string`.
+ *
+ * @param {unknown} err - The caught error value.
+ * @returns {string} A trimmed, newline-joined message combining the error message and any stderr text.
+ *
+ * @example
+ * getExecErrorMessage(new Error('git clone failed'))
+ * // Returns: 'git clone failed'
+ *
+ * @example
+ * const err = Object.assign(new Error('Command failed'), { stderr: Buffer.from('fatal: not a git repo') });
+ * getExecErrorMessage(err)
+ * // Returns: 'Command failed\nfatal: not a git repo'
+ */
+function getExecErrorMessage(err) {
+    const stderr = err?.stderr;
+    const stderrText = typeof stderr === 'string' ? stderr : stderr?.toString('utf8');
+    return [err instanceof Error ? err.message : String(err), stderrText].filter(Boolean).join('\n').trim();
+}
 
 ;// CONCATENATED MODULE: ./src/terraform-module.ts
 
@@ -36991,7 +37280,20 @@ class TerraformModule {
         if (latestTag === null) {
             return null;
         }
-        const match = MODULE_TAG_REGEX.exec(latestTag);
+        return TerraformModule.getVersionFromTag(latestTag);
+    }
+    /**
+     * Extracts the version portion of a module tag, preserving any version prefix (such as "v").
+     *
+     * Static because the orphan-tag recovery path in `createTaggedReleases` needs the version of an
+     * arbitrary existing tag, not only the module's latest one.
+     *
+     * @param {string} tag - A module tag (e.g. `aws/vpc/v1.2.3`).
+     * @returns {string | null} The version including any prefix (e.g. `v1.2.3`), or null if the tag does
+     *  not match the expected module tag format.
+     */
+    static getVersionFromTag(tag) {
+        const match = MODULE_TAG_REGEX.exec(tag);
         return match ? match[3] : null;
     }
     /**
@@ -37551,6 +37853,17 @@ const closePattern = /\\}/g;
 const commaPattern = /\\,/g;
 const periodPattern = /\\\./g;
 const EXPANSION_MAX = 100_000;
+// `EXPANSION_MAX` caps the *number* of expansions, but not their length. An
+// input like `'{a,b}'.repeat(1500)` stays under that count - its output is
+// truncated to 100k results - while making every result ~1500 characters
+// long. The result set, and the intermediate arrays built while combining
+// brace sets, then grow large enough to exhaust memory and crash the process
+// (CVE-2026-14257). `EXPANSION_MAX_LENGTH` bounds the total number of
+// characters the accumulator may hold at any point, so memory stays flat no
+// matter how many brace groups are chained. The limit sits well above any
+// realistic expansion (100k results hitting `EXPANSION_MAX` measure ~1M
+// characters) so legitimate input is unaffected.
+const EXPANSION_MAX_LENGTH = 4_000_000;
 function numeric(str) {
     return !isNaN(str) ? parseInt(str, 10) : str.charCodeAt(0);
 }
@@ -37600,7 +37913,7 @@ function esm_expand(str, options = {}) {
     if (!str) {
         return [];
     }
-    const { max = EXPANSION_MAX } = options;
+    const { max = EXPANSION_MAX, maxLength = EXPANSION_MAX_LENGTH } = options;
     // I don't know why Bash 4.3 does this, but it does.
     // Anything starting with {} will have the first two bytes preserved
     // but *only* at the top level, so {},a}b will not expand to anything,
@@ -37610,7 +37923,7 @@ function esm_expand(str, options = {}) {
     if (str.slice(0, 2) === '{}') {
         str = '\\{\\}' + str.slice(2);
     }
-    return expand_(escapeBraces(str), max, true).map(unescapeBraces);
+    return expand_(escapeBraces(str), max, maxLength, true).map(unescapeBraces);
 }
 function embrace(str) {
     return '{' + str + '}';
@@ -37624,22 +37937,117 @@ function lte(i, y) {
 function gte(i, y) {
     return i >= y;
 }
-function expand_(str, max, isTop) {
-    /** @type {string[]} */
-    const expansions = [];
-    const m = balanced('{', '}', str);
-    if (!m)
-        return [str];
-    // no need to expand pre, since it is guaranteed to be free of brace-sets
-    const pre = m.pre;
-    const post = m.post.length ? expand_(m.post, max, false) : [''];
-    if (/\$$/.test(m.pre)) {
-        for (let k = 0; k < post.length && k < max; k++) {
-            const expansion = pre + '{' + m.body + '}' + post[k];
-            expansions.push(expansion);
+// Build `{ acc[a] + pre + values[v] }` for every combination, capping the
+// number of results at `max` and the total number of characters at `maxLength`.
+// This is the one place output grows, so bounding it here keeps the single
+// accumulator - and therefore memory - flat regardless of how many brace groups
+// are combined (CVE-2026-14257).
+function combine(acc, pre, values, max, maxLength, dropEmpties) {
+    const out = [];
+    let length = 0;
+    for (let a = 0; a < acc.length; a++) {
+        for (let v = 0; v < values.length; v++) {
+            if (out.length >= max)
+                return out;
+            const expansion = acc[a] + pre + values[v];
+            // Bash drops empty results at the top level. Skip them before they count
+            // against `max`, so `max` bounds the number of *kept* results.
+            if (dropEmpties && !expansion)
+                continue;
+            if (length + expansion.length > maxLength)
+                return out;
+            out.push(expansion);
+            length += expansion.length;
         }
     }
-    else {
+    return out;
+}
+// The expansion values of a single numeric (`1..5`) or alphabetic (`a..e..2`)
+// sequence body.
+function expandSequence(body, isAlphaSequence, max, maxLength) {
+    const n = body.split(/\.\./);
+    const N = [];
+    // A sequence body always splits into two or three parts, but the compiler
+    // can't know that.
+    /* c8 ignore start */
+    if (n[0] === undefined || n[1] === undefined) {
+        return N;
+    }
+    /* c8 ignore stop */
+    const x = numeric(n[0]);
+    const y = numeric(n[1]);
+    const width = Math.max(n[0].length, n[1].length);
+    let incr = n.length === 3 && n[2] !== undefined ?
+        Math.max(Math.abs(numeric(n[2])), 1)
+        : 1;
+    let test = lte;
+    const reverse = y < x;
+    if (reverse) {
+        incr *= -1;
+        test = gte;
+    }
+    const pad = n.some(isPadded);
+    let length = 0;
+    for (let i = x; test(i, y) && N.length < max; i += incr) {
+        let c;
+        if (isAlphaSequence) {
+            c = String.fromCharCode(i);
+            if (c === '\\') {
+                c = '';
+            }
+        }
+        else {
+            c = String(i);
+            if (pad) {
+                const need = width - c.length;
+                if (need > 0) {
+                    const z = new Array(need + 1).join('0');
+                    if (i < 0) {
+                        c = '-' + z + c.slice(1);
+                    }
+                    else {
+                        c = z + c;
+                    }
+                }
+            }
+        }
+        if (length + c.length > maxLength)
+            break;
+        N.push(c);
+        length += c.length;
+    }
+    return N;
+}
+function expand_(str, max, maxLength, isTop) {
+    // Consume the string's top-level brace groups left to right, threading a
+    // running set of combined prefixes (`acc`). Expanding the tail iteratively -
+    // rather than recursing on `m.post` once per group - keeps the native stack
+    // depth constant, so deeply chained input (`'{a,b}'.repeat(3000)`) can no
+    // longer overflow the stack, and leaves a single accumulator whose size
+    // `maxLength` bounds directly (CVE-2026-14257).
+    let acc = [''];
+    // Bash drops empty results, but only when the *first* top-level group is a
+    // comma set - a sequence like `{a..\}` may legitimately yield ''. The drop
+    // is on the final strings, so it is applied to whichever `combine` produces
+    // them (the one with no brace set left in the tail).
+    let dropEmpties = false;
+    let firstGroup = true;
+    for (;;) {
+        const m = balanced('{', '}', str);
+        // No brace set left: the rest of the string is literal.
+        if (!m) {
+            return combine(acc, str, [''], max, maxLength, dropEmpties);
+        }
+        // no need to expand pre, since it is guaranteed to be free of brace-sets
+        const pre = m.pre;
+        if (/\$$/.test(pre)) {
+            acc = combine(acc, pre + '{' + m.body + '}', [''], max, maxLength, dropEmpties && !m.post.length);
+            firstGroup = false;
+            if (!m.post.length)
+                break;
+            str = m.post;
+            continue;
+        }
         const isNumericSequence = /^-?\d+\.\.-?\d+(?:\.\.-?\d+)?$/.test(m.body);
         const isAlphaSequence = /^[a-zA-Z]\.\.[a-zA-Z](?:\.\.-?\d+)?$/.test(m.body);
         const isSequence = isNumericSequence || isAlphaSequence;
@@ -37648,87 +38056,69 @@ function expand_(str, max, isTop) {
             // {a},b}
             if (m.post.match(/,(?!,).*\}/)) {
                 str = m.pre + '{' + m.body + escClose + m.post;
-                return expand_(str, max, true);
+                isTop = true;
+                continue;
             }
-            return [str];
+            // Nothing here expands, so the whole remaining string is literal.
+            return combine(acc, pre + '{' + m.body + '}' + m.post, [''], max, maxLength, dropEmpties);
         }
-        let n;
+        if (firstGroup) {
+            dropEmpties = isTop && !isSequence;
+            firstGroup = false;
+        }
+        let values;
         if (isSequence) {
-            n = m.body.split(/\.\./);
+            values = expandSequence(m.body, isAlphaSequence, max, maxLength);
         }
         else {
-            n = parseCommaParts(m.body);
+            let n = parseCommaParts(m.body);
             if (n.length === 1 && n[0] !== undefined) {
                 // x{{a,b}}y ==> x{a}y x{b}y
-                n = expand_(n[0], max, false).map(embrace);
+                n = expand_(n[0], max, maxLength, false).map(embrace);
                 //XXX is this necessary? Can't seem to hit it in tests.
                 /* c8 ignore start */
                 if (n.length === 1) {
-                    return post.map(p => m.pre + n[0] + p);
+                    acc = combine(acc, pre + n[0], [''], max, maxLength, dropEmpties && !m.post.length);
+                    if (!m.post.length)
+                        break;
+                    str = m.post;
+                    continue;
                 }
                 /* c8 ignore stop */
             }
-        }
-        // at this point, n is the parts, and we know it's not a comma set
-        // with a single entry.
-        let N;
-        if (isSequence && n[0] !== undefined && n[1] !== undefined) {
-            const x = numeric(n[0]);
-            const y = numeric(n[1]);
-            const width = Math.max(n[0].length, n[1].length);
-            let incr = n.length === 3 && n[2] !== undefined ?
-                Math.max(Math.abs(numeric(n[2])), 1)
-                : 1;
-            let test = lte;
-            const reverse = y < x;
-            if (reverse) {
-                incr *= -1;
-                test = gte;
+            // Values that `combine` is going to drop as empty produce no result, so
+            // they must not count against `max` - otherwise `{a,,b}` with `max: 2`
+            // would stop at `['a', '']` and yield one result instead of two. Skipping
+            // them outright keeps `values` bounded while leaving `max` a bound on
+            // *kept* results.
+            let dropsEmpties = dropEmpties && !m.post.length && !pre;
+            for (let d = 0; dropsEmpties && d < acc.length; d++) {
+                if (acc[d]) {
+                    dropsEmpties = false;
+                }
             }
-            const pad = n.some(isPadded);
-            N = [];
-            for (let i = x; test(i, y); i += incr) {
-                let c;
-                if (isAlphaSequence) {
-                    c = String.fromCharCode(i);
-                    if (c === '\\') {
-                        c = '';
+            values = [];
+            let valuesLength = 0;
+            outer: for (let j = 0; j < n.length; j++) {
+                const expanded = expand_(n[j], max, maxLength, false);
+                for (let k = 0; k < expanded.length; k++) {
+                    const v = expanded[k];
+                    if (dropsEmpties && !v)
+                        continue;
+                    if (values.length >= max || valuesLength + v.length > maxLength) {
+                        break outer;
                     }
-                }
-                else {
-                    c = String(i);
-                    if (pad) {
-                        const need = width - c.length;
-                        if (need > 0) {
-                            const z = new Array(need + 1).join('0');
-                            if (i < 0) {
-                                c = '-' + z + c.slice(1);
-                            }
-                            else {
-                                c = z + c;
-                            }
-                        }
-                    }
-                }
-                N.push(c);
-            }
-        }
-        else {
-            N = [];
-            for (let j = 0; j < n.length; j++) {
-                N.push.apply(N, expand_(n[j], max, false));
-            }
-        }
-        for (let j = 0; j < N.length; j++) {
-            for (let k = 0; k < post.length && expansions.length < max; k++) {
-                const expansion = pre + N[j] + post[k];
-                if (!isTop || isSequence || expansion) {
-                    expansions.push(expansion);
+                    values.push(v);
+                    valuesLength += v.length;
                 }
             }
         }
+        acc = combine(acc, pre, values, max, maxLength, dropEmpties && !m.post.length);
+        if (!m.post.length)
+            break;
+        str = m.post;
     }
-    return expansions;
+    return acc;
 }
 //# sourceMappingURL=index.js.map
 ;// CONCATENATED MODULE: ./node_modules/minimatch/dist/esm/assert-valid-pattern.js
@@ -39915,6 +40305,47 @@ minimatch.unescape = unescape_unescape;
 
 
 /**
+ * Locates a `.terraform-docs.yml` configuration file for a module.
+ *
+ * Walks from the module directory up to (and including) the workspace root, checking each
+ * directory and its `.config/` subdirectory. This mirrors the discovery behavior used by
+ * this action: module root → .config/ → parent dir → parent .config/ → … → workspace root.
+ *
+ * The first config file found wins (closest to the module takes precedence). If the module
+ * directory is outside the workspace root, returns `null` without searching parent directories.
+ *
+ * @param moduleDirectory - The absolute path to the Terraform module directory.
+ * @param workspaceDir - The absolute or relative workspace root used as the search boundary.
+ * @returns The absolute path to the found config file, or `null` if none exists.
+ */
+function findModuleTerraformDocsConfig(moduleDirectory, workspaceDir) {
+    const resolvedWorkspaceDir = (0,external_node_path_.resolve)(workspaceDir);
+    let currentDir = (0,external_node_path_.resolve)(moduleDirectory);
+    const relativeModulePath = (0,external_node_path_.relative)(resolvedWorkspaceDir, currentDir);
+    const isWithinWorkspace = relativeModulePath === '' || (!relativeModulePath.startsWith('..') && !(0,external_node_path_.isAbsolute)(relativeModulePath));
+    if (!isWithinWorkspace) {
+        return null;
+    }
+    // Walk from module dir up to workspace root (inclusive)
+    while (true) {
+        // Check current directory and its .config/ subdirectory
+        for (const dir of [currentDir, (0,external_node_path_.join)(currentDir, '.config')]) {
+            const configPath = (0,external_node_path_.join)(dir, TERRAFORM_DOCS_CONFIG_FILENAME);
+            if ((0,external_node_fs_.existsSync)(configPath)) {
+                return configPath;
+            }
+        }
+        // Stop after checking workspace root
+        if (currentDir === resolvedWorkspaceDir) {
+            break;
+        }
+        // Move to the parent directory. The loop always breaks at the workspace root above (guaranteed by
+        // the isWithinWorkspace check), so we never need a filesystem-root guard and never walk past it.
+        currentDir = (0,external_node_path_.dirname)(currentDir);
+    }
+    return null;
+}
+/**
  * Checks if a directory contains any Terraform (.tf) files.
  *
  * @param {string} dirPath - The path of the directory to check.
@@ -40008,15 +40439,16 @@ function findTerraformModuleDirectories(workspaceDir, modulePathIgnore = []) {
  * Gets the relative path of the Terraform module directory associated with a specified file.
  *
  * Traverses upward from the file's directory to locate the nearest Terraform module directory.
- * Returns the module's path relative to the current working directory.
+ * Returns the module's path relative to the provided workspace directory.
  *
  * @param {string} filePath - The absolute or relative path of the file to analyze.
- * @returns {string | null} Relative path to the associated Terraform module directory, or null
- *                          if no directory is found.
+ * @param {string} workspaceDir - The workspace root directory used as the base for relative paths.
+ * @returns {string | null} Relative path to the associated Terraform module directory from
+ *                          workspaceDir, or null if no directory is found.
  */
-function getRelativeTerraformModulePathFromFilePath(filePath) {
-    const rootDir = (0,external_node_path_.resolve)(context.workspaceDir);
-    const absoluteFilePath = (0,external_node_path_.isAbsolute)(filePath) ? filePath : (0,external_node_path_.resolve)(context.workspaceDir, filePath); // Handle relative/absolute
+function getRelativeTerraformModulePathFromFilePath(filePath, workspaceDir) {
+    const rootDir = (0,external_node_path_.resolve)(workspaceDir);
+    const absoluteFilePath = (0,external_node_path_.isAbsolute)(filePath) ? filePath : (0,external_node_path_.resolve)(workspaceDir, filePath);
     let directory = (0,external_node_path_.dirname)(absoluteFilePath);
     // Traverse upward until the current working directory (rootDir) is reached
     while (directory !== rootDir && directory !== (0,external_node_path_.resolve)(directory, '..')) {
@@ -40187,7 +40619,7 @@ function parseTerraformModules(commits, allTags = [], allReleases = []) {
         // Track which modules should get this commit (only modules with at least one non-excluded file)
         const modulesToCommitMap = new Map();
         for (const relativeFilePath of files) {
-            const relativeModulePath = getRelativeTerraformModulePathFromFilePath(relativeFilePath);
+            const relativeModulePath = getRelativeTerraformModulePathFromFilePath(relativeFilePath, context.workspaceDir);
             if (relativeModulePath === null) {
                 // File isn't associated with a Terraform module - continue to next file.
                 info(`✗ Skipping file "${relativeFilePath}" ➜  No associated Terraform module`);
@@ -40242,12 +40674,176 @@ function parseTerraformModules(commits, allTags = [], allReleases = []) {
     return terraformModules;
 }
 
+;// CONCATENATED MODULE: ./src/utils/markers.ts
+
+
+/**
+ * Escapes a string for safe literal use inside a regular expression.
+ *
+ * @param {string} value - The raw string to escape.
+ * @returns {string} The escaped string.
+ */
+function escapeRegExp(value) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+const ESCAPED_MARKER_PREFIX = escapeRegExp(RELEASE_BODY_PR_MARKER_PREFIX);
+/**
+ * Matches every marker that occupies a whole line, capturing its `<owner>/<repo>#<prNumber>` identity.
+ *
+ * Anchoring to a standalone line (tolerating CRLF from the API and surrounding horizontal whitespace)
+ * means a marker embedded mid-sentence inside attacker-influenced prose is never honored. Both writers
+ * always emit the marker as its own trailing line.
+ */
+const MARKER_LINE_REGEX = new RegExp(`(?:^|\\r?\\n)[ \\t]*${ESCAPED_MARKER_PREFIX}\\d+:(\\S+#\\d+) -->[ \\t]*(?=\\r?\\n|$)`, 'g');
+/**
+ * Returns the pull request identity this marker scheme uses: `<owner>/<repo>#<prNumber>`.
+ *
+ * The repository is part of the identity because a fork or mirror clone copies **tags but not
+ * releases**. Every module's latest tag in such a clone is therefore an orphan carrying the upstream
+ * marker, and fork pull request numbering restarts at 1 — so a bare number would let a fork adopt an
+ * upstream tag on a number collision.
+ *
+ * @param {number} prNumber - The pull request number.
+ * @returns {string} The scoped identity.
+ */
+function buildPrIdentity(prNumber) {
+    const { repo: { owner, repo }, } = context;
+    return `${owner}/${repo}#${prNumber}`;
+}
+/**
+ * Collects the distinct pull request identities carried by standalone marker lines in the given text.
+ *
+ * @param {string} text - The release body or commit message to scan.
+ * @returns {Set<string>} The distinct identities found.
+ */
+function collectMarkerIdentities(text) {
+    const identities = new Set();
+    for (const match of text.matchAll(MARKER_LINE_REGEX)) {
+        identities.add(match[1]);
+    }
+    return identities;
+}
+/**
+ * Builds the hidden, schema-versioned marker that ties a release — and the release commit its tag
+ * points at — to the pull request that produced it. The marker is an HTML comment so it never renders
+ * in release notes or in the wiki changelog.
+ *
+ * Format: `<!-- techpivot/terraform-module-releaser:release-pr:<schema>:<owner>/<repo>#<prNumber> -->`
+ *
+ * This is the single source of truth for the idempotency tie. Every writer (`createTaggedReleases`,
+ * which appends it to each release body it creates and to each release commit message) and the reader
+ * ({@link matchesPrMarker}) go through this module, so the two can never drift.
+ *
+ * @param {number} prNumber - The pull request number that produced the release.
+ * @returns {string} The hidden marker for that pull request.
+ */
+function buildPrMarker(prNumber) {
+    return `${RELEASE_BODY_PR_MARKER_PREFIX}${RELEASE_BODY_PR_MARKER_SCHEMA}:${buildPrIdentity(prNumber)} -->`;
+}
+/**
+ * Returns true if the given text carries this action's marker for the given pull request.
+ *
+ * Used against two kinds of text, which is why it is deliberately generic:
+ * - a **release body**, to detect that this pull request already released a module (step 1); and
+ * - a **release commit message**, to prove that an orphan tag was produced by this pull request
+ *   (step 2 provenance).
+ *
+ * Matching rules:
+ * - **Schema-agnostic** on the schema digit: a marker written by a future `:2:` schema is still
+ *   recognized by current code, and vice versa.
+ * - **Repository-scoped**, so a fork never mistakes an upstream tag for its own.
+ * - **Anchored to a standalone line**, so marker-shaped text inside prose is ignored.
+ * - **Ambiguity is not ownership.** If the text carries markers for more than one distinct pull
+ *   request, no match is reported. A single text should only ever name one producer; more than one
+ *   means something injected a marker, and the safe reading is "not ours" (which costs at most a
+ *   version bump, never a lost release).
+ *
+ * @param {string | undefined | null} text - The release body or commit message to test.
+ * @param {number} prNumber - The pull request number to match.
+ * @returns {boolean} Whether the text carries a marker for that pull request.
+ */
+function matchesPrMarker(text, prNumber) {
+    if (!text) {
+        return false;
+    }
+    const identities = collectMarkerIdentities(text);
+    return identities.size === 1 && identities.has(buildPrIdentity(prNumber));
+}
+/**
+ * Returns true if the given text carries one of our markers for ANY pull request.
+ *
+ * Used by the orphan-tag provenance check to distinguish "this tag predates the marker scheme"
+ * (no marker at all — eligible for the pre-marker fallback) from "this tag names some other pull
+ * request" (never adoptable, and no lookup needed).
+ *
+ * @param {string | undefined | null} text - The release body or commit message to test.
+ * @returns {boolean} Whether the text carries a marker for any pull request.
+ */
+function hasAnyPrMarker(text) {
+    if (!text) {
+        return false;
+    }
+    return collectMarkerIdentities(text).size > 0;
+}
+/**
+ * Returns true if `text` contains `marker` on a line of its own.
+ *
+ * Used for the fixed comment markers (`PR_SUMMARY_MARKER`, `PR_RELEASE_COMMENT_MARKER`), whose matches
+ * are acted on **destructively** — the newest match is edited in place and older ones are deleted. A
+ * bare `includes()` would also match a comment that merely *quotes* one of ours: GitHub's "Quote
+ * reply" copies raw markdown, hidden HTML comments included, so a reviewer quoting the action's
+ * comment would otherwise become the newest match and have their text overwritten.
+ *
+ * Quote-reply prefixes every line with `> `, so requiring the marker to start its own line (allowing
+ * only horizontal whitespace) excludes quoted copies while still matching our own comments, which
+ * always emit the marker as the first line. This deliberately does not filter on comment author,
+ * because consumers may run the action with a custom `github-token` whose comments are not authored by
+ * `github-actions[bot]`.
+ *
+ * @param {string | undefined | null} text - The comment body to test.
+ * @param {string} marker - The exact marker string to look for.
+ * @returns {boolean} Whether the marker occupies its own line.
+ */
+function hasStandaloneMarkerLine(text, marker) {
+    if (!text) {
+        return false;
+    }
+    return new RegExp(`(^|\\r?\\n)[ \\t]*${escapeRegExp(marker)}[ \\t]*(\\r?\\n|$)`).test(text);
+}
+/**
+ * Neutralizes any text that looks like one of our markers so untrusted input can never forge the
+ * idempotency tie or the provenance proof.
+ *
+ * Pull request titles and bodies, and commit messages, are interpolated verbatim into **release
+ * bodies** (`src/changelog.ts`) and into the **release commit message** (`createTaggedReleases`).
+ * Without this, a merged pull request whose description contained
+ * `<!-- techpivot/terraform-module-releaser:release-pr:1:owner/repo#123 -->` on its own line would
+ * plant that marker in a tag's commit message — the exact text the provenance check trusts — and could
+ * make pull request #123 adopt someone else's tag or skip its own release entirely.
+ *
+ * We escape only the opening `<` of our own marker namespace — unrelated HTML comments a user
+ * legitimately writes are left untouched. The escaped form renders visibly (rather than silently
+ * disappearing as a comment), which makes an attempted forgery obvious.
+ *
+ * @param {string} text - Untrusted text destined for a release body or a release commit message.
+ * @returns {string} The text with any marker-shaped sequences neutralized.
+ */
+function neutralizePrMarkers(text) {
+    return text.replaceAll(RELEASE_BODY_PR_MARKER_PREFIX, `&lt;${RELEASE_BODY_PR_MARKER_PREFIX.slice(1)}`);
+}
+
 ;// CONCATENATED MODULE: ./src/changelog.ts
+
 
 /**
  * Creates a changelog entry for a Terraform module.
  *
  * The changelog contains a heading and a list of commits formatted with a timestamp.
+ *
+ * Note: the pull request title and commit messages are untrusted input that ends up verbatim in a
+ * release body — which is where the hidden idempotency marker also lives. Both are passed through
+ * {@link neutralizePrMarkers} so a crafted title or commit message can never forge that marker and
+ * suppress another pull request's release. See `src/utils/markers.ts`.
  *
  * @param {string} heading - The version or tag heading for the changelog entry.
  * @param {readonly string[]} commits - An array of commit messages to include in the changelog.
@@ -40261,14 +40857,14 @@ function createTerraformModuleChangelogEntry(heading, commits) {
     // links the PR in the pull request comments but not automatically in the wiki markdown. In the releases section
     // it will automatically link just the #9 portion but not the PR part. If we link the whole section it
     // ends up being much cleaner.
-    changelogContent.push(`- :twisted_rightwards_arrows:**[PR #${prNumber}](${repoUrl}/pull/${prNumber})** - ${prTitle}`);
+    changelogContent.push(`- :twisted_rightwards_arrows:**[PR #${prNumber}](${repoUrl}/pull/${prNumber})** - ${neutralizePrMarkers(prTitle)}`);
     // Perform some normalization
     const normalizedCommitMessages = commits
         // If the PR title equals the message exactly, we'll skip it
         .filter((msg) => msg.trim() !== prTitle)
         // Trim the commit message and for markdown, newlines that are part of a list format
         // better if they use a <br> tag instead of a newline character.
-        .map((commitMessage) => commitMessage.trim().replace(/\n/g, '<br>'));
+        .map((commitMessage) => neutralizePrMarkers(commitMessage.trim().replace(/\n/g, '<br>')));
     for (const normalizedCommit of normalizedCommitMessages) {
         changelogContent.push(`- ${normalizedCommit}`);
     }
@@ -40348,10 +40944,3140 @@ var promises_ = __nccwpck_require__(1455);
 const external_node_os_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:os");
 // EXTERNAL MODULE: external "node:util"
 var external_node_util_ = __nccwpck_require__(7975);
+// EXTERNAL MODULE: external "node:async_hooks"
+var external_node_async_hooks_ = __nccwpck_require__(6698);
+;// CONCATENATED MODULE: ./src/utils/log-buffer.ts
+
+
+const logStorage = new external_node_async_hooks_.AsyncLocalStorage();
+/**
+ * Logs a message via `core.info()`. If called inside `withBufferedLogs()`,
+ * the message is buffered and flushed when the async scope completes.
+ * Otherwise, it writes immediately.
+ */
+function bufferedInfo(msg) {
+    const buffer = logStorage.getStore();
+    if (buffer) {
+        buffer.push({ msg, level: 'info' });
+    }
+    else {
+        info(msg);
+    }
+}
+/**
+ * Logs an error via `core.error()`. If called inside `withBufferedLogs()`,
+ * the message is buffered and flushed as a red error annotation when the
+ * async scope completes. Otherwise, it writes immediately.
+ */
+function bufferedError(msg) {
+    const buffer = logStorage.getStore();
+    if (buffer) {
+        buffer.push({ msg, level: 'error' });
+    }
+    else {
+        error(msg);
+    }
+}
+/**
+ * Runs `fn` with log buffering enabled. All `bufferedInfo()` and
+ * `bufferedError()` calls inside `fn` (including nested async calls)
+ * are collected and flushed after `fn` resolves. Each async invocation
+ * gets its own isolated buffer, so parallel calls don't interleave.
+ */
+async function withBufferedLogs(fn) {
+    const buffer = [];
+    let success = false;
+    try {
+        const result = await logStorage.run(buffer, fn);
+        success = true;
+        return result;
+    }
+    finally {
+        for (const { msg, level } of buffer) {
+            if (level === 'error') {
+                error(msg);
+            }
+            else {
+                info(msg);
+            }
+        }
+        // Trailing blank line separates each module's output — skip when the buffer
+        // contains errors since GitHub Actions already adds spacing after ::error:: lines.
+        const hasErrors = buffer.some((entry) => entry.level === 'error');
+        if (buffer.length > 0 && success && !hasErrors) {
+            info('');
+        }
+    }
+}
+
+;// CONCATENATED MODULE: ./node_modules/js-yaml/dist/js-yaml.mjs
+function getDefaultExportFromCjs(x) {
+  return x && x.__esModule && Object.prototype.hasOwnProperty.call(x, "default") ? x["default"] : x;
+}
+var jsYaml = {};
+var loader = {};
+var common = {};
+var hasRequiredCommon;
+function requireCommon() {
+  if (hasRequiredCommon) return common;
+  hasRequiredCommon = 1;
+  function isNothing(subject) {
+    return typeof subject === "undefined" || subject === null;
+  }
+  function isObject(subject) {
+    return typeof subject === "object" && subject !== null;
+  }
+  function toArray(sequence) {
+    if (Array.isArray(sequence)) return sequence;
+    else if (isNothing(sequence)) return [];
+    return [sequence];
+  }
+  function extend(target, source) {
+    if (source) {
+      const sourceKeys = Object.keys(source);
+      for (let index = 0, length = sourceKeys.length; index < length; index += 1) {
+        const key = sourceKeys[index];
+        target[key] = source[key];
+      }
+    }
+    return target;
+  }
+  function repeat(string, count) {
+    let result = "";
+    for (let cycle = 0; cycle < count; cycle += 1) {
+      result += string;
+    }
+    return result;
+  }
+  function isNegativeZero(number) {
+    return number === 0 && Number.NEGATIVE_INFINITY === 1 / number;
+  }
+  common.isNothing = isNothing;
+  common.isObject = isObject;
+  common.toArray = toArray;
+  common.repeat = repeat;
+  common.isNegativeZero = isNegativeZero;
+  common.extend = extend;
+  return common;
+}
+var exception;
+var hasRequiredException;
+function requireException() {
+  if (hasRequiredException) return exception;
+  hasRequiredException = 1;
+  function formatError(exception2, compact) {
+    let where = "";
+    const message = exception2.reason || "(unknown reason)";
+    if (!exception2.mark) return message;
+    if (exception2.mark.name) {
+      where += 'in "' + exception2.mark.name + '" ';
+    }
+    where += "(" + (exception2.mark.line + 1) + ":" + (exception2.mark.column + 1) + ")";
+    if (!compact && exception2.mark.snippet) {
+      where += "\n\n" + exception2.mark.snippet;
+    }
+    return message + " " + where;
+  }
+  function YAMLException2(reason, mark) {
+    Error.call(this);
+    this.name = "YAMLException";
+    this.reason = reason;
+    this.mark = mark;
+    this.message = formatError(this, false);
+    if (Error.captureStackTrace) {
+      Error.captureStackTrace(this, this.constructor);
+    } else {
+      this.stack = new Error().stack || "";
+    }
+  }
+  YAMLException2.prototype = Object.create(Error.prototype);
+  YAMLException2.prototype.constructor = YAMLException2;
+  YAMLException2.prototype.toString = function toString(compact) {
+    return this.name + ": " + formatError(this, compact);
+  };
+  exception = YAMLException2;
+  return exception;
+}
+var snippet;
+var hasRequiredSnippet;
+function requireSnippet() {
+  if (hasRequiredSnippet) return snippet;
+  hasRequiredSnippet = 1;
+  const common2 = requireCommon();
+  function getLine(buffer, lineStart, lineEnd, position, maxLineLength) {
+    let head = "";
+    let tail = "";
+    const maxHalfLength = Math.floor(maxLineLength / 2) - 1;
+    if (position - lineStart > maxHalfLength) {
+      head = " ... ";
+      lineStart = position - maxHalfLength + head.length;
+    }
+    if (lineEnd - position > maxHalfLength) {
+      tail = " ...";
+      lineEnd = position + maxHalfLength - tail.length;
+    }
+    return {
+      str: head + buffer.slice(lineStart, lineEnd).replace(/\t/g, "→") + tail,
+      pos: position - lineStart + head.length
+      // relative position
+    };
+  }
+  function padStart(string, max) {
+    return common2.repeat(" ", max - string.length) + string;
+  }
+  function makeSnippet(mark, options) {
+    options = Object.create(options || null);
+    if (!mark.buffer) return null;
+    if (!options.maxLength) options.maxLength = 79;
+    if (typeof options.indent !== "number") options.indent = 1;
+    if (typeof options.linesBefore !== "number") options.linesBefore = 3;
+    if (typeof options.linesAfter !== "number") options.linesAfter = 2;
+    const re = /\r?\n|\r|\0/g;
+    const lineStarts = [0];
+    const lineEnds = [];
+    let match;
+    let foundLineNo = -1;
+    while (match = re.exec(mark.buffer)) {
+      lineEnds.push(match.index);
+      lineStarts.push(match.index + match[0].length);
+      if (mark.position <= match.index && foundLineNo < 0) {
+        foundLineNo = lineStarts.length - 2;
+      }
+    }
+    if (foundLineNo < 0) foundLineNo = lineStarts.length - 1;
+    let result = "";
+    const lineNoLength = Math.min(mark.line + options.linesAfter, lineEnds.length).toString().length;
+    const maxLineLength = options.maxLength - (options.indent + lineNoLength + 3);
+    for (let i = 1; i <= options.linesBefore; i++) {
+      if (foundLineNo - i < 0) break;
+      const line2 = getLine(
+        mark.buffer,
+        lineStarts[foundLineNo - i],
+        lineEnds[foundLineNo - i],
+        mark.position - (lineStarts[foundLineNo] - lineStarts[foundLineNo - i]),
+        maxLineLength
+      );
+      result = common2.repeat(" ", options.indent) + padStart((mark.line - i + 1).toString(), lineNoLength) + " | " + line2.str + "\n" + result;
+    }
+    const line = getLine(mark.buffer, lineStarts[foundLineNo], lineEnds[foundLineNo], mark.position, maxLineLength);
+    result += common2.repeat(" ", options.indent) + padStart((mark.line + 1).toString(), lineNoLength) + " | " + line.str + "\n";
+    result += common2.repeat("-", options.indent + lineNoLength + 3 + line.pos) + "^\n";
+    for (let i = 1; i <= options.linesAfter; i++) {
+      if (foundLineNo + i >= lineEnds.length) break;
+      const line2 = getLine(
+        mark.buffer,
+        lineStarts[foundLineNo + i],
+        lineEnds[foundLineNo + i],
+        mark.position - (lineStarts[foundLineNo] - lineStarts[foundLineNo + i]),
+        maxLineLength
+      );
+      result += common2.repeat(" ", options.indent) + padStart((mark.line + i + 1).toString(), lineNoLength) + " | " + line2.str + "\n";
+    }
+    return result.replace(/\n$/, "");
+  }
+  snippet = makeSnippet;
+  return snippet;
+}
+var type;
+var hasRequiredType;
+function requireType() {
+  if (hasRequiredType) return type;
+  hasRequiredType = 1;
+  const YAMLException2 = requireException();
+  const TYPE_CONSTRUCTOR_OPTIONS = [
+    "kind",
+    "multi",
+    "resolve",
+    "construct",
+    "instanceOf",
+    "predicate",
+    "represent",
+    "representName",
+    "defaultStyle",
+    "styleAliases"
+  ];
+  const YAML_NODE_KINDS = [
+    "scalar",
+    "sequence",
+    "mapping"
+  ];
+  function compileStyleAliases(map2) {
+    const result = {};
+    if (map2 !== null) {
+      Object.keys(map2).forEach(function(style) {
+        map2[style].forEach(function(alias) {
+          result[String(alias)] = style;
+        });
+      });
+    }
+    return result;
+  }
+  function Type2(tag, options) {
+    options = options || {};
+    Object.keys(options).forEach(function(name) {
+      if (TYPE_CONSTRUCTOR_OPTIONS.indexOf(name) === -1) {
+        throw new YAMLException2('Unknown option "' + name + '" is met in definition of "' + tag + '" YAML type.');
+      }
+    });
+    this.options = options;
+    this.tag = tag;
+    this.kind = options["kind"] || null;
+    this.resolve = options["resolve"] || function() {
+      return true;
+    };
+    this.construct = options["construct"] || function(data) {
+      return data;
+    };
+    this.instanceOf = options["instanceOf"] || null;
+    this.predicate = options["predicate"] || null;
+    this.represent = options["represent"] || null;
+    this.representName = options["representName"] || null;
+    this.defaultStyle = options["defaultStyle"] || null;
+    this.multi = options["multi"] || false;
+    this.styleAliases = compileStyleAliases(options["styleAliases"] || null);
+    if (YAML_NODE_KINDS.indexOf(this.kind) === -1) {
+      throw new YAMLException2('Unknown kind "' + this.kind + '" is specified for "' + tag + '" YAML type.');
+    }
+  }
+  type = Type2;
+  return type;
+}
+var schema;
+var hasRequiredSchema;
+function requireSchema() {
+  if (hasRequiredSchema) return schema;
+  hasRequiredSchema = 1;
+  const YAMLException2 = requireException();
+  const Type2 = requireType();
+  function compileList(schema2, name) {
+    const result = [];
+    schema2[name].forEach(function(currentType) {
+      let newIndex = result.length;
+      result.forEach(function(previousType, previousIndex) {
+        if (previousType.tag === currentType.tag && previousType.kind === currentType.kind && previousType.multi === currentType.multi) {
+          newIndex = previousIndex;
+        }
+      });
+      result[newIndex] = currentType;
+    });
+    return result;
+  }
+  function compileMap() {
+    const result = {
+      scalar: {},
+      sequence: {},
+      mapping: {},
+      fallback: {},
+      multi: {
+        scalar: [],
+        sequence: [],
+        mapping: [],
+        fallback: []
+      }
+    };
+    function collectType(type2) {
+      if (type2.multi) {
+        result.multi[type2.kind].push(type2);
+        result.multi["fallback"].push(type2);
+      } else {
+        result[type2.kind][type2.tag] = result["fallback"][type2.tag] = type2;
+      }
+    }
+    for (let index = 0, length = arguments.length; index < length; index += 1) {
+      arguments[index].forEach(collectType);
+    }
+    return result;
+  }
+  function Schema2(definition) {
+    return this.extend(definition);
+  }
+  Schema2.prototype.extend = function extend(definition) {
+    let implicit = [];
+    let explicit = [];
+    if (definition instanceof Type2) {
+      explicit.push(definition);
+    } else if (Array.isArray(definition)) {
+      explicit = explicit.concat(definition);
+    } else if (definition && (Array.isArray(definition.implicit) || Array.isArray(definition.explicit))) {
+      if (definition.implicit) implicit = implicit.concat(definition.implicit);
+      if (definition.explicit) explicit = explicit.concat(definition.explicit);
+    } else {
+      throw new YAMLException2("Schema.extend argument should be a Type, [ Type ], or a schema definition ({ implicit: [...], explicit: [...] })");
+    }
+    implicit.forEach(function(type2) {
+      if (!(type2 instanceof Type2)) {
+        throw new YAMLException2("Specified list of YAML types (or a single Type object) contains a non-Type object.");
+      }
+      if (type2.loadKind && type2.loadKind !== "scalar") {
+        throw new YAMLException2("There is a non-scalar type in the implicit list of a schema. Implicit resolving of such types is not supported.");
+      }
+      if (type2.multi) {
+        throw new YAMLException2("There is a multi type in the implicit list of a schema. Multi tags can only be listed as explicit.");
+      }
+    });
+    explicit.forEach(function(type2) {
+      if (!(type2 instanceof Type2)) {
+        throw new YAMLException2("Specified list of YAML types (or a single Type object) contains a non-Type object.");
+      }
+    });
+    const result = Object.create(Schema2.prototype);
+    result.implicit = (this.implicit || []).concat(implicit);
+    result.explicit = (this.explicit || []).concat(explicit);
+    result.compiledImplicit = compileList(result, "implicit");
+    result.compiledExplicit = compileList(result, "explicit");
+    result.compiledTypeMap = compileMap(result.compiledImplicit, result.compiledExplicit);
+    return result;
+  };
+  schema = Schema2;
+  return schema;
+}
+var str;
+var hasRequiredStr;
+function requireStr() {
+  if (hasRequiredStr) return str;
+  hasRequiredStr = 1;
+  const Type2 = requireType();
+  str = new Type2("tag:yaml.org,2002:str", {
+    kind: "scalar",
+    construct: function(data) {
+      return data !== null ? data : "";
+    }
+  });
+  return str;
+}
+var seq;
+var hasRequiredSeq;
+function requireSeq() {
+  if (hasRequiredSeq) return seq;
+  hasRequiredSeq = 1;
+  const Type2 = requireType();
+  seq = new Type2("tag:yaml.org,2002:seq", {
+    kind: "sequence",
+    construct: function(data) {
+      return data !== null ? data : [];
+    }
+  });
+  return seq;
+}
+var map;
+var hasRequiredMap;
+function requireMap() {
+  if (hasRequiredMap) return map;
+  hasRequiredMap = 1;
+  const Type2 = requireType();
+  map = new Type2("tag:yaml.org,2002:map", {
+    kind: "mapping",
+    construct: function(data) {
+      return data !== null ? data : {};
+    }
+  });
+  return map;
+}
+var failsafe;
+var hasRequiredFailsafe;
+function requireFailsafe() {
+  if (hasRequiredFailsafe) return failsafe;
+  hasRequiredFailsafe = 1;
+  const Schema2 = requireSchema();
+  failsafe = new Schema2({
+    explicit: [
+      requireStr(),
+      requireSeq(),
+      requireMap()
+    ]
+  });
+  return failsafe;
+}
+var _null;
+var hasRequired_null;
+function require_null() {
+  if (hasRequired_null) return _null;
+  hasRequired_null = 1;
+  const Type2 = requireType();
+  function resolveYamlNull(data) {
+    if (data === null) return true;
+    const max = data.length;
+    return max === 1 && data === "~" || max === 4 && (data === "null" || data === "Null" || data === "NULL");
+  }
+  function constructYamlNull() {
+    return null;
+  }
+  function isNull(object) {
+    return object === null;
+  }
+  _null = new Type2("tag:yaml.org,2002:null", {
+    kind: "scalar",
+    resolve: resolveYamlNull,
+    construct: constructYamlNull,
+    predicate: isNull,
+    represent: {
+      canonical: function() {
+        return "~";
+      },
+      lowercase: function() {
+        return "null";
+      },
+      uppercase: function() {
+        return "NULL";
+      },
+      camelcase: function() {
+        return "Null";
+      },
+      empty: function() {
+        return "";
+      }
+    },
+    defaultStyle: "lowercase"
+  });
+  return _null;
+}
+var bool;
+var hasRequiredBool;
+function requireBool() {
+  if (hasRequiredBool) return bool;
+  hasRequiredBool = 1;
+  const Type2 = requireType();
+  function resolveYamlBoolean(data) {
+    if (data === null) return false;
+    const max = data.length;
+    return max === 4 && (data === "true" || data === "True" || data === "TRUE") || max === 5 && (data === "false" || data === "False" || data === "FALSE");
+  }
+  function constructYamlBoolean(data) {
+    return data === "true" || data === "True" || data === "TRUE";
+  }
+  function isBoolean(object) {
+    return Object.prototype.toString.call(object) === "[object Boolean]";
+  }
+  bool = new Type2("tag:yaml.org,2002:bool", {
+    kind: "scalar",
+    resolve: resolveYamlBoolean,
+    construct: constructYamlBoolean,
+    predicate: isBoolean,
+    represent: {
+      lowercase: function(object) {
+        return object ? "true" : "false";
+      },
+      uppercase: function(object) {
+        return object ? "TRUE" : "FALSE";
+      },
+      camelcase: function(object) {
+        return object ? "True" : "False";
+      }
+    },
+    defaultStyle: "lowercase"
+  });
+  return bool;
+}
+var js_yaml_int;
+var hasRequiredInt;
+function requireInt() {
+  if (hasRequiredInt) return js_yaml_int;
+  hasRequiredInt = 1;
+  const common2 = requireCommon();
+  const Type2 = requireType();
+  function isHexCode(c) {
+    return c >= 48 && c <= 57 || c >= 65 && c <= 70 || c >= 97 && c <= 102;
+  }
+  function isOctCode(c) {
+    return c >= 48 && c <= 55;
+  }
+  function isDecCode(c) {
+    return c >= 48 && c <= 57;
+  }
+  function resolveYamlInteger(data) {
+    if (data === null) return false;
+    const max = data.length;
+    let index = 0;
+    let hasDigits = false;
+    if (!max) return false;
+    let ch = data[index];
+    if (ch === "-" || ch === "+") {
+      ch = data[++index];
+    }
+    if (ch === "0") {
+      if (index + 1 === max) return true;
+      ch = data[++index];
+      if (ch === "b") {
+        index++;
+        for (; index < max; index++) {
+          ch = data[index];
+          if (ch !== "0" && ch !== "1") return false;
+          hasDigits = true;
+        }
+        return hasDigits && isFinite(parseYamlInteger(data));
+      }
+      if (ch === "x") {
+        index++;
+        for (; index < max; index++) {
+          if (!isHexCode(data.charCodeAt(index))) return false;
+          hasDigits = true;
+        }
+        return hasDigits && isFinite(parseYamlInteger(data));
+      }
+      if (ch === "o") {
+        index++;
+        for (; index < max; index++) {
+          if (!isOctCode(data.charCodeAt(index))) return false;
+          hasDigits = true;
+        }
+        return hasDigits && isFinite(parseYamlInteger(data));
+      }
+    }
+    for (; index < max; index++) {
+      if (!isDecCode(data.charCodeAt(index))) {
+        return false;
+      }
+      hasDigits = true;
+    }
+    if (!hasDigits) return false;
+    return isFinite(parseYamlInteger(data));
+  }
+  function parseYamlInteger(data) {
+    let value = data;
+    let sign = 1;
+    let ch = value[0];
+    if (ch === "-" || ch === "+") {
+      if (ch === "-") sign = -1;
+      value = value.slice(1);
+      ch = value[0];
+    }
+    if (value === "0") return 0;
+    if (ch === "0") {
+      if (value[1] === "b") return sign * parseInt(value.slice(2), 2);
+      if (value[1] === "x") return sign * parseInt(value.slice(2), 16);
+      if (value[1] === "o") return sign * parseInt(value.slice(2), 8);
+    }
+    return sign * parseInt(value, 10);
+  }
+  function constructYamlInteger(data) {
+    return parseYamlInteger(data);
+  }
+  function isInteger(object) {
+    return Object.prototype.toString.call(object) === "[object Number]" && (object % 1 === 0 && !common2.isNegativeZero(object));
+  }
+  js_yaml_int = new Type2("tag:yaml.org,2002:int", {
+    kind: "scalar",
+    resolve: resolveYamlInteger,
+    construct: constructYamlInteger,
+    predicate: isInteger,
+    represent: {
+      binary: function(obj) {
+        return obj >= 0 ? "0b" + obj.toString(2) : "-0b" + obj.toString(2).slice(1);
+      },
+      octal: function(obj) {
+        return obj >= 0 ? "0o" + obj.toString(8) : "-0o" + obj.toString(8).slice(1);
+      },
+      decimal: function(obj) {
+        return obj.toString(10);
+      },
+      hexadecimal: function(obj) {
+        return obj >= 0 ? "0x" + obj.toString(16).toUpperCase() : "-0x" + obj.toString(16).toUpperCase().slice(1);
+      }
+    },
+    defaultStyle: "decimal",
+    styleAliases: {
+      binary: [2, "bin"],
+      octal: [8, "oct"],
+      decimal: [10, "dec"],
+      hexadecimal: [16, "hex"]
+    }
+  });
+  return js_yaml_int;
+}
+var js_yaml_float;
+var hasRequiredFloat;
+function requireFloat() {
+  if (hasRequiredFloat) return js_yaml_float;
+  hasRequiredFloat = 1;
+  const common2 = requireCommon();
+  const Type2 = requireType();
+  const YAML_FLOAT_PATTERN = new RegExp(
+    // 2.5e4, 2.5 and integers
+    "^(?:[-+]?(?:[0-9]+)(?:\\.[0-9]*)?(?:[eE][-+]?[0-9]+)?|\\.[0-9]+(?:[eE][-+]?[0-9]+)?|[-+]?\\.(?:inf|Inf|INF)|\\.(?:nan|NaN|NAN))$"
+  );
+  const YAML_FLOAT_SPECIAL_PATTERN = new RegExp(
+    "^(?:[-+]?\\.(?:inf|Inf|INF)|\\.(?:nan|NaN|NAN))$"
+  );
+  function resolveYamlFloat(data) {
+    if (data === null) return false;
+    if (!YAML_FLOAT_PATTERN.test(data)) {
+      return false;
+    }
+    if (isFinite(parseFloat(data, 10))) {
+      return true;
+    }
+    return YAML_FLOAT_SPECIAL_PATTERN.test(data);
+  }
+  function constructYamlFloat(data) {
+    let value = data.toLowerCase();
+    const sign = value[0] === "-" ? -1 : 1;
+    if ("+-".indexOf(value[0]) >= 0) {
+      value = value.slice(1);
+    }
+    if (value === ".inf") {
+      return sign === 1 ? Number.POSITIVE_INFINITY : Number.NEGATIVE_INFINITY;
+    } else if (value === ".nan") {
+      return NaN;
+    }
+    return sign * parseFloat(value, 10);
+  }
+  const SCIENTIFIC_WITHOUT_DOT = /^[-+]?[0-9]+e/;
+  function representYamlFloat(object, style) {
+    if (isNaN(object)) {
+      switch (style) {
+        case "lowercase":
+          return ".nan";
+        case "uppercase":
+          return ".NAN";
+        case "camelcase":
+          return ".NaN";
+      }
+    } else if (Number.POSITIVE_INFINITY === object) {
+      switch (style) {
+        case "lowercase":
+          return ".inf";
+        case "uppercase":
+          return ".INF";
+        case "camelcase":
+          return ".Inf";
+      }
+    } else if (Number.NEGATIVE_INFINITY === object) {
+      switch (style) {
+        case "lowercase":
+          return "-.inf";
+        case "uppercase":
+          return "-.INF";
+        case "camelcase":
+          return "-.Inf";
+      }
+    } else if (common2.isNegativeZero(object)) {
+      return "-0.0";
+    }
+    const res = object.toString(10);
+    return SCIENTIFIC_WITHOUT_DOT.test(res) ? res.replace("e", ".e") : res;
+  }
+  function isFloat(object) {
+    return Object.prototype.toString.call(object) === "[object Number]" && (object % 1 !== 0 || common2.isNegativeZero(object));
+  }
+  js_yaml_float = new Type2("tag:yaml.org,2002:float", {
+    kind: "scalar",
+    resolve: resolveYamlFloat,
+    construct: constructYamlFloat,
+    predicate: isFloat,
+    represent: representYamlFloat,
+    defaultStyle: "lowercase"
+  });
+  return js_yaml_float;
+}
+var json;
+var hasRequiredJson;
+function requireJson() {
+  if (hasRequiredJson) return json;
+  hasRequiredJson = 1;
+  json = requireFailsafe().extend({
+    implicit: [
+      require_null(),
+      requireBool(),
+      requireInt(),
+      requireFloat()
+    ]
+  });
+  return json;
+}
+var core;
+var hasRequiredCore;
+function requireCore() {
+  if (hasRequiredCore) return core;
+  hasRequiredCore = 1;
+  core = requireJson();
+  return core;
+}
+var timestamp;
+var hasRequiredTimestamp;
+function requireTimestamp() {
+  if (hasRequiredTimestamp) return timestamp;
+  hasRequiredTimestamp = 1;
+  const Type2 = requireType();
+  const YAML_DATE_REGEXP = new RegExp(
+    "^([0-9][0-9][0-9][0-9])-([0-9][0-9])-([0-9][0-9])$"
+  );
+  const YAML_TIMESTAMP_REGEXP = new RegExp(
+    "^([0-9][0-9][0-9][0-9])-([0-9][0-9]?)-([0-9][0-9]?)(?:[Tt]|[ \\t]+)([0-9][0-9]?):([0-9][0-9]):([0-9][0-9])(?:\\.([0-9]*))?(?:[ \\t]*(Z|([-+])([0-9][0-9]?)(?::([0-9][0-9]))?))?$"
+  );
+  function resolveYamlTimestamp(data) {
+    if (data === null) return false;
+    if (YAML_DATE_REGEXP.exec(data) !== null) return true;
+    if (YAML_TIMESTAMP_REGEXP.exec(data) !== null) return true;
+    return false;
+  }
+  function constructYamlTimestamp(data) {
+    let fraction = 0;
+    let delta = null;
+    let match = YAML_DATE_REGEXP.exec(data);
+    if (match === null) match = YAML_TIMESTAMP_REGEXP.exec(data);
+    if (match === null) throw new Error("Date resolve error");
+    const year = +match[1];
+    const month = +match[2] - 1;
+    const day = +match[3];
+    if (!match[4]) {
+      return new Date(Date.UTC(year, month, day));
+    }
+    const hour = +match[4];
+    const minute = +match[5];
+    const second = +match[6];
+    if (match[7]) {
+      fraction = match[7].slice(0, 3);
+      while (fraction.length < 3) {
+        fraction += "0";
+      }
+      fraction = +fraction;
+    }
+    if (match[9]) {
+      const tzHour = +match[10];
+      const tzMinute = +(match[11] || 0);
+      delta = (tzHour * 60 + tzMinute) * 6e4;
+      if (match[9] === "-") delta = -delta;
+    }
+    const date = new Date(Date.UTC(year, month, day, hour, minute, second, fraction));
+    if (delta) date.setTime(date.getTime() - delta);
+    return date;
+  }
+  function representYamlTimestamp(object) {
+    return object.toISOString();
+  }
+  timestamp = new Type2("tag:yaml.org,2002:timestamp", {
+    kind: "scalar",
+    resolve: resolveYamlTimestamp,
+    construct: constructYamlTimestamp,
+    instanceOf: Date,
+    represent: representYamlTimestamp
+  });
+  return timestamp;
+}
+var js_yaml_merge;
+var hasRequiredMerge;
+function requireMerge() {
+  if (hasRequiredMerge) return js_yaml_merge;
+  hasRequiredMerge = 1;
+  const Type2 = requireType();
+  function resolveYamlMerge(data) {
+    return data === "<<" || data === null;
+  }
+  js_yaml_merge = new Type2("tag:yaml.org,2002:merge", {
+    kind: "scalar",
+    resolve: resolveYamlMerge
+  });
+  return js_yaml_merge;
+}
+var binary;
+var hasRequiredBinary;
+function requireBinary() {
+  if (hasRequiredBinary) return binary;
+  hasRequiredBinary = 1;
+  const Type2 = requireType();
+  const BASE64_MAP = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=\n\r";
+  function resolveYamlBinary(data) {
+    if (data === null) return false;
+    let bitlen = 0;
+    const max = data.length;
+    const map2 = BASE64_MAP;
+    for (let idx = 0; idx < max; idx++) {
+      const code = map2.indexOf(data.charAt(idx));
+      if (code > 64) continue;
+      if (code < 0) return false;
+      bitlen += 6;
+    }
+    return bitlen % 8 === 0;
+  }
+  function constructYamlBinary(data) {
+    const input = data.replace(/[\r\n=]/g, "");
+    const max = input.length;
+    const map2 = BASE64_MAP;
+    let bits = 0;
+    const result = [];
+    for (let idx = 0; idx < max; idx++) {
+      if (idx % 4 === 0 && idx) {
+        result.push(bits >> 16 & 255);
+        result.push(bits >> 8 & 255);
+        result.push(bits & 255);
+      }
+      bits = bits << 6 | map2.indexOf(input.charAt(idx));
+    }
+    const tailbits = max % 4 * 6;
+    if (tailbits === 0) {
+      result.push(bits >> 16 & 255);
+      result.push(bits >> 8 & 255);
+      result.push(bits & 255);
+    } else if (tailbits === 18) {
+      result.push(bits >> 10 & 255);
+      result.push(bits >> 2 & 255);
+    } else if (tailbits === 12) {
+      result.push(bits >> 4 & 255);
+    }
+    return new Uint8Array(result);
+  }
+  function representYamlBinary(object) {
+    let result = "";
+    let bits = 0;
+    const max = object.length;
+    const map2 = BASE64_MAP;
+    for (let idx = 0; idx < max; idx++) {
+      if (idx % 3 === 0 && idx) {
+        result += map2[bits >> 18 & 63];
+        result += map2[bits >> 12 & 63];
+        result += map2[bits >> 6 & 63];
+        result += map2[bits & 63];
+      }
+      bits = (bits << 8) + object[idx];
+    }
+    const tail = max % 3;
+    if (tail === 0) {
+      result += map2[bits >> 18 & 63];
+      result += map2[bits >> 12 & 63];
+      result += map2[bits >> 6 & 63];
+      result += map2[bits & 63];
+    } else if (tail === 2) {
+      result += map2[bits >> 10 & 63];
+      result += map2[bits >> 4 & 63];
+      result += map2[bits << 2 & 63];
+      result += map2[64];
+    } else if (tail === 1) {
+      result += map2[bits >> 2 & 63];
+      result += map2[bits << 4 & 63];
+      result += map2[64];
+      result += map2[64];
+    }
+    return result;
+  }
+  function isBinary(obj) {
+    return Object.prototype.toString.call(obj) === "[object Uint8Array]";
+  }
+  binary = new Type2("tag:yaml.org,2002:binary", {
+    kind: "scalar",
+    resolve: resolveYamlBinary,
+    construct: constructYamlBinary,
+    predicate: isBinary,
+    represent: representYamlBinary
+  });
+  return binary;
+}
+var omap;
+var hasRequiredOmap;
+function requireOmap() {
+  if (hasRequiredOmap) return omap;
+  hasRequiredOmap = 1;
+  const Type2 = requireType();
+  const _hasOwnProperty = Object.prototype.hasOwnProperty;
+  const _toString = Object.prototype.toString;
+  function resolveYamlOmap(data) {
+    if (data === null) return true;
+    const objectKeys = [];
+    const object = data;
+    for (let index = 0, length = object.length; index < length; index += 1) {
+      const pair = object[index];
+      let pairHasKey = false;
+      if (_toString.call(pair) !== "[object Object]") return false;
+      let pairKey;
+      for (pairKey in pair) {
+        if (_hasOwnProperty.call(pair, pairKey)) {
+          if (!pairHasKey) pairHasKey = true;
+          else return false;
+        }
+      }
+      if (!pairHasKey) return false;
+      if (objectKeys.indexOf(pairKey) === -1) objectKeys.push(pairKey);
+      else return false;
+    }
+    return true;
+  }
+  function constructYamlOmap(data) {
+    return data !== null ? data : [];
+  }
+  omap = new Type2("tag:yaml.org,2002:omap", {
+    kind: "sequence",
+    resolve: resolveYamlOmap,
+    construct: constructYamlOmap
+  });
+  return omap;
+}
+var pairs;
+var hasRequiredPairs;
+function requirePairs() {
+  if (hasRequiredPairs) return pairs;
+  hasRequiredPairs = 1;
+  const Type2 = requireType();
+  const _toString = Object.prototype.toString;
+  function resolveYamlPairs(data) {
+    if (data === null) return true;
+    const object = data;
+    const result = new Array(object.length);
+    for (let index = 0, length = object.length; index < length; index += 1) {
+      const pair = object[index];
+      if (_toString.call(pair) !== "[object Object]") return false;
+      const keys = Object.keys(pair);
+      if (keys.length !== 1) return false;
+      result[index] = [keys[0], pair[keys[0]]];
+    }
+    return true;
+  }
+  function constructYamlPairs(data) {
+    if (data === null) return [];
+    const object = data;
+    const result = new Array(object.length);
+    for (let index = 0, length = object.length; index < length; index += 1) {
+      const pair = object[index];
+      const keys = Object.keys(pair);
+      result[index] = [keys[0], pair[keys[0]]];
+    }
+    return result;
+  }
+  pairs = new Type2("tag:yaml.org,2002:pairs", {
+    kind: "sequence",
+    resolve: resolveYamlPairs,
+    construct: constructYamlPairs
+  });
+  return pairs;
+}
+var set;
+var hasRequiredSet;
+function requireSet() {
+  if (hasRequiredSet) return set;
+  hasRequiredSet = 1;
+  const Type2 = requireType();
+  const _hasOwnProperty = Object.prototype.hasOwnProperty;
+  function resolveYamlSet(data) {
+    if (data === null) return true;
+    const object = data;
+    for (const key in object) {
+      if (_hasOwnProperty.call(object, key)) {
+        if (object[key] !== null) return false;
+      }
+    }
+    return true;
+  }
+  function constructYamlSet(data) {
+    return data !== null ? data : {};
+  }
+  set = new Type2("tag:yaml.org,2002:set", {
+    kind: "mapping",
+    resolve: resolveYamlSet,
+    construct: constructYamlSet
+  });
+  return set;
+}
+var _default;
+var hasRequired_default;
+function require_default() {
+  if (hasRequired_default) return _default;
+  hasRequired_default = 1;
+  _default = requireCore().extend({
+    implicit: [
+      requireTimestamp(),
+      requireMerge()
+    ],
+    explicit: [
+      requireBinary(),
+      requireOmap(),
+      requirePairs(),
+      requireSet()
+    ]
+  });
+  return _default;
+}
+var hasRequiredLoader;
+function requireLoader() {
+  if (hasRequiredLoader) return loader;
+  hasRequiredLoader = 1;
+  const common2 = requireCommon();
+  const YAMLException2 = requireException();
+  const makeSnippet = requireSnippet();
+  const DEFAULT_SCHEMA2 = require_default();
+  const _hasOwnProperty = Object.prototype.hasOwnProperty;
+  const CONTEXT_FLOW_IN = 1;
+  const CONTEXT_FLOW_OUT = 2;
+  const CONTEXT_BLOCK_IN = 3;
+  const CONTEXT_BLOCK_OUT = 4;
+  const CHOMPING_CLIP = 1;
+  const CHOMPING_STRIP = 2;
+  const CHOMPING_KEEP = 3;
+  const PATTERN_NON_PRINTABLE = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x84\x86-\x9F\uFFFE\uFFFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:[^\uD800-\uDBFF]|^)[\uDC00-\uDFFF]/;
+  const PATTERN_NON_ASCII_LINE_BREAKS = /[\x85\u2028\u2029]/;
+  const PATTERN_FLOW_INDICATORS = /[,\[\]{}]/;
+  const PATTERN_TAG_HANDLE = /^(?:!|!!|![0-9A-Za-z-]+!)$/;
+  const PATTERN_TAG_URI = /^(?:!|[^,\[\]{}])(?:%[0-9a-f]{2}|[0-9a-z\-#;/?:@&=+$,_.!~*'()\[\]])*$/i;
+  function _class(obj) {
+    return Object.prototype.toString.call(obj);
+  }
+  function isEol(c) {
+    return c === 10 || c === 13;
+  }
+  function isWhiteSpace(c) {
+    return c === 9 || c === 32;
+  }
+  function isWsOrEol(c) {
+    return c === 9 || c === 32 || c === 10 || c === 13;
+  }
+  function isFlowIndicator(c) {
+    return c === 44 || c === 91 || c === 93 || c === 123 || c === 125;
+  }
+  function fromHexCode(c) {
+    if (c >= 48 && c <= 57) {
+      return c - 48;
+    }
+    const lc = c | 32;
+    if (lc >= 97 && lc <= 102) {
+      return lc - 97 + 10;
+    }
+    return -1;
+  }
+  function escapedHexLen(c) {
+    if (c === 120) {
+      return 2;
+    }
+    if (c === 117) {
+      return 4;
+    }
+    if (c === 85) {
+      return 8;
+    }
+    return 0;
+  }
+  function fromDecimalCode(c) {
+    if (c >= 48 && c <= 57) {
+      return c - 48;
+    }
+    return -1;
+  }
+  function simpleEscapeSequence(c) {
+    switch (c) {
+      case 48:
+        return "\0";
+      case 97:
+        return "\x07";
+      case 98:
+        return "\b";
+      case 116:
+        return "	";
+      case 9:
+        return "	";
+      case 110:
+        return "\n";
+      case 118:
+        return "\v";
+      case 102:
+        return "\f";
+      case 114:
+        return "\r";
+      case 101:
+        return "\x1B";
+      case 32:
+        return " ";
+      case 34:
+        return '"';
+      case 47:
+        return "/";
+      case 92:
+        return "\\";
+      case 78:
+        return "";
+      case 95:
+        return " ";
+      case 76:
+        return "\u2028";
+      case 80:
+        return "\u2029";
+      default:
+        return "";
+    }
+  }
+  function charFromCodepoint(c) {
+    if (c <= 65535) {
+      return String.fromCharCode(c);
+    }
+    return String.fromCharCode(
+      (c - 65536 >> 10) + 55296,
+      (c - 65536 & 1023) + 56320
+    );
+  }
+  function setProperty(object, key, value) {
+    if (key === "__proto__") {
+      Object.defineProperty(object, key, {
+        configurable: true,
+        enumerable: true,
+        writable: true,
+        value
+      });
+    } else {
+      object[key] = value;
+    }
+  }
+  const simpleEscapeCheck = new Array(256);
+  const simpleEscapeMap = new Array(256);
+  for (let i = 0; i < 256; i++) {
+    simpleEscapeCheck[i] = simpleEscapeSequence(i) ? 1 : 0;
+    simpleEscapeMap[i] = simpleEscapeSequence(i);
+  }
+  function State(input, options) {
+    this.input = input;
+    this.filename = options["filename"] || null;
+    this.schema = options["schema"] || DEFAULT_SCHEMA2;
+    this.onWarning = options["onWarning"] || null;
+    this.legacy = options["legacy"] || false;
+    this.json = options["json"] || false;
+    this.listener = options["listener"] || null;
+    this.maxDepth = typeof options["maxDepth"] === "number" ? options["maxDepth"] : 100;
+    this.maxTotalMergeKeys = typeof options["maxTotalMergeKeys"] === "number" ? options["maxTotalMergeKeys"] : 1e4;
+    this.implicitTypes = this.schema.compiledImplicit;
+    this.typeMap = this.schema.compiledTypeMap;
+    this.length = input.length;
+    this.position = 0;
+    this.line = 0;
+    this.lineStart = 0;
+    this.lineIndent = 0;
+    this.depth = 0;
+    this.totalMergeKeys = 0;
+    this.firstTabInLine = -1;
+    this.documents = [];
+    this.anchorMapTransactions = [];
+  }
+  function generateError(state, message) {
+    const mark = {
+      name: state.filename,
+      buffer: state.input.slice(0, -1),
+      // omit trailing \0
+      position: state.position,
+      line: state.line,
+      column: state.position - state.lineStart
+    };
+    mark.snippet = makeSnippet(mark);
+    return new YAMLException2(message, mark);
+  }
+  function throwError(state, message) {
+    throw generateError(state, message);
+  }
+  function throwWarning(state, message) {
+    if (state.onWarning) {
+      state.onWarning.call(null, generateError(state, message));
+    }
+  }
+  function storeAnchor(state, name, value) {
+    const transactions = state.anchorMapTransactions;
+    if (transactions.length !== 0) {
+      const transaction = transactions[transactions.length - 1];
+      if (!_hasOwnProperty.call(transaction, name)) {
+        transaction[name] = {
+          existed: _hasOwnProperty.call(state.anchorMap, name),
+          value: state.anchorMap[name]
+        };
+      }
+    }
+    state.anchorMap[name] = value;
+  }
+  function beginAnchorTransaction(state) {
+    state.anchorMapTransactions.push(/* @__PURE__ */ Object.create(null));
+  }
+  function commitAnchorTransaction(state) {
+    const transaction = state.anchorMapTransactions.pop();
+    const transactions = state.anchorMapTransactions;
+    if (transactions.length === 0) return;
+    const parent = transactions[transactions.length - 1];
+    const names = Object.keys(transaction);
+    for (let index = 0, length = names.length; index < length; index += 1) {
+      const name = names[index];
+      if (!_hasOwnProperty.call(parent, name)) {
+        parent[name] = transaction[name];
+      }
+    }
+  }
+  function rollbackAnchorTransaction(state) {
+    const transaction = state.anchorMapTransactions.pop();
+    const names = Object.keys(transaction);
+    for (let index = names.length - 1; index >= 0; index -= 1) {
+      const entry = transaction[names[index]];
+      if (entry.existed) {
+        state.anchorMap[names[index]] = entry.value;
+      } else {
+        delete state.anchorMap[names[index]];
+      }
+    }
+  }
+  function snapshotState(state) {
+    return {
+      position: state.position,
+      line: state.line,
+      lineStart: state.lineStart,
+      lineIndent: state.lineIndent,
+      firstTabInLine: state.firstTabInLine,
+      tag: state.tag,
+      anchor: state.anchor,
+      kind: state.kind,
+      result: state.result
+    };
+  }
+  function restoreState(state, snapshot) {
+    state.position = snapshot.position;
+    state.line = snapshot.line;
+    state.lineStart = snapshot.lineStart;
+    state.lineIndent = snapshot.lineIndent;
+    state.firstTabInLine = snapshot.firstTabInLine;
+    state.tag = snapshot.tag;
+    state.anchor = snapshot.anchor;
+    state.kind = snapshot.kind;
+    state.result = snapshot.result;
+  }
+  const directiveHandlers = {
+    YAML: function handleYamlDirective(state, name, args) {
+      if (state.version !== null) {
+        throwError(state, "duplication of %YAML directive");
+      }
+      if (args.length !== 1) {
+        throwError(state, "YAML directive accepts exactly one argument");
+      }
+      const match = /^([0-9]+)\.([0-9]+)$/.exec(args[0]);
+      if (match === null) {
+        throwError(state, "ill-formed argument of the YAML directive");
+      }
+      const major = parseInt(match[1], 10);
+      const minor = parseInt(match[2], 10);
+      if (major !== 1) {
+        throwError(state, "unacceptable YAML version of the document");
+      }
+      state.version = args[0];
+      state.checkLineBreaks = minor < 2;
+      if (minor !== 1 && minor !== 2) {
+        throwWarning(state, "unsupported YAML version of the document");
+      }
+    },
+    TAG: function handleTagDirective(state, name, args) {
+      let prefix;
+      if (args.length !== 2) {
+        throwError(state, "TAG directive accepts exactly two arguments");
+      }
+      const handle = args[0];
+      prefix = args[1];
+      if (!PATTERN_TAG_HANDLE.test(handle)) {
+        throwError(state, "ill-formed tag handle (first argument) of the TAG directive");
+      }
+      if (_hasOwnProperty.call(state.tagMap, handle)) {
+        throwError(state, 'there is a previously declared suffix for "' + handle + '" tag handle');
+      }
+      if (!PATTERN_TAG_URI.test(prefix)) {
+        throwError(state, "ill-formed tag prefix (second argument) of the TAG directive");
+      }
+      try {
+        prefix = decodeURIComponent(prefix);
+      } catch (err) {
+        throwError(state, "tag prefix is malformed: " + prefix);
+      }
+      state.tagMap[handle] = prefix;
+    }
+  };
+  function captureSegment(state, start, end, checkJson) {
+    if (start < end) {
+      const _result = state.input.slice(start, end);
+      if (checkJson) {
+        for (let _position = 0, _length = _result.length; _position < _length; _position += 1) {
+          const _character = _result.charCodeAt(_position);
+          if (!(_character === 9 || _character >= 32 && _character <= 1114111)) {
+            throwError(state, "expected valid JSON character");
+          }
+        }
+      } else if (PATTERN_NON_PRINTABLE.test(_result)) {
+        throwError(state, "the stream contains non-printable characters");
+      }
+      state.result += _result;
+    }
+  }
+  function mergeMappings(state, destination, source, overridableKeys) {
+    if (!common2.isObject(source)) {
+      throwError(state, "cannot merge mappings; the provided source object is unacceptable");
+    }
+    const sourceKeys = Object.keys(source);
+    for (let index = 0, quantity = sourceKeys.length; index < quantity; index += 1) {
+      const key = sourceKeys[index];
+      if (state.maxTotalMergeKeys !== -1 && ++state.totalMergeKeys > state.maxTotalMergeKeys) {
+        throwError(state, "merge keys exceeded maxTotalMergeKeys (" + state.maxTotalMergeKeys + ")");
+      }
+      if (!_hasOwnProperty.call(destination, key)) {
+        setProperty(destination, key, source[key]);
+        overridableKeys[key] = true;
+      }
+    }
+  }
+  function storeMappingPair(state, _result, overridableKeys, keyTag, keyNode, valueNode, startLine, startLineStart, startPos) {
+    if (Array.isArray(keyNode)) {
+      keyNode = Array.prototype.slice.call(keyNode);
+      for (let index = 0, quantity = keyNode.length; index < quantity; index += 1) {
+        if (Array.isArray(keyNode[index])) {
+          throwError(state, "nested arrays are not supported inside keys");
+        }
+        if (typeof keyNode === "object" && _class(keyNode[index]) === "[object Object]") {
+          keyNode[index] = "[object Object]";
+        }
+      }
+    }
+    if (typeof keyNode === "object" && _class(keyNode) === "[object Object]") {
+      keyNode = "[object Object]";
+    }
+    keyNode = String(keyNode);
+    if (_result === null) {
+      _result = {};
+    }
+    if (keyTag === "tag:yaml.org,2002:merge") {
+      if (Array.isArray(valueNode)) {
+        for (let index = 0, quantity = valueNode.length; index < quantity; index += 1) {
+          mergeMappings(state, _result, valueNode[index], overridableKeys);
+        }
+      } else {
+        mergeMappings(state, _result, valueNode, overridableKeys);
+      }
+    } else {
+      if (!state.json && !_hasOwnProperty.call(overridableKeys, keyNode) && _hasOwnProperty.call(_result, keyNode)) {
+        state.line = startLine || state.line;
+        state.lineStart = startLineStart || state.lineStart;
+        state.position = startPos || state.position;
+        throwError(state, "duplicated mapping key");
+      }
+      setProperty(_result, keyNode, valueNode);
+      delete overridableKeys[keyNode];
+    }
+    return _result;
+  }
+  function readLineBreak(state) {
+    const ch = state.input.charCodeAt(state.position);
+    if (ch === 10) {
+      state.position++;
+    } else if (ch === 13) {
+      state.position++;
+      if (state.input.charCodeAt(state.position) === 10) {
+        state.position++;
+      }
+    } else {
+      throwError(state, "a line break is expected");
+    }
+    state.line += 1;
+    state.lineStart = state.position;
+    state.firstTabInLine = -1;
+  }
+  function skipSeparationSpace(state, allowComments, checkIndent) {
+    let lineBreaks = 0;
+    let ch = state.input.charCodeAt(state.position);
+    while (ch !== 0) {
+      while (isWhiteSpace(ch)) {
+        if (ch === 9 && state.firstTabInLine === -1) {
+          state.firstTabInLine = state.position;
+        }
+        ch = state.input.charCodeAt(++state.position);
+      }
+      if (allowComments && ch === 35) {
+        do {
+          ch = state.input.charCodeAt(++state.position);
+        } while (ch !== 10 && ch !== 13 && ch !== 0);
+      }
+      if (isEol(ch)) {
+        readLineBreak(state);
+        ch = state.input.charCodeAt(state.position);
+        lineBreaks++;
+        state.lineIndent = 0;
+        while (ch === 32) {
+          state.lineIndent++;
+          ch = state.input.charCodeAt(++state.position);
+        }
+      } else {
+        break;
+      }
+    }
+    if (checkIndent !== -1 && lineBreaks !== 0 && state.lineIndent < checkIndent) {
+      throwWarning(state, "deficient indentation");
+    }
+    return lineBreaks;
+  }
+  function testDocumentSeparator(state) {
+    let _position = state.position;
+    let ch = state.input.charCodeAt(_position);
+    if ((ch === 45 || ch === 46) && ch === state.input.charCodeAt(_position + 1) && ch === state.input.charCodeAt(_position + 2)) {
+      _position += 3;
+      ch = state.input.charCodeAt(_position);
+      if (ch === 0 || isWsOrEol(ch)) {
+        return true;
+      }
+    }
+    return false;
+  }
+  function writeFoldedLines(state, count) {
+    if (count === 1) {
+      state.result += " ";
+    } else if (count > 1) {
+      state.result += common2.repeat("\n", count - 1);
+    }
+  }
+  function readPlainScalar(state, nodeIndent, withinFlowCollection) {
+    let captureStart;
+    let captureEnd;
+    let hasPendingContent;
+    let _line;
+    let _lineStart;
+    let _lineIndent;
+    const _kind = state.kind;
+    const _result = state.result;
+    let ch = state.input.charCodeAt(state.position);
+    if (isWsOrEol(ch) || isFlowIndicator(ch) || ch === 35 || ch === 38 || ch === 42 || ch === 33 || ch === 124 || ch === 62 || ch === 39 || ch === 34 || ch === 37 || ch === 64 || ch === 96) {
+      return false;
+    }
+    if (ch === 63 || ch === 45) {
+      const following = state.input.charCodeAt(state.position + 1);
+      if (isWsOrEol(following) || withinFlowCollection && isFlowIndicator(following)) {
+        return false;
+      }
+    }
+    state.kind = "scalar";
+    state.result = "";
+    captureStart = captureEnd = state.position;
+    hasPendingContent = false;
+    while (ch !== 0) {
+      if (ch === 58) {
+        const following = state.input.charCodeAt(state.position + 1);
+        if (isWsOrEol(following) || withinFlowCollection && isFlowIndicator(following)) {
+          break;
+        }
+      } else if (ch === 35) {
+        const preceding = state.input.charCodeAt(state.position - 1);
+        if (isWsOrEol(preceding)) {
+          break;
+        }
+      } else if (state.position === state.lineStart && testDocumentSeparator(state) || withinFlowCollection && isFlowIndicator(ch)) {
+        break;
+      } else if (isEol(ch)) {
+        _line = state.line;
+        _lineStart = state.lineStart;
+        _lineIndent = state.lineIndent;
+        skipSeparationSpace(state, false, -1);
+        if (state.lineIndent >= nodeIndent) {
+          hasPendingContent = true;
+          ch = state.input.charCodeAt(state.position);
+          continue;
+        } else {
+          state.position = captureEnd;
+          state.line = _line;
+          state.lineStart = _lineStart;
+          state.lineIndent = _lineIndent;
+          break;
+        }
+      }
+      if (hasPendingContent) {
+        captureSegment(state, captureStart, captureEnd, false);
+        writeFoldedLines(state, state.line - _line);
+        captureStart = captureEnd = state.position;
+        hasPendingContent = false;
+      }
+      if (!isWhiteSpace(ch)) {
+        captureEnd = state.position + 1;
+      }
+      ch = state.input.charCodeAt(++state.position);
+    }
+    captureSegment(state, captureStart, captureEnd, false);
+    if (state.result) {
+      return true;
+    }
+    state.kind = _kind;
+    state.result = _result;
+    return false;
+  }
+  function readSingleQuotedScalar(state, nodeIndent) {
+    let captureStart;
+    let captureEnd;
+    let ch = state.input.charCodeAt(state.position);
+    if (ch !== 39) {
+      return false;
+    }
+    state.kind = "scalar";
+    state.result = "";
+    state.position++;
+    captureStart = captureEnd = state.position;
+    while ((ch = state.input.charCodeAt(state.position)) !== 0) {
+      if (ch === 39) {
+        captureSegment(state, captureStart, state.position, true);
+        ch = state.input.charCodeAt(++state.position);
+        if (ch === 39) {
+          captureStart = state.position;
+          state.position++;
+          captureEnd = state.position;
+        } else {
+          return true;
+        }
+      } else if (isEol(ch)) {
+        captureSegment(state, captureStart, captureEnd, true);
+        writeFoldedLines(state, skipSeparationSpace(state, false, nodeIndent));
+        captureStart = captureEnd = state.position;
+      } else if (state.position === state.lineStart && testDocumentSeparator(state)) {
+        throwError(state, "unexpected end of the document within a single quoted scalar");
+      } else {
+        state.position++;
+        if (!isWhiteSpace(ch)) {
+          captureEnd = state.position;
+        }
+      }
+    }
+    throwError(state, "unexpected end of the stream within a single quoted scalar");
+  }
+  function readDoubleQuotedScalar(state, nodeIndent) {
+    let captureStart;
+    let captureEnd;
+    let tmp;
+    let ch = state.input.charCodeAt(state.position);
+    if (ch !== 34) {
+      return false;
+    }
+    state.kind = "scalar";
+    state.result = "";
+    state.position++;
+    captureStart = captureEnd = state.position;
+    while ((ch = state.input.charCodeAt(state.position)) !== 0) {
+      if (ch === 34) {
+        captureSegment(state, captureStart, state.position, true);
+        state.position++;
+        return true;
+      } else if (ch === 92) {
+        captureSegment(state, captureStart, state.position, true);
+        ch = state.input.charCodeAt(++state.position);
+        if (isEol(ch)) {
+          skipSeparationSpace(state, false, nodeIndent);
+        } else if (ch < 256 && simpleEscapeCheck[ch]) {
+          state.result += simpleEscapeMap[ch];
+          state.position++;
+        } else if ((tmp = escapedHexLen(ch)) > 0) {
+          let hexLength = tmp;
+          let hexResult = 0;
+          for (; hexLength > 0; hexLength--) {
+            ch = state.input.charCodeAt(++state.position);
+            if ((tmp = fromHexCode(ch)) >= 0) {
+              hexResult = (hexResult << 4) + tmp;
+            } else {
+              throwError(state, "expected hexadecimal character");
+            }
+          }
+          state.result += charFromCodepoint(hexResult);
+          state.position++;
+        } else {
+          throwError(state, "unknown escape sequence");
+        }
+        captureStart = captureEnd = state.position;
+      } else if (isEol(ch)) {
+        captureSegment(state, captureStart, captureEnd, true);
+        writeFoldedLines(state, skipSeparationSpace(state, false, nodeIndent));
+        captureStart = captureEnd = state.position;
+      } else if (state.position === state.lineStart && testDocumentSeparator(state)) {
+        throwError(state, "unexpected end of the document within a double quoted scalar");
+      } else {
+        state.position++;
+        if (!isWhiteSpace(ch)) {
+          captureEnd = state.position;
+        }
+      }
+    }
+    throwError(state, "unexpected end of the stream within a double quoted scalar");
+  }
+  function readFlowCollection(state, nodeIndent) {
+    let readNext = true;
+    let _line;
+    let _lineStart;
+    let _pos;
+    const _tag = state.tag;
+    let _result;
+    const _anchor = state.anchor;
+    let terminator;
+    let isPair;
+    let isExplicitPair;
+    let isMapping;
+    const overridableKeys = /* @__PURE__ */ Object.create(null);
+    let keyNode;
+    let keyTag;
+    let valueNode;
+    let ch = state.input.charCodeAt(state.position);
+    if (ch === 91) {
+      terminator = 93;
+      isMapping = false;
+      _result = [];
+    } else if (ch === 123) {
+      terminator = 125;
+      isMapping = true;
+      _result = {};
+    } else {
+      return false;
+    }
+    if (state.anchor !== null) {
+      storeAnchor(state, state.anchor, _result);
+    }
+    ch = state.input.charCodeAt(++state.position);
+    while (ch !== 0) {
+      skipSeparationSpace(state, true, nodeIndent);
+      ch = state.input.charCodeAt(state.position);
+      if (ch === terminator) {
+        state.position++;
+        state.tag = _tag;
+        state.anchor = _anchor;
+        state.kind = isMapping ? "mapping" : "sequence";
+        state.result = _result;
+        return true;
+      } else if (!readNext) {
+        throwError(state, "missed comma between flow collection entries");
+      } else if (ch === 44) {
+        throwError(state, "expected the node content, but found ','");
+      }
+      keyTag = keyNode = valueNode = null;
+      isPair = isExplicitPair = false;
+      if (ch === 63) {
+        const following = state.input.charCodeAt(state.position + 1);
+        if (isWsOrEol(following)) {
+          isPair = isExplicitPair = true;
+          state.position++;
+          skipSeparationSpace(state, true, nodeIndent);
+        }
+      }
+      _line = state.line;
+      _lineStart = state.lineStart;
+      _pos = state.position;
+      composeNode(state, nodeIndent, CONTEXT_FLOW_IN, false, true);
+      keyTag = state.tag;
+      keyNode = state.result;
+      skipSeparationSpace(state, true, nodeIndent);
+      ch = state.input.charCodeAt(state.position);
+      if ((isExplicitPair || state.line === _line) && ch === 58) {
+        isPair = true;
+        ch = state.input.charCodeAt(++state.position);
+        skipSeparationSpace(state, true, nodeIndent);
+        composeNode(state, nodeIndent, CONTEXT_FLOW_IN, false, true);
+        valueNode = state.result;
+      }
+      if (isMapping) {
+        storeMappingPair(state, _result, overridableKeys, keyTag, keyNode, valueNode, _line, _lineStart, _pos);
+      } else if (isPair) {
+        _result.push(storeMappingPair(state, null, overridableKeys, keyTag, keyNode, valueNode, _line, _lineStart, _pos));
+      } else {
+        _result.push(keyNode);
+      }
+      skipSeparationSpace(state, true, nodeIndent);
+      ch = state.input.charCodeAt(state.position);
+      if (ch === 44) {
+        readNext = true;
+        ch = state.input.charCodeAt(++state.position);
+      } else {
+        readNext = false;
+      }
+    }
+    throwError(state, "unexpected end of the stream within a flow collection");
+  }
+  function readBlockScalar(state, nodeIndent) {
+    let folding;
+    let chomping = CHOMPING_CLIP;
+    let didReadContent = false;
+    let detectedIndent = false;
+    let textIndent = nodeIndent;
+    let emptyLines = 0;
+    let atMoreIndented = false;
+    let tmp;
+    let ch = state.input.charCodeAt(state.position);
+    if (ch === 124) {
+      folding = false;
+    } else if (ch === 62) {
+      folding = true;
+    } else {
+      return false;
+    }
+    state.kind = "scalar";
+    state.result = "";
+    while (ch !== 0) {
+      ch = state.input.charCodeAt(++state.position);
+      if (ch === 43 || ch === 45) {
+        if (CHOMPING_CLIP === chomping) {
+          chomping = ch === 43 ? CHOMPING_KEEP : CHOMPING_STRIP;
+        } else {
+          throwError(state, "repeat of a chomping mode identifier");
+        }
+      } else if ((tmp = fromDecimalCode(ch)) >= 0) {
+        if (tmp === 0) {
+          throwError(state, "bad explicit indentation width of a block scalar; it cannot be less than one");
+        } else if (!detectedIndent) {
+          textIndent = nodeIndent + tmp - 1;
+          detectedIndent = true;
+        } else {
+          throwError(state, "repeat of an indentation width identifier");
+        }
+      } else {
+        break;
+      }
+    }
+    if (isWhiteSpace(ch)) {
+      do {
+        ch = state.input.charCodeAt(++state.position);
+      } while (isWhiteSpace(ch));
+      if (ch === 35) {
+        do {
+          ch = state.input.charCodeAt(++state.position);
+        } while (!isEol(ch) && ch !== 0);
+      }
+    }
+    while (ch !== 0) {
+      readLineBreak(state);
+      state.lineIndent = 0;
+      ch = state.input.charCodeAt(state.position);
+      while ((!detectedIndent || state.lineIndent < textIndent) && ch === 32) {
+        state.lineIndent++;
+        ch = state.input.charCodeAt(++state.position);
+      }
+      if (!detectedIndent && state.lineIndent > textIndent) {
+        textIndent = state.lineIndent;
+      }
+      if (isEol(ch)) {
+        emptyLines++;
+        continue;
+      }
+      if (!detectedIndent && textIndent === 0) {
+        throwError(state, "missing indentation for block scalar");
+      }
+      if (state.lineIndent < textIndent) {
+        if (chomping === CHOMPING_KEEP) {
+          state.result += common2.repeat("\n", didReadContent ? 1 + emptyLines : emptyLines);
+        } else if (chomping === CHOMPING_CLIP) {
+          if (didReadContent) {
+            state.result += "\n";
+          }
+        }
+        break;
+      }
+      if (folding) {
+        if (isWhiteSpace(ch)) {
+          atMoreIndented = true;
+          state.result += common2.repeat("\n", didReadContent ? 1 + emptyLines : emptyLines);
+        } else if (atMoreIndented) {
+          atMoreIndented = false;
+          state.result += common2.repeat("\n", emptyLines + 1);
+        } else if (emptyLines === 0) {
+          if (didReadContent) {
+            state.result += " ";
+          }
+        } else {
+          state.result += common2.repeat("\n", emptyLines);
+        }
+      } else {
+        state.result += common2.repeat("\n", didReadContent ? 1 + emptyLines : emptyLines);
+      }
+      didReadContent = true;
+      detectedIndent = true;
+      emptyLines = 0;
+      const captureStart = state.position;
+      while (!isEol(ch) && ch !== 0) {
+        ch = state.input.charCodeAt(++state.position);
+      }
+      captureSegment(state, captureStart, state.position, false);
+    }
+    return true;
+  }
+  function readBlockSequence(state, nodeIndent) {
+    const _tag = state.tag;
+    const _anchor = state.anchor;
+    const _result = [];
+    let detected = false;
+    if (state.firstTabInLine !== -1) return false;
+    if (state.anchor !== null) {
+      storeAnchor(state, state.anchor, _result);
+    }
+    let ch = state.input.charCodeAt(state.position);
+    while (ch !== 0) {
+      if (state.firstTabInLine !== -1) {
+        state.position = state.firstTabInLine;
+        throwError(state, "tab characters must not be used in indentation");
+      }
+      if (ch !== 45) {
+        break;
+      }
+      const following = state.input.charCodeAt(state.position + 1);
+      if (!isWsOrEol(following)) {
+        break;
+      }
+      detected = true;
+      state.position++;
+      if (skipSeparationSpace(state, true, -1)) {
+        if (state.lineIndent <= nodeIndent) {
+          _result.push(null);
+          ch = state.input.charCodeAt(state.position);
+          continue;
+        }
+      }
+      const _line = state.line;
+      composeNode(state, nodeIndent, CONTEXT_BLOCK_IN, false, true);
+      _result.push(state.result);
+      skipSeparationSpace(state, true, -1);
+      ch = state.input.charCodeAt(state.position);
+      if ((state.line === _line || state.lineIndent > nodeIndent) && ch !== 0) {
+        throwError(state, "bad indentation of a sequence entry");
+      } else if (state.lineIndent < nodeIndent) {
+        break;
+      }
+    }
+    if (detected) {
+      state.tag = _tag;
+      state.anchor = _anchor;
+      state.kind = "sequence";
+      state.result = _result;
+      return true;
+    }
+    return false;
+  }
+  function readBlockMapping(state, nodeIndent, flowIndent) {
+    let allowCompact;
+    let _keyLine;
+    let _keyLineStart;
+    let _keyPos;
+    const _tag = state.tag;
+    const _anchor = state.anchor;
+    const _result = {};
+    const overridableKeys = /* @__PURE__ */ Object.create(null);
+    let keyTag = null;
+    let keyNode = null;
+    let valueNode = null;
+    let atExplicitKey = false;
+    let detected = false;
+    if (state.firstTabInLine !== -1) return false;
+    if (state.anchor !== null) {
+      storeAnchor(state, state.anchor, _result);
+    }
+    let ch = state.input.charCodeAt(state.position);
+    while (ch !== 0) {
+      if (!atExplicitKey && state.firstTabInLine !== -1) {
+        state.position = state.firstTabInLine;
+        throwError(state, "tab characters must not be used in indentation");
+      }
+      const following = state.input.charCodeAt(state.position + 1);
+      const _line = state.line;
+      if ((ch === 63 || ch === 58) && isWsOrEol(following)) {
+        if (ch === 63) {
+          if (atExplicitKey) {
+            storeMappingPair(state, _result, overridableKeys, keyTag, keyNode, null, _keyLine, _keyLineStart, _keyPos);
+            keyTag = keyNode = valueNode = null;
+          }
+          detected = true;
+          atExplicitKey = true;
+          allowCompact = true;
+        } else if (atExplicitKey) {
+          atExplicitKey = false;
+          allowCompact = true;
+        } else {
+          throwError(state, "incomplete explicit mapping pair; a key node is missed; or followed by a non-tabulated empty line");
+        }
+        state.position += 1;
+        ch = following;
+      } else {
+        _keyLine = state.line;
+        _keyLineStart = state.lineStart;
+        _keyPos = state.position;
+        if (!composeNode(state, flowIndent, CONTEXT_FLOW_OUT, false, true)) {
+          break;
+        }
+        if (state.line === _line) {
+          ch = state.input.charCodeAt(state.position);
+          while (isWhiteSpace(ch)) {
+            ch = state.input.charCodeAt(++state.position);
+          }
+          if (ch === 58) {
+            ch = state.input.charCodeAt(++state.position);
+            if (!isWsOrEol(ch)) {
+              throwError(state, "a whitespace character is expected after the key-value separator within a block mapping");
+            }
+            if (atExplicitKey) {
+              storeMappingPair(state, _result, overridableKeys, keyTag, keyNode, null, _keyLine, _keyLineStart, _keyPos);
+              keyTag = keyNode = valueNode = null;
+            }
+            detected = true;
+            atExplicitKey = false;
+            allowCompact = false;
+            keyTag = state.tag;
+            keyNode = state.result;
+          } else if (detected) {
+            throwError(state, "can not read an implicit mapping pair; a colon is missed");
+          } else {
+            state.tag = _tag;
+            state.anchor = _anchor;
+            return true;
+          }
+        } else if (detected) {
+          throwError(state, "can not read a block mapping entry; a multiline key may not be an implicit key");
+        } else {
+          state.tag = _tag;
+          state.anchor = _anchor;
+          return true;
+        }
+      }
+      if (state.line === _line || state.lineIndent > nodeIndent) {
+        if (atExplicitKey) {
+          _keyLine = state.line;
+          _keyLineStart = state.lineStart;
+          _keyPos = state.position;
+        }
+        if (composeNode(state, nodeIndent, CONTEXT_BLOCK_OUT, true, allowCompact)) {
+          if (atExplicitKey) {
+            keyNode = state.result;
+          } else {
+            valueNode = state.result;
+          }
+        }
+        if (!atExplicitKey) {
+          storeMappingPair(state, _result, overridableKeys, keyTag, keyNode, valueNode, _keyLine, _keyLineStart, _keyPos);
+          keyTag = keyNode = valueNode = null;
+        }
+        skipSeparationSpace(state, true, -1);
+        ch = state.input.charCodeAt(state.position);
+      }
+      if ((state.line === _line || state.lineIndent > nodeIndent) && ch !== 0) {
+        throwError(state, "bad indentation of a mapping entry");
+      } else if (state.lineIndent < nodeIndent) {
+        break;
+      }
+    }
+    if (atExplicitKey) {
+      storeMappingPair(state, _result, overridableKeys, keyTag, keyNode, null, _keyLine, _keyLineStart, _keyPos);
+    }
+    if (detected) {
+      state.tag = _tag;
+      state.anchor = _anchor;
+      state.kind = "mapping";
+      state.result = _result;
+    }
+    return detected;
+  }
+  function readTagProperty(state) {
+    let isVerbatim = false;
+    let isNamed = false;
+    let tagHandle;
+    let tagName;
+    let ch = state.input.charCodeAt(state.position);
+    if (ch !== 33) return false;
+    if (state.tag !== null) {
+      throwError(state, "duplication of a tag property");
+    }
+    ch = state.input.charCodeAt(++state.position);
+    if (ch === 60) {
+      isVerbatim = true;
+      ch = state.input.charCodeAt(++state.position);
+    } else if (ch === 33) {
+      isNamed = true;
+      tagHandle = "!!";
+      ch = state.input.charCodeAt(++state.position);
+    } else {
+      tagHandle = "!";
+    }
+    let _position = state.position;
+    if (isVerbatim) {
+      do {
+        ch = state.input.charCodeAt(++state.position);
+      } while (ch !== 0 && ch !== 62);
+      if (state.position < state.length) {
+        tagName = state.input.slice(_position, state.position);
+        ch = state.input.charCodeAt(++state.position);
+      } else {
+        throwError(state, "unexpected end of the stream within a verbatim tag");
+      }
+    } else {
+      while (ch !== 0 && !isWsOrEol(ch)) {
+        if (ch === 33) {
+          if (!isNamed) {
+            tagHandle = state.input.slice(_position - 1, state.position + 1);
+            if (!PATTERN_TAG_HANDLE.test(tagHandle)) {
+              throwError(state, "named tag handle cannot contain such characters");
+            }
+            isNamed = true;
+            _position = state.position + 1;
+          } else {
+            throwError(state, "tag suffix cannot contain exclamation marks");
+          }
+        }
+        ch = state.input.charCodeAt(++state.position);
+      }
+      tagName = state.input.slice(_position, state.position);
+      if (PATTERN_FLOW_INDICATORS.test(tagName)) {
+        throwError(state, "tag suffix cannot contain flow indicator characters");
+      }
+    }
+    if (tagName && !PATTERN_TAG_URI.test(tagName)) {
+      throwError(state, "tag name cannot contain such characters: " + tagName);
+    }
+    try {
+      tagName = decodeURIComponent(tagName);
+    } catch (err) {
+      throwError(state, "tag name is malformed: " + tagName);
+    }
+    if (isVerbatim) {
+      state.tag = tagName;
+    } else if (_hasOwnProperty.call(state.tagMap, tagHandle)) {
+      state.tag = state.tagMap[tagHandle] + tagName;
+    } else if (tagHandle === "!") {
+      state.tag = "!" + tagName;
+    } else if (tagHandle === "!!") {
+      state.tag = "tag:yaml.org,2002:" + tagName;
+    } else {
+      throwError(state, 'undeclared tag handle "' + tagHandle + '"');
+    }
+    return true;
+  }
+  function readAnchorProperty(state) {
+    let ch = state.input.charCodeAt(state.position);
+    if (ch !== 38) return false;
+    if (state.anchor !== null) {
+      throwError(state, "duplication of an anchor property");
+    }
+    ch = state.input.charCodeAt(++state.position);
+    const _position = state.position;
+    while (ch !== 0 && !isWsOrEol(ch) && !isFlowIndicator(ch)) {
+      ch = state.input.charCodeAt(++state.position);
+    }
+    if (state.position === _position) {
+      throwError(state, "name of an anchor node must contain at least one character");
+    }
+    state.anchor = state.input.slice(_position, state.position);
+    return true;
+  }
+  function readAlias(state) {
+    let ch = state.input.charCodeAt(state.position);
+    if (ch !== 42) return false;
+    ch = state.input.charCodeAt(++state.position);
+    const _position = state.position;
+    while (ch !== 0 && !isWsOrEol(ch) && !isFlowIndicator(ch)) {
+      ch = state.input.charCodeAt(++state.position);
+    }
+    if (state.position === _position) {
+      throwError(state, "name of an alias node must contain at least one character");
+    }
+    const alias = state.input.slice(_position, state.position);
+    if (!_hasOwnProperty.call(state.anchorMap, alias)) {
+      throwError(state, 'unidentified alias "' + alias + '"');
+    }
+    state.result = state.anchorMap[alias];
+    skipSeparationSpace(state, true, -1);
+    return true;
+  }
+  function tryReadBlockMappingFromProperty(state, propertyStart, nodeIndent, flowIndent) {
+    const fallbackState = snapshotState(state);
+    beginAnchorTransaction(state);
+    restoreState(state, propertyStart);
+    state.tag = null;
+    state.anchor = null;
+    state.kind = null;
+    state.result = null;
+    if (readBlockMapping(state, nodeIndent, flowIndent) && state.kind === "mapping") {
+      commitAnchorTransaction(state);
+      return true;
+    }
+    rollbackAnchorTransaction(state);
+    restoreState(state, fallbackState);
+    return false;
+  }
+  function composeNode(state, parentIndent, nodeContext, allowToSeek, allowCompact) {
+    let allowBlockScalars;
+    let allowBlockCollections;
+    let indentStatus = 1;
+    let atNewLine = false;
+    let hasContent = false;
+    let propertyStart = null;
+    let type2;
+    let flowIndent;
+    let blockIndent;
+    if (state.depth >= state.maxDepth) {
+      throwError(state, "nesting exceeded maxDepth (" + state.maxDepth + ")");
+    }
+    state.depth += 1;
+    if (state.listener !== null) {
+      state.listener("open", state);
+    }
+    state.tag = null;
+    state.anchor = null;
+    state.kind = null;
+    state.result = null;
+    const allowBlockStyles = allowBlockScalars = allowBlockCollections = CONTEXT_BLOCK_OUT === nodeContext || CONTEXT_BLOCK_IN === nodeContext;
+    if (allowToSeek) {
+      if (skipSeparationSpace(state, true, -1)) {
+        atNewLine = true;
+        if (state.lineIndent > parentIndent) {
+          indentStatus = 1;
+        } else if (state.lineIndent === parentIndent) {
+          indentStatus = 0;
+        } else if (state.lineIndent < parentIndent) {
+          indentStatus = -1;
+        }
+      }
+    }
+    if (indentStatus === 1) {
+      while (true) {
+        const ch = state.input.charCodeAt(state.position);
+        const propertyState = snapshotState(state);
+        if (atNewLine && (ch === 33 && state.tag !== null || ch === 38 && state.anchor !== null)) {
+          break;
+        }
+        if (!readTagProperty(state) && !readAnchorProperty(state)) {
+          break;
+        }
+        if (propertyStart === null) {
+          propertyStart = propertyState;
+        }
+        if (skipSeparationSpace(state, true, -1)) {
+          atNewLine = true;
+          allowBlockCollections = allowBlockStyles;
+          if (state.lineIndent > parentIndent) {
+            indentStatus = 1;
+          } else if (state.lineIndent === parentIndent) {
+            indentStatus = 0;
+          } else if (state.lineIndent < parentIndent) {
+            indentStatus = -1;
+          }
+        } else {
+          allowBlockCollections = false;
+        }
+      }
+    }
+    if (allowBlockCollections) {
+      allowBlockCollections = atNewLine || allowCompact;
+    }
+    if (indentStatus === 1 || CONTEXT_BLOCK_OUT === nodeContext) {
+      if (CONTEXT_FLOW_IN === nodeContext || CONTEXT_FLOW_OUT === nodeContext) {
+        flowIndent = parentIndent;
+      } else {
+        flowIndent = parentIndent + 1;
+      }
+      blockIndent = state.position - state.lineStart;
+      if (indentStatus === 1) {
+        if (allowBlockCollections && (readBlockSequence(state, blockIndent) || readBlockMapping(state, blockIndent, flowIndent)) || readFlowCollection(state, flowIndent)) {
+          hasContent = true;
+        } else {
+          const ch = state.input.charCodeAt(state.position);
+          if (propertyStart !== null && allowBlockStyles && !allowBlockCollections && ch !== 124 && ch !== 62 && tryReadBlockMappingFromProperty(
+            state,
+            propertyStart,
+            propertyStart.position - propertyStart.lineStart,
+            flowIndent
+          )) {
+            hasContent = true;
+          } else if (allowBlockScalars && readBlockScalar(state, flowIndent) || readSingleQuotedScalar(state, flowIndent) || readDoubleQuotedScalar(state, flowIndent)) {
+            hasContent = true;
+          } else if (readAlias(state)) {
+            hasContent = true;
+            if (state.tag !== null || state.anchor !== null) {
+              throwError(state, "alias node should not have any properties");
+            }
+          } else if (readPlainScalar(state, flowIndent, CONTEXT_FLOW_IN === nodeContext)) {
+            hasContent = true;
+            if (state.tag === null) {
+              state.tag = "?";
+            }
+          }
+          if (state.anchor !== null) {
+            storeAnchor(state, state.anchor, state.result);
+          }
+        }
+      } else if (indentStatus === 0) {
+        hasContent = allowBlockCollections && readBlockSequence(state, blockIndent);
+      }
+    }
+    if (state.tag === null) {
+      if (state.anchor !== null) {
+        storeAnchor(state, state.anchor, state.result);
+      }
+    } else if (state.tag === "?") {
+      if (state.result !== null && state.kind !== "scalar") {
+        throwError(state, 'unacceptable node kind for !<?> tag; it should be "scalar", not "' + state.kind + '"');
+      }
+      for (let typeIndex = 0, typeQuantity = state.implicitTypes.length; typeIndex < typeQuantity; typeIndex += 1) {
+        type2 = state.implicitTypes[typeIndex];
+        if (type2.resolve(state.result)) {
+          state.result = type2.construct(state.result);
+          state.tag = type2.tag;
+          if (state.anchor !== null) {
+            storeAnchor(state, state.anchor, state.result);
+          }
+          break;
+        }
+      }
+    } else if (state.tag !== "!") {
+      if (_hasOwnProperty.call(state.typeMap[state.kind || "fallback"], state.tag)) {
+        type2 = state.typeMap[state.kind || "fallback"][state.tag];
+      } else {
+        type2 = null;
+        const typeList = state.typeMap.multi[state.kind || "fallback"];
+        for (let typeIndex = 0, typeQuantity = typeList.length; typeIndex < typeQuantity; typeIndex += 1) {
+          if (state.tag.slice(0, typeList[typeIndex].tag.length) === typeList[typeIndex].tag) {
+            type2 = typeList[typeIndex];
+            break;
+          }
+        }
+      }
+      if (!type2) {
+        throwError(state, "unknown tag !<" + state.tag + ">");
+      }
+      if (state.result !== null && type2.kind !== state.kind) {
+        throwError(state, "unacceptable node kind for !<" + state.tag + '> tag; it should be "' + type2.kind + '", not "' + state.kind + '"');
+      }
+      if (!type2.resolve(state.result, state.tag)) {
+        throwError(state, "cannot resolve a node with !<" + state.tag + "> explicit tag");
+      } else {
+        state.result = type2.construct(state.result, state.tag);
+        if (state.anchor !== null) {
+          storeAnchor(state, state.anchor, state.result);
+        }
+      }
+    }
+    if (state.listener !== null) {
+      state.listener("close", state);
+    }
+    state.depth -= 1;
+    return state.tag !== null || state.anchor !== null || hasContent;
+  }
+  function readDocument(state) {
+    const documentStart = state.position;
+    let hasDirectives = false;
+    let ch;
+    state.version = null;
+    state.checkLineBreaks = state.legacy;
+    state.tagMap = /* @__PURE__ */ Object.create(null);
+    state.anchorMap = /* @__PURE__ */ Object.create(null);
+    while ((ch = state.input.charCodeAt(state.position)) !== 0) {
+      skipSeparationSpace(state, true, -1);
+      ch = state.input.charCodeAt(state.position);
+      if (state.lineIndent > 0 || ch !== 37) {
+        break;
+      }
+      hasDirectives = true;
+      ch = state.input.charCodeAt(++state.position);
+      let _position = state.position;
+      while (ch !== 0 && !isWsOrEol(ch)) {
+        ch = state.input.charCodeAt(++state.position);
+      }
+      const directiveName = state.input.slice(_position, state.position);
+      const directiveArgs = [];
+      if (directiveName.length < 1) {
+        throwError(state, "directive name must not be less than one character in length");
+      }
+      while (ch !== 0) {
+        while (isWhiteSpace(ch)) {
+          ch = state.input.charCodeAt(++state.position);
+        }
+        if (ch === 35) {
+          do {
+            ch = state.input.charCodeAt(++state.position);
+          } while (ch !== 0 && !isEol(ch));
+          break;
+        }
+        if (isEol(ch)) break;
+        _position = state.position;
+        while (ch !== 0 && !isWsOrEol(ch)) {
+          ch = state.input.charCodeAt(++state.position);
+        }
+        directiveArgs.push(state.input.slice(_position, state.position));
+      }
+      if (ch !== 0) readLineBreak(state);
+      if (_hasOwnProperty.call(directiveHandlers, directiveName)) {
+        directiveHandlers[directiveName](state, directiveName, directiveArgs);
+      } else {
+        throwWarning(state, 'unknown document directive "' + directiveName + '"');
+      }
+    }
+    skipSeparationSpace(state, true, -1);
+    if (state.lineIndent === 0 && state.input.charCodeAt(state.position) === 45 && state.input.charCodeAt(state.position + 1) === 45 && state.input.charCodeAt(state.position + 2) === 45) {
+      state.position += 3;
+      skipSeparationSpace(state, true, -1);
+    } else if (hasDirectives) {
+      throwError(state, "directives end mark is expected");
+    }
+    composeNode(state, state.lineIndent - 1, CONTEXT_BLOCK_OUT, false, true);
+    skipSeparationSpace(state, true, -1);
+    if (state.checkLineBreaks && PATTERN_NON_ASCII_LINE_BREAKS.test(state.input.slice(documentStart, state.position))) {
+      throwWarning(state, "non-ASCII line breaks are interpreted as content");
+    }
+    state.documents.push(state.result);
+    if (state.position === state.lineStart && testDocumentSeparator(state)) {
+      if (state.input.charCodeAt(state.position) === 46) {
+        state.position += 3;
+        skipSeparationSpace(state, true, -1);
+      }
+      return;
+    }
+    if (state.position < state.length - 1) {
+      throwError(state, "end of the stream or a document separator is expected");
+    }
+  }
+  function loadDocuments(input, options) {
+    input = String(input);
+    options = options || {};
+    if (input.length !== 0) {
+      if (input.charCodeAt(input.length - 1) !== 10 && input.charCodeAt(input.length - 1) !== 13) {
+        input += "\n";
+      }
+      if (input.charCodeAt(0) === 65279) {
+        input = input.slice(1);
+      }
+    }
+    const state = new State(input, options);
+    const nullpos = input.indexOf("\0");
+    if (nullpos !== -1) {
+      state.position = nullpos;
+      throwError(state, "null byte is not allowed in input");
+    }
+    state.input += "\0";
+    while (state.input.charCodeAt(state.position) === 32) {
+      state.lineIndent += 1;
+      state.position += 1;
+    }
+    while (state.position < state.length - 1) {
+      readDocument(state);
+    }
+    return state.documents;
+  }
+  function loadAll2(input, iterator, options) {
+    if (iterator !== null && typeof iterator === "object" && typeof options === "undefined") {
+      options = iterator;
+      iterator = null;
+    }
+    const documents = loadDocuments(input, options);
+    if (typeof iterator !== "function") {
+      return documents;
+    }
+    for (let index = 0, length = documents.length; index < length; index += 1) {
+      iterator(documents[index]);
+    }
+  }
+  function load2(input, options) {
+    const documents = loadDocuments(input, options);
+    if (documents.length === 0) {
+      return void 0;
+    } else if (documents.length === 1) {
+      return documents[0];
+    }
+    throw new YAMLException2("expected a single document in the stream, but found more");
+  }
+  loader.loadAll = loadAll2;
+  loader.load = load2;
+  return loader;
+}
+var dumper = {};
+var hasRequiredDumper;
+function requireDumper() {
+  if (hasRequiredDumper) return dumper;
+  hasRequiredDumper = 1;
+  const common2 = requireCommon();
+  const YAMLException2 = requireException();
+  const DEFAULT_SCHEMA2 = require_default();
+  const _toString = Object.prototype.toString;
+  const _hasOwnProperty = Object.prototype.hasOwnProperty;
+  const CHAR_BOM = 65279;
+  const CHAR_TAB = 9;
+  const CHAR_LINE_FEED = 10;
+  const CHAR_CARRIAGE_RETURN = 13;
+  const CHAR_SPACE = 32;
+  const CHAR_EXCLAMATION = 33;
+  const CHAR_DOUBLE_QUOTE = 34;
+  const CHAR_SHARP = 35;
+  const CHAR_PERCENT = 37;
+  const CHAR_AMPERSAND = 38;
+  const CHAR_SINGLE_QUOTE = 39;
+  const CHAR_ASTERISK = 42;
+  const CHAR_COMMA = 44;
+  const CHAR_MINUS = 45;
+  const CHAR_COLON = 58;
+  const CHAR_EQUALS = 61;
+  const CHAR_GREATER_THAN = 62;
+  const CHAR_QUESTION = 63;
+  const CHAR_COMMERCIAL_AT = 64;
+  const CHAR_LEFT_SQUARE_BRACKET = 91;
+  const CHAR_RIGHT_SQUARE_BRACKET = 93;
+  const CHAR_GRAVE_ACCENT = 96;
+  const CHAR_LEFT_CURLY_BRACKET = 123;
+  const CHAR_VERTICAL_LINE = 124;
+  const CHAR_RIGHT_CURLY_BRACKET = 125;
+  const ESCAPE_SEQUENCES = {};
+  ESCAPE_SEQUENCES[0] = "\\0";
+  ESCAPE_SEQUENCES[7] = "\\a";
+  ESCAPE_SEQUENCES[8] = "\\b";
+  ESCAPE_SEQUENCES[9] = "\\t";
+  ESCAPE_SEQUENCES[10] = "\\n";
+  ESCAPE_SEQUENCES[11] = "\\v";
+  ESCAPE_SEQUENCES[12] = "\\f";
+  ESCAPE_SEQUENCES[13] = "\\r";
+  ESCAPE_SEQUENCES[27] = "\\e";
+  ESCAPE_SEQUENCES[34] = '\\"';
+  ESCAPE_SEQUENCES[92] = "\\\\";
+  ESCAPE_SEQUENCES[133] = "\\N";
+  ESCAPE_SEQUENCES[160] = "\\_";
+  ESCAPE_SEQUENCES[8232] = "\\L";
+  ESCAPE_SEQUENCES[8233] = "\\P";
+  const DEPRECATED_BOOLEANS_SYNTAX = [
+    "y",
+    "Y",
+    "yes",
+    "Yes",
+    "YES",
+    "on",
+    "On",
+    "ON",
+    "n",
+    "N",
+    "no",
+    "No",
+    "NO",
+    "off",
+    "Off",
+    "OFF"
+  ];
+  const DEPRECATED_BASE60_SYNTAX = /^[-+]?[0-9_]+(?::[0-9_]+)+(?:\.[0-9_]*)?$/;
+  function compileStyleMap(schema2, map2) {
+    if (map2 === null) return {};
+    const result = {};
+    const keys = Object.keys(map2);
+    for (let index = 0, length = keys.length; index < length; index += 1) {
+      let tag = keys[index];
+      let style = String(map2[tag]);
+      if (tag.slice(0, 2) === "!!") {
+        tag = "tag:yaml.org,2002:" + tag.slice(2);
+      }
+      const type2 = schema2.compiledTypeMap["fallback"][tag];
+      if (type2 && _hasOwnProperty.call(type2.styleAliases, style)) {
+        style = type2.styleAliases[style];
+      }
+      result[tag] = style;
+    }
+    return result;
+  }
+  function encodeHex(character) {
+    let handle;
+    let length;
+    const string = character.toString(16).toUpperCase();
+    if (character <= 255) {
+      handle = "x";
+      length = 2;
+    } else if (character <= 65535) {
+      handle = "u";
+      length = 4;
+    } else if (character <= 4294967295) {
+      handle = "U";
+      length = 8;
+    } else {
+      throw new YAMLException2("code point within a string may not be greater than 0xFFFFFFFF");
+    }
+    return "\\" + handle + common2.repeat("0", length - string.length) + string;
+  }
+  const QUOTING_TYPE_SINGLE = 1;
+  const QUOTING_TYPE_DOUBLE = 2;
+  function State(options) {
+    this.schema = options["schema"] || DEFAULT_SCHEMA2;
+    this.indent = Math.max(1, options["indent"] || 2);
+    this.noArrayIndent = options["noArrayIndent"] || false;
+    this.skipInvalid = options["skipInvalid"] || false;
+    this.flowLevel = common2.isNothing(options["flowLevel"]) ? -1 : options["flowLevel"];
+    this.styleMap = compileStyleMap(this.schema, options["styles"] || null);
+    this.sortKeys = options["sortKeys"] || false;
+    this.lineWidth = options["lineWidth"] || 80;
+    this.noRefs = options["noRefs"] || false;
+    this.noCompatMode = options["noCompatMode"] || false;
+    this.condenseFlow = options["condenseFlow"] || false;
+    this.quotingType = options["quotingType"] === '"' ? QUOTING_TYPE_DOUBLE : QUOTING_TYPE_SINGLE;
+    this.forceQuotes = options["forceQuotes"] || false;
+    this.replacer = typeof options["replacer"] === "function" ? options["replacer"] : null;
+    this.implicitTypes = this.schema.compiledImplicit;
+    this.explicitTypes = this.schema.compiledExplicit;
+    this.tag = null;
+    this.result = "";
+    this.duplicates = [];
+    this.usedDuplicates = null;
+  }
+  function indentString(string, spaces) {
+    const ind = common2.repeat(" ", spaces);
+    let position = 0;
+    let result = "";
+    const length = string.length;
+    while (position < length) {
+      let line;
+      const next = string.indexOf("\n", position);
+      if (next === -1) {
+        line = string.slice(position);
+        position = length;
+      } else {
+        line = string.slice(position, next + 1);
+        position = next + 1;
+      }
+      if (line.length && line !== "\n") result += ind;
+      result += line;
+    }
+    return result;
+  }
+  function generateNextLine(state, level) {
+    return "\n" + common2.repeat(" ", state.indent * level);
+  }
+  function testImplicitResolving(state, str2) {
+    for (let index = 0, length = state.implicitTypes.length; index < length; index += 1) {
+      const type2 = state.implicitTypes[index];
+      if (type2.resolve(str2)) {
+        return true;
+      }
+    }
+    return false;
+  }
+  function isWhitespace(c) {
+    return c === CHAR_SPACE || c === CHAR_TAB;
+  }
+  function isPrintable(c) {
+    return c >= 32 && c <= 126 || c >= 161 && c <= 55295 && c !== 8232 && c !== 8233 || c >= 57344 && c <= 65533 && c !== CHAR_BOM || c >= 65536 && c <= 1114111;
+  }
+  function isNsCharOrWhitespace(c) {
+    return isPrintable(c) && c !== CHAR_BOM && // - b-char
+    c !== CHAR_CARRIAGE_RETURN && c !== CHAR_LINE_FEED;
+  }
+  function isPlainSafe(c, prev, inblock) {
+    const cIsNsCharOrWhitespace = isNsCharOrWhitespace(c);
+    const cIsNsChar = cIsNsCharOrWhitespace && !isWhitespace(c);
+    return (
+      // ns-plain-safe
+      (inblock ? cIsNsCharOrWhitespace : cIsNsCharOrWhitespace && // - c-flow-indicator
+      c !== CHAR_COMMA && c !== CHAR_LEFT_SQUARE_BRACKET && c !== CHAR_RIGHT_SQUARE_BRACKET && c !== CHAR_LEFT_CURLY_BRACKET && c !== CHAR_RIGHT_CURLY_BRACKET) && // ns-plain-char
+      c !== CHAR_SHARP && // false on '#'
+      !(prev === CHAR_COLON && !cIsNsChar) || // false on ': '
+      isNsCharOrWhitespace(prev) && !isWhitespace(prev) && c === CHAR_SHARP || // change to true on '[^ ]#'
+      prev === CHAR_COLON && cIsNsChar
+    );
+  }
+  function isPlainSafeFirst(c) {
+    return isPrintable(c) && c !== CHAR_BOM && !isWhitespace(c) && // - s-white
+    // - (c-indicator ::=
+    // “-” | “?” | “:” | “,” | “[” | “]” | “{” | “}”
+    c !== CHAR_MINUS && c !== CHAR_QUESTION && c !== CHAR_COLON && c !== CHAR_COMMA && c !== CHAR_LEFT_SQUARE_BRACKET && c !== CHAR_RIGHT_SQUARE_BRACKET && c !== CHAR_LEFT_CURLY_BRACKET && c !== CHAR_RIGHT_CURLY_BRACKET && // | “#” | “&” | “*” | “!” | “|” | “=” | “>” | “'” | “"”
+    c !== CHAR_SHARP && c !== CHAR_AMPERSAND && c !== CHAR_ASTERISK && c !== CHAR_EXCLAMATION && c !== CHAR_VERTICAL_LINE && c !== CHAR_EQUALS && c !== CHAR_GREATER_THAN && c !== CHAR_SINGLE_QUOTE && c !== CHAR_DOUBLE_QUOTE && // | “%” | “@” | “`”)
+    c !== CHAR_PERCENT && c !== CHAR_COMMERCIAL_AT && c !== CHAR_GRAVE_ACCENT;
+  }
+  function isPlainSafeLast(c) {
+    return !isWhitespace(c) && c !== CHAR_COLON;
+  }
+  function codePointAt(string, pos) {
+    const first = string.charCodeAt(pos);
+    let second;
+    if (first >= 55296 && first <= 56319 && pos + 1 < string.length) {
+      second = string.charCodeAt(pos + 1);
+      if (second >= 56320 && second <= 57343) {
+        return (first - 55296) * 1024 + second - 56320 + 65536;
+      }
+    }
+    return first;
+  }
+  function needIndentIndicator(string) {
+    const leadingSpaceRe = /^\n* /;
+    return leadingSpaceRe.test(string);
+  }
+  const STYLE_PLAIN = 1;
+  const STYLE_SINGLE = 2;
+  const STYLE_LITERAL = 3;
+  const STYLE_FOLDED = 4;
+  const STYLE_DOUBLE = 5;
+  function chooseScalarStyle(string, singleLineOnly, indentPerLevel, lineWidth, testAmbiguousType, quotingType, forceQuotes, inblock) {
+    let i;
+    let char = 0;
+    let prevChar = null;
+    let hasLineBreak = false;
+    let hasFoldableLine = false;
+    const shouldTrackWidth = lineWidth !== -1;
+    let previousLineBreak = -1;
+    let plain = isPlainSafeFirst(codePointAt(string, 0)) && isPlainSafeLast(codePointAt(string, string.length - 1));
+    if (singleLineOnly || forceQuotes) {
+      for (i = 0; i < string.length; char >= 65536 ? i += 2 : i++) {
+        char = codePointAt(string, i);
+        if (!isPrintable(char)) {
+          return STYLE_DOUBLE;
+        }
+        plain = plain && isPlainSafe(char, prevChar, inblock);
+        prevChar = char;
+      }
+    } else {
+      for (i = 0; i < string.length; char >= 65536 ? i += 2 : i++) {
+        char = codePointAt(string, i);
+        if (char === CHAR_LINE_FEED) {
+          hasLineBreak = true;
+          if (shouldTrackWidth) {
+            hasFoldableLine = hasFoldableLine || // Foldable line = too long, and not more-indented.
+            i - previousLineBreak - 1 > lineWidth && string[previousLineBreak + 1] !== " ";
+            previousLineBreak = i;
+          }
+        } else if (!isPrintable(char)) {
+          return STYLE_DOUBLE;
+        }
+        plain = plain && isPlainSafe(char, prevChar, inblock);
+        prevChar = char;
+      }
+      hasFoldableLine = hasFoldableLine || shouldTrackWidth && (i - previousLineBreak - 1 > lineWidth && string[previousLineBreak + 1] !== " ");
+    }
+    if (!hasLineBreak && !hasFoldableLine) {
+      if (plain && !forceQuotes && !testAmbiguousType(string)) {
+        return STYLE_PLAIN;
+      }
+      return quotingType === QUOTING_TYPE_DOUBLE ? STYLE_DOUBLE : STYLE_SINGLE;
+    }
+    if (indentPerLevel > 9 && needIndentIndicator(string)) {
+      return STYLE_DOUBLE;
+    }
+    if (!forceQuotes) {
+      return hasFoldableLine ? STYLE_FOLDED : STYLE_LITERAL;
+    }
+    return quotingType === QUOTING_TYPE_DOUBLE ? STYLE_DOUBLE : STYLE_SINGLE;
+  }
+  function writeScalar(state, string, level, iskey, inblock) {
+    state.dump = (function() {
+      if (string.length === 0) {
+        return state.quotingType === QUOTING_TYPE_DOUBLE ? '""' : "''";
+      }
+      if (!state.noCompatMode) {
+        if (DEPRECATED_BOOLEANS_SYNTAX.indexOf(string) !== -1 || DEPRECATED_BASE60_SYNTAX.test(string)) {
+          return state.quotingType === QUOTING_TYPE_DOUBLE ? '"' + string + '"' : "'" + string + "'";
+        }
+      }
+      const indent = state.indent * Math.max(1, level);
+      const lineWidth = state.lineWidth === -1 ? -1 : Math.max(Math.min(state.lineWidth, 40), state.lineWidth - indent);
+      const singleLineOnly = iskey || // No block styles in flow mode.
+      state.flowLevel > -1 && level >= state.flowLevel;
+      function testAmbiguity(string2) {
+        return testImplicitResolving(state, string2);
+      }
+      switch (chooseScalarStyle(
+        string,
+        singleLineOnly,
+        state.indent,
+        lineWidth,
+        testAmbiguity,
+        state.quotingType,
+        state.forceQuotes && !iskey,
+        inblock
+      )) {
+        case STYLE_PLAIN:
+          return string;
+        case STYLE_SINGLE:
+          return "'" + string.replace(/'/g, "''") + "'";
+        case STYLE_LITERAL:
+          return "|" + blockHeader(string, state.indent) + dropEndingNewline(indentString(string, indent));
+        case STYLE_FOLDED:
+          return ">" + blockHeader(string, state.indent) + dropEndingNewline(indentString(foldString(string, lineWidth), indent));
+        case STYLE_DOUBLE:
+          return '"' + escapeString(string) + '"';
+        default:
+          throw new YAMLException2("impossible error: invalid scalar style");
+      }
+    })();
+  }
+  function blockHeader(string, indentPerLevel) {
+    const indentIndicator = needIndentIndicator(string) ? String(indentPerLevel) : "";
+    const clip = string[string.length - 1] === "\n";
+    const keep = clip && (string[string.length - 2] === "\n" || string === "\n");
+    const chomp = keep ? "+" : clip ? "" : "-";
+    return indentIndicator + chomp + "\n";
+  }
+  function dropEndingNewline(string) {
+    return string[string.length - 1] === "\n" ? string.slice(0, -1) : string;
+  }
+  function foldString(string, width) {
+    const lineRe = /(\n+)([^\n]*)/g;
+    let result = (function() {
+      let nextLF = string.indexOf("\n");
+      nextLF = nextLF !== -1 ? nextLF : string.length;
+      lineRe.lastIndex = nextLF;
+      return foldLine(string.slice(0, nextLF), width);
+    })();
+    let prevMoreIndented = string[0] === "\n" || string[0] === " ";
+    let moreIndented;
+    let match;
+    while (match = lineRe.exec(string)) {
+      const prefix = match[1];
+      const line = match[2];
+      moreIndented = line[0] === " ";
+      result += prefix + (!prevMoreIndented && !moreIndented && line !== "" ? "\n" : "") + foldLine(line, width);
+      prevMoreIndented = moreIndented;
+    }
+    return result;
+  }
+  function foldLine(line, width) {
+    if (line === "" || line[0] === " ") return line;
+    const breakRe = / [^ ]/g;
+    let match;
+    let start = 0;
+    let end;
+    let curr = 0;
+    let next = 0;
+    let result = "";
+    while (match = breakRe.exec(line)) {
+      next = match.index;
+      if (next - start > width) {
+        end = curr > start ? curr : next;
+        result += "\n" + line.slice(start, end);
+        start = end + 1;
+      }
+      curr = next;
+    }
+    result += "\n";
+    if (line.length - start > width && curr > start) {
+      result += line.slice(start, curr) + "\n" + line.slice(curr + 1);
+    } else {
+      result += line.slice(start);
+    }
+    return result.slice(1);
+  }
+  function escapeString(string) {
+    let result = "";
+    let char = 0;
+    for (let i = 0; i < string.length; char >= 65536 ? i += 2 : i++) {
+      char = codePointAt(string, i);
+      const escapeSeq = ESCAPE_SEQUENCES[char];
+      if (!escapeSeq && isPrintable(char)) {
+        result += string[i];
+        if (char >= 65536) result += string[i + 1];
+      } else {
+        result += escapeSeq || encodeHex(char);
+      }
+    }
+    return result;
+  }
+  function writeFlowSequence(state, level, object) {
+    let _result = "";
+    const _tag = state.tag;
+    for (let index = 0, length = object.length; index < length; index += 1) {
+      let value = object[index];
+      if (state.replacer) {
+        value = state.replacer.call(object, String(index), value);
+      }
+      if (writeNode(state, level, value, false, false) || typeof value === "undefined" && writeNode(state, level, null, false, false)) {
+        if (_result !== "") _result += "," + (!state.condenseFlow ? " " : "");
+        _result += state.dump;
+      }
+    }
+    state.tag = _tag;
+    state.dump = "[" + _result + "]";
+  }
+  function writeBlockSequence(state, level, object, compact) {
+    let _result = "";
+    const _tag = state.tag;
+    for (let index = 0, length = object.length; index < length; index += 1) {
+      let value = object[index];
+      if (state.replacer) {
+        value = state.replacer.call(object, String(index), value);
+      }
+      if (writeNode(state, level + 1, value, true, true, false, true) || typeof value === "undefined" && writeNode(state, level + 1, null, true, true, false, true)) {
+        if (!compact || _result !== "") {
+          _result += generateNextLine(state, level);
+        }
+        if (state.dump && CHAR_LINE_FEED === state.dump.charCodeAt(0)) {
+          _result += "-";
+        } else {
+          _result += "- ";
+        }
+        _result += state.dump;
+      }
+    }
+    state.tag = _tag;
+    state.dump = _result || "[]";
+  }
+  function writeFlowMapping(state, level, object) {
+    let _result = "";
+    const _tag = state.tag;
+    const objectKeyList = Object.keys(object);
+    for (let index = 0, length = objectKeyList.length; index < length; index += 1) {
+      let pairBuffer = "";
+      if (_result !== "") pairBuffer += ", ";
+      if (state.condenseFlow) pairBuffer += '"';
+      const objectKey = objectKeyList[index];
+      let objectValue = object[objectKey];
+      if (state.replacer) {
+        objectValue = state.replacer.call(object, objectKey, objectValue);
+      }
+      if (!writeNode(state, level, objectKey, false, false)) {
+        continue;
+      }
+      if (state.dump.length > 1024) pairBuffer += "? ";
+      pairBuffer += state.dump + (state.condenseFlow ? '"' : "") + ":" + (state.condenseFlow ? "" : " ");
+      if (!writeNode(state, level, objectValue, false, false)) {
+        continue;
+      }
+      pairBuffer += state.dump;
+      _result += pairBuffer;
+    }
+    state.tag = _tag;
+    state.dump = "{" + _result + "}";
+  }
+  function writeBlockMapping(state, level, object, compact) {
+    let _result = "";
+    const _tag = state.tag;
+    const objectKeyList = Object.keys(object);
+    if (state.sortKeys === true) {
+      objectKeyList.sort();
+    } else if (typeof state.sortKeys === "function") {
+      objectKeyList.sort(state.sortKeys);
+    } else if (state.sortKeys) {
+      throw new YAMLException2("sortKeys must be a boolean or a function");
+    }
+    for (let index = 0, length = objectKeyList.length; index < length; index += 1) {
+      let pairBuffer = "";
+      if (!compact || _result !== "") {
+        pairBuffer += generateNextLine(state, level);
+      }
+      const objectKey = objectKeyList[index];
+      let objectValue = object[objectKey];
+      if (state.replacer) {
+        objectValue = state.replacer.call(object, objectKey, objectValue);
+      }
+      if (!writeNode(state, level + 1, objectKey, true, true, true)) {
+        continue;
+      }
+      const explicitPair = state.tag !== null && state.tag !== "?" || state.dump && state.dump.length > 1024;
+      if (explicitPair) {
+        if (state.dump && CHAR_LINE_FEED === state.dump.charCodeAt(0)) {
+          pairBuffer += "?";
+        } else {
+          pairBuffer += "? ";
+        }
+      }
+      pairBuffer += state.dump;
+      if (explicitPair) {
+        pairBuffer += generateNextLine(state, level);
+      }
+      if (!writeNode(state, level + 1, objectValue, true, explicitPair)) {
+        continue;
+      }
+      if (state.dump && CHAR_LINE_FEED === state.dump.charCodeAt(0)) {
+        pairBuffer += ":";
+      } else {
+        pairBuffer += ": ";
+      }
+      pairBuffer += state.dump;
+      _result += pairBuffer;
+    }
+    state.tag = _tag;
+    state.dump = _result || "{}";
+  }
+  function detectType(state, object, explicit) {
+    const typeList = explicit ? state.explicitTypes : state.implicitTypes;
+    for (let index = 0, length = typeList.length; index < length; index += 1) {
+      const type2 = typeList[index];
+      if ((type2.instanceOf || type2.predicate) && (!type2.instanceOf || typeof object === "object" && object instanceof type2.instanceOf) && (!type2.predicate || type2.predicate(object))) {
+        if (explicit) {
+          if (type2.multi && type2.representName) {
+            state.tag = type2.representName(object);
+          } else {
+            state.tag = type2.tag;
+          }
+        } else {
+          state.tag = "?";
+        }
+        if (type2.represent) {
+          const style = state.styleMap[type2.tag] || type2.defaultStyle;
+          let _result;
+          if (_toString.call(type2.represent) === "[object Function]") {
+            _result = type2.represent(object, style);
+          } else if (_hasOwnProperty.call(type2.represent, style)) {
+            _result = type2.represent[style](object, style);
+          } else {
+            throw new YAMLException2("!<" + type2.tag + '> tag resolver accepts not "' + style + '" style');
+          }
+          state.dump = _result;
+        }
+        return true;
+      }
+    }
+    return false;
+  }
+  function writeNode(state, level, object, block, compact, iskey, isblockseq) {
+    state.tag = null;
+    state.dump = object;
+    if (!detectType(state, object, false)) {
+      detectType(state, object, true);
+    }
+    const type2 = _toString.call(state.dump);
+    const inblock = block;
+    if (block) {
+      block = state.flowLevel < 0 || state.flowLevel > level;
+    }
+    const objectOrArray = type2 === "[object Object]" || type2 === "[object Array]";
+    let duplicateIndex;
+    let duplicate;
+    if (objectOrArray) {
+      duplicateIndex = state.duplicates.indexOf(object);
+      duplicate = duplicateIndex !== -1;
+    }
+    if (state.tag !== null && state.tag !== "?" || duplicate || state.indent !== 2 && level > 0) {
+      compact = false;
+    }
+    if (duplicate && state.usedDuplicates[duplicateIndex]) {
+      state.dump = "*ref_" + duplicateIndex;
+    } else {
+      if (objectOrArray && duplicate && !state.usedDuplicates[duplicateIndex]) {
+        state.usedDuplicates[duplicateIndex] = true;
+      }
+      if (type2 === "[object Object]") {
+        if (block && Object.keys(state.dump).length !== 0) {
+          writeBlockMapping(state, level, state.dump, compact);
+          if (duplicate) {
+            state.dump = "&ref_" + duplicateIndex + state.dump;
+          }
+        } else {
+          writeFlowMapping(state, level, state.dump);
+          if (duplicate) {
+            state.dump = "&ref_" + duplicateIndex + " " + state.dump;
+          }
+        }
+      } else if (type2 === "[object Array]") {
+        if (block && state.dump.length !== 0) {
+          if (state.noArrayIndent && !isblockseq && level > 0) {
+            writeBlockSequence(state, level - 1, state.dump, compact);
+          } else {
+            writeBlockSequence(state, level, state.dump, compact);
+          }
+          if (duplicate) {
+            state.dump = "&ref_" + duplicateIndex + state.dump;
+          }
+        } else {
+          writeFlowSequence(state, level, state.dump);
+          if (duplicate) {
+            state.dump = "&ref_" + duplicateIndex + " " + state.dump;
+          }
+        }
+      } else if (type2 === "[object String]") {
+        if (state.tag !== "?") {
+          writeScalar(state, state.dump, level, iskey, inblock);
+        }
+      } else if (type2 === "[object Undefined]") {
+        return false;
+      } else {
+        if (state.skipInvalid) return false;
+        throw new YAMLException2("unacceptable kind of an object to dump " + type2);
+      }
+      if (state.tag !== null && state.tag !== "?") {
+        let tagStr = encodeURI(
+          state.tag[0] === "!" ? state.tag.slice(1) : state.tag
+        ).replace(/!/g, "%21");
+        if (state.tag[0] === "!") {
+          tagStr = "!" + tagStr;
+        } else if (tagStr.slice(0, 18) === "tag:yaml.org,2002:") {
+          tagStr = "!!" + tagStr.slice(18);
+        } else {
+          tagStr = "!<" + tagStr + ">";
+        }
+        state.dump = tagStr + " " + state.dump;
+      }
+    }
+    return true;
+  }
+  function getDuplicateReferences(object, state) {
+    const objects = [];
+    const duplicatesIndexes = [];
+    inspectNode(object, objects, duplicatesIndexes);
+    const length = duplicatesIndexes.length;
+    for (let index = 0; index < length; index += 1) {
+      state.duplicates.push(objects[duplicatesIndexes[index]]);
+    }
+    state.usedDuplicates = new Array(length);
+  }
+  function inspectNode(object, objects, duplicatesIndexes) {
+    if (object !== null && typeof object === "object") {
+      const index = objects.indexOf(object);
+      if (index !== -1) {
+        if (duplicatesIndexes.indexOf(index) === -1) {
+          duplicatesIndexes.push(index);
+        }
+      } else {
+        objects.push(object);
+        if (Array.isArray(object)) {
+          for (let i = 0, length = object.length; i < length; i += 1) {
+            inspectNode(object[i], objects, duplicatesIndexes);
+          }
+        } else {
+          const objectKeyList = Object.keys(object);
+          for (let i = 0, length = objectKeyList.length; i < length; i += 1) {
+            inspectNode(object[objectKeyList[i]], objects, duplicatesIndexes);
+          }
+        }
+      }
+    }
+  }
+  function dump2(input, options) {
+    options = options || {};
+    const state = new State(options);
+    if (!state.noRefs) getDuplicateReferences(input, state);
+    let value = input;
+    if (state.replacer) {
+      value = state.replacer.call({ "": value }, "", value);
+    }
+    if (writeNode(state, 0, value, true, true)) return state.dump + "\n";
+    return "";
+  }
+  dumper.dump = dump2;
+  return dumper;
+}
+var hasRequiredJsYaml;
+function requireJsYaml() {
+  if (hasRequiredJsYaml) return jsYaml;
+  hasRequiredJsYaml = 1;
+  const loader2 = requireLoader();
+  const dumper2 = requireDumper();
+  function renamed(from, to) {
+    return function() {
+      throw new Error("Function yaml." + from + " is removed in js-yaml 4. Use yaml." + to + " instead, which is now safe by default.");
+    };
+  }
+  jsYaml.Type = requireType();
+  jsYaml.Schema = requireSchema();
+  jsYaml.FAILSAFE_SCHEMA = requireFailsafe();
+  jsYaml.JSON_SCHEMA = requireJson();
+  jsYaml.CORE_SCHEMA = requireCore();
+  jsYaml.DEFAULT_SCHEMA = require_default();
+  jsYaml.load = loader2.load;
+  jsYaml.loadAll = loader2.loadAll;
+  jsYaml.dump = dumper2.dump;
+  jsYaml.YAMLException = requireException();
+  jsYaml.types = {
+    binary: requireBinary(),
+    float: requireFloat(),
+    map: requireMap(),
+    null: require_null(),
+    pairs: requirePairs(),
+    set: requireSet(),
+    timestamp: requireTimestamp(),
+    bool: requireBool(),
+    int: requireInt(),
+    merge: requireMerge(),
+    omap: requireOmap(),
+    seq: requireSeq(),
+    str: requireStr()
+  };
+  jsYaml.safeLoad = renamed("safeLoad", "load");
+  jsYaml.safeLoadAll = renamed("safeLoadAll", "loadAll");
+  jsYaml.safeDump = renamed("safeDump", "dump");
+  return jsYaml;
+}
+var jsYamlExports = requireJsYaml();
+const yaml = /* @__PURE__ */ getDefaultExportFromCjs(jsYamlExports);
+const {
+  Type,
+  Schema,
+  FAILSAFE_SCHEMA,
+  JSON_SCHEMA,
+  CORE_SCHEMA,
+  DEFAULT_SCHEMA,
+  load,
+  loadAll,
+  dump,
+  YAMLException,
+  types: js_yaml_types,
+  safeLoad,
+  safeLoadAll,
+  safeDump
+} = yaml;
+
+//# sourceMappingURL=js-yaml.mjs.map
+
 // EXTERNAL MODULE: ./node_modules/which/lib/index.js
 var lib = __nccwpck_require__(1189);
 var lib_default = /*#__PURE__*/__nccwpck_require__.n(lib);
 ;// CONCATENATED MODULE: ./src/terraform-docs.ts
+
+
+
+
 
 
 
@@ -40521,43 +44247,73 @@ function installTerraformDocs(terraformDocsVersion) {
     }
 }
 /**
- * Ensures that the .terraform-docs.yml configuration file does not exist in the workspace directory.
- * If the file exists, it will be removed to prevent conflicts during Terraform documentation generation.
- *
- * @returns {void} This function does not return a value.
- */
-function ensureTerraformDocsConfigDoesNotExist() {
-    info('Ensuring .terraform-docs.yml does not exist');
-    const terraformDocsFile = (0,external_node_path_.join)(context.workspaceDir, '.terraform-docs.yml');
-    if ((0,external_node_fs_.existsSync)(terraformDocsFile)) {
-        info('Found .terraform-docs.yml file, removing.');
-        (0,external_node_fs_.unlinkSync)(terraformDocsFile);
-    }
-    else {
-        info('No .terraform-docs.yml found.');
-    }
-}
-/**
  * Generates Terraform documentation for a given module.
  *
- * This function runs the `terraform-docs` CLI tool to generate a Markdown table format of the Terraform documentation
- * for the specified module. It will sort the output by required fields.
+ * Discovers any module-level `.terraform-docs.yml`, merges user settings with our required
+ * overrides (`formatter`, `output`), writes a temp config, runs terraform-docs,
+ * and cleans up automatically. Fully async and safe for parallel invocation.
  *
- * @param {TerraformModule} terraformModule - An object containing the module details, including:
- *   - `name`: The name of the Terraform module.
- *   - `directory`: The directory path where the Terraform module is located.
- * @returns {Promise<string>} A promise that resolves with the generated Terraform documentation in Markdown format.
- * @throws {Error} Throws an error if the `terraform-docs` command fails or produces an error in the `stderr` output.
+ * Uses `bufferedInfo()` for logging — when called inside `withBufferedLogs()`,
+ * output is buffered and flushed as a contiguous block per module.
+ *
+ * @param {TerraformModule} terraformModule - The module to generate docs for.
+ * @returns {Promise<string>} The generated Terraform documentation in Markdown format.
+ * @throws {Error} If `terraform-docs` fails or produces stderr output.
  */
 async function generateTerraformDocs({ name, directory }) {
-    info(`Generating tf-docs for: ${name}`);
-    const terraformDocsPath = lib_default().sync('terraform-docs');
-    const { stdout, stderr } = await execFilePromisified(terraformDocsPath, ['markdown', 'table', '--sort-by', 'required', directory], { encoding: 'utf-8' });
-    if (stderr) {
-        throw new Error(`Terraform-docs generation failed for module: ${name}\n${stderr}`);
+    const startTime = performance.now();
+    const prefix = `[${name}] `;
+    const log = (msg) => bufferedInfo(`${prefix}${msg}`);
+    log('Generating tf-docs...');
+    // Discover and parse user config
+    const userConfigPath = findModuleTerraformDocsConfig(directory, context.workspaceDir);
+    let userConfig = {};
+    if (userConfigPath) {
+        log(`Using config: ${userConfigPath}`);
+        try {
+            const rawContent = await (0,promises_.readFile)(userConfigPath, 'utf-8');
+            const parsed = yaml.load(rawContent, { schema: yaml.JSON_SCHEMA });
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                userConfig = parsed;
+            }
+        }
+        catch (error) {
+            log(`WARNING: Failed to parse ${userConfigPath}, using defaults: ${error instanceof Error ? error.message : error}`);
+        }
     }
-    info(`Finished tf-docs for: ${name}`);
-    return stdout;
+    // Merge: spread all user settings, then override the keys we control
+    const userOutput = userConfig.output && typeof userConfig.output === 'object' && !Array.isArray(userConfig.output)
+        ? userConfig.output
+        : {};
+    const mergedConfig = {
+        ...userConfig,
+        formatter: 'markdown table',
+        output: { ...userOutput, file: '', mode: 'inject' },
+    };
+    log(`Effective config: ${JSON.stringify({
+        userConfigPath,
+        formatter: mergedConfig.formatter,
+        output: mergedConfig.output,
+    })}`);
+    // Write merged config to a temp file, run terraform-docs, then clean up
+    const tmpDir = await (0,promises_.mkdtemp)((0,external_node_path_.join)((0,external_node_os_namespaceObject.tmpdir)(), 'tfdocs-'));
+    const configPath = (0,external_node_path_.join)(tmpDir, '.terraform-docs.yml');
+    try {
+        await (0,promises_.writeFile)(configPath, yaml.dump(mergedConfig, { lineWidth: -1 }), 'utf-8');
+        const terraformDocsPath = lib_default().sync('terraform-docs');
+        const { stdout, stderr } = await execFilePromisified(terraformDocsPath, ['-c', configPath, directory], {
+            encoding: 'utf-8',
+        });
+        if (stderr) {
+            throw new Error(`Terraform-docs generation failed for module: ${name}\n${stderr}`);
+        }
+        const elapsed = ((performance.now() - startTime) / 1000).toFixed(2);
+        log(`Finished tf-docs (${elapsed}s)`);
+        return stdout;
+    }
+    finally {
+        await (0,promises_.rm)(tmpDir, { recursive: true, force: true });
+    }
 }
 
 ;// CONCATENATED MODULE: ./src/utils/github.ts
@@ -40862,8 +44618,23 @@ function validateConcurrency(concurrency) {
 
 
 
+
 // Special subdirectory inside the primary repository where the wiki is checked out.
 const WIKI_SUBDIRECTORY_NAME = '.wiki';
+/**
+ * Returns true if a wiki status represents a failure (any `FAILURE_*` status).
+ *
+ * Centralizes the "did the wiki check fail?" decision so it cannot drift between call sites (the release
+ * plan comment header and the `hide-no-changes-pr-comment` nothing-to-report guard). The prefix check
+ * intentionally covers every current and future `FAILURE_*` status, so a newly added failure mode can
+ * never be silently treated as success (and have its error comment suppressed).
+ *
+ * @param {WikiStatus} status - The wiki status to evaluate.
+ * @returns {boolean} Whether the status is a failure.
+ */
+function isWikiCheckFailure(status) {
+    return status.startsWith('FAILURE');
+}
 /**
  * Clones the wiki repository for the current GitHub repository into a specified subdirectory.
  *
@@ -40936,29 +44707,59 @@ function checkoutWiki() {
     }
 }
 /**
- * Checks the status of the wiki operation for a Terraform module release.
+ * Determines the full wiki status for a set of Terraform modules.
  *
- * This function will never throw an error; all errors are caught and returned as part of the result.
+ * Performs a multi-stage check:
+ * 1. Returns `DISABLED` if wiki generation is turned off via config.
+ * 2. Attempts to clone/checkout the wiki repository — returns `FAILURE_CHECKOUT` on error.
+ * 3. Installs terraform-docs — returns `FAILURE_TERRAFORM_DOCS_INSTALL` if installation fails.
+ * 4. Runs a full wiki generation (files are written but not committed) to validate that terraform-docs can process every module — returns `FAILURE_TERRAFORM_DOCS_RUN` with per-module errors if any fail, or if any non-module-scoped error occurs.
+ * 5. Returns `SUCCESS` if all stages pass.
  *
- * @returns {WikiStatusResult} The result of the wiki status check, including error details if any failure occurs.
+ * This function never throws; all errors are captured and returned as part of the result.
+ *
+ * @param {TerraformModule[]} terraformModules - All Terraform modules in the workspace.
+ * @returns {Promise<WikiStatusResult>} The wiki status, including any error details. Possible status values:
+ *   - `DISABLED`: Wiki generation is disabled by config.
+ *   - `FAILURE_CHECKOUT`: Wiki checkout failed (see `errorMessage`).
+ *   - `FAILURE_TERRAFORM_DOCS_INSTALL`: terraform-docs install failed (see `errorMessage`).
+ *   - `FAILURE_TERRAFORM_DOCS_RUN`: terraform-docs run or wiki file generation failed (see `errorMessage`, `terraformDocsErrors`).
+ *   - `SUCCESS`: All steps succeeded.
  */
-function getWikiStatus() {
+async function getWikiStatus(terraformModules) {
+    if (config.disableWiki) {
+        return { status: WIKI_STATUS.DISABLED };
+    }
     try {
-        if (config.disableWiki) {
-            return { status: WIKI_STATUS.DISABLED };
-        }
         checkoutWiki();
-        return { status: WIKI_STATUS.SUCCESS };
     }
     catch (err) {
-        // Since all errors in checkoutWiki() come from execFileSync, we can safely cast to ExecSyncError
-        const execError = err;
+        return { status: WIKI_STATUS.FAILURE_CHECKOUT, errorMessage: getExecErrorMessage(err) };
+    }
+    try {
+        installTerraformDocs(config.terraformDocsVersion);
+    }
+    catch (err) {
+        return { status: WIKI_STATUS.FAILURE_TERRAFORM_DOCS_INSTALL, errorMessage: getExecErrorMessage(err) };
+    }
+    try {
+        const { moduleErrors } = await generateWikiFiles(terraformModules);
+        if (moduleErrors.size > 0) {
+            return {
+                status: WIKI_STATUS.FAILURE_TERRAFORM_DOCS_RUN,
+                errorMessage: `terraform-docs validation failed for ${moduleErrors.size} module${moduleErrors.size > 1 ? 's' : ''}`,
+                terraformDocsErrors: moduleErrors,
+            };
+        }
+    }
+    catch (err) {
+        const errorMessage = err instanceof Error ? err.message : String(err).trim();
         return {
-            status: WIKI_STATUS.FAILURE,
-            error: execError,
-            errorSummary: String(execError).trim(),
+            status: WIKI_STATUS.FAILURE_TERRAFORM_DOCS_RUN,
+            errorMessage,
         };
     }
+    return { status: WIKI_STATUS.SUCCESS };
 }
 /**
  * Generates a sanitized slug for a GitHub Wiki title by replacing specific characters in the
@@ -41035,42 +44836,6 @@ function getWikiLink(moduleName, relative = true) {
     return `${baseUrl}/wiki/${getWikiSlug(moduleName)}`;
 }
 /**
- * Formats the module source URL based on configuration settings.
- *
- * Converts repository URLs to the appropriate format for Terraform module sourcing:
- * - SSH format: git::ssh://git@hostname/path.git
- * - HTTPS format: git::https://hostname/path.git
- *
- * @param repoUrl - The repository URL (must be a valid HTTPS URL)
- * @param useSSH - Whether to use SSH format instead of HTTPS
- * @returns The formatted source URL for the module with git:: prefix
- * @throws {TypeError} When repoUrl is not a valid URL that can be parsed
- *
- * @example
- * ```typescript
- * // HTTPS format
- * getModuleSource('https://github.com/owner/repo', false)
- * // Returns: 'git::https://github.com/owner/repo.git'
- *
- * // SSH format
- * getModuleSource('https://github.techpivot.com/owner/repo', true)
- * // Returns: 'git::ssh://git@github.techpivot.com/owner/repo.git'
- * ```
- */
-function getModuleSource(repoUrl, useSSH) {
-    if (useSSH) {
-        const url = new URL(repoUrl);
-        const hostname = url.hostname;
-        const pathname = url.pathname;
-        // Convert HTTPS URL to SSH format with git:: prefix
-        // From: https://github.techpivot.com/owner/repo
-        // To: git::ssh://git@github.techpivot.com/owner/repo.git
-        return `git::ssh://git@${hostname}${pathname}.git`;
-    }
-    // Return HTTPS format with git:: prefix
-    return `git::${repoUrl}.git`;
-}
-/**
  * Writes content to a wiki file in the workspace wiki subdirectory.
  *
  * This function creates or overwrites a file in the wiki subdirectory with the
@@ -41084,17 +44849,16 @@ function getModuleSource(repoUrl, useSSH) {
 async function writeWikiFile(basename, content) {
     const wikiFile = (0,external_node_path_.join)(context.workspaceDir, WIKI_SUBDIRECTORY_NAME, basename);
     await promises_.writeFile(wikiFile, content, 'utf8');
-    info(`Generated: ${basename}`);
     return wikiFile;
 }
 /**
- * Generates the wiki file associated with the specified Terraform module.
- * Ensures that the directory structure is created if it doesn't exist and handles overwriting
- * the existing wiki file.
+ * Generates the wiki file for a Terraform module.
+ *
+ * Orchestrates changelog retrieval, terraform-docs generation, content assembly,
+ * and file writing for a single module's wiki page.
  *
  * @param {TerraformModule} terraformModule - The Terraform module to generate the wiki file for.
  * @returns {Promise<string>} The path to the wiki file that was written.
- * @throws Will throw an error if the file cannot be written.
  */
 async function generateWikiTerraformModule(terraformModule) {
     const changelog = getTerraformModuleFullReleaseChangelog(terraformModule);
@@ -41106,7 +44870,6 @@ async function generateWikiTerraformModule(terraformModule) {
     let refComment = '';
     switch (config.moduleRefMode) {
         case MODULE_REF_MODE_TAG:
-            // Use the tag as the ref
             ref = latestTag ?? '';
             break;
         case MODULE_REF_MODE_SHA:
@@ -41114,12 +44877,10 @@ async function generateWikiTerraformModule(terraformModule) {
             refComment = terraformModule.getLatestTagVersion() ? ` # ${terraformModule.getLatestTagVersion()}` : '';
             break;
         default:
-            // This should never happen due to validation at config load time
             throw new Error(`Invalid module_ref_mode: ${config.moduleRefMode}`);
     }
-    // Warn if ref is empty (could happen if latestTag is null/empty or SHA not found in SHA mode)
     if (!ref) {
-        info(`Warning: No ref available for module '${terraformModule.name}' (tag: '${latestTag}')`);
+        bufferedInfo(`Warning: No ref available for module '${terraformModule.name}' (tag: '${latestTag}')`);
     }
     const usage = renderTemplate(config.wikiUsageTemplate, {
         module_name: terraformModule.name,
@@ -41140,7 +44901,6 @@ async function generateWikiTerraformModule(terraformModule) {
         '\n# Changelog\n',
         changelog,
     ].join('\n');
-    // Write the markdown content to the wiki file, overwriting if it exists
     return await writeWikiFile(`${getWikiSlug(terraformModule.name)}.md`, content);
 }
 /**
@@ -41286,56 +45046,68 @@ async function generateWikiHome(terraformModules) {
     return await writeWikiFile(WIKI_HOME_FILENAME, content);
 }
 /**
- * Updates the wiki documentation for a list of Terraform modules.
+ * Generates all wiki files for the given Terraform modules.
  *
- * This function generates markdown content for each Terraform module by calling
- * `getWikiFileMarkdown` and appending its associated changelog, then writes the
- * content to the wiki. It commits and pushes the changes to the wiki repository.
+ * Clears the wiki directory (preserving `.git`), then generates per-module wiki pages,
+ * Home, Sidebar, and Footer files in parallel using `pLimit`. Per-module terraform-docs
+ * errors are captured and returned (not thrown) so callers can decide how to handle them.
  *
- * The function limits the number of concurrent wiki updates by using `pLimit`.
- * Once all wiki files are updated, it commits and pushes the changes to the repository.
- *
- * @param {TerraformModule[]} terraformModules - A list of Terraform modules to update in the wiki.
- * @returns {Promise<string[]>} A promise that resolves to a list of file paths of the updated wiki files.
+ * @param {TerraformModule[]} terraformModules - A list of Terraform modules to generate wiki files for.
+ * @returns {Promise<WikiGenerationResult>} The generated file paths and any per-module errors.
  */
 async function generateWikiFiles(terraformModules) {
-    startGroup('Generating wiki files...');
-    // Clears the contents of the Wiki directory to ensure no stale content remains,
-    // as the Wiki is fully regenerated during each run.
-    //
-    // This process:
-    // - Logs the cleanup action for tracking purposes.
-    // - Removes all files and directories within `WIKI_DIRECTORY` except `.git`,
-    //   which is preserved to maintain version control and Git history.
-    //
-    // This approach supports:
-    // - Ensuring the Wiki remains up-to-date without leftover or outdated files.
-    // - Avoiding conflicts or unexpected results due to stale data.
-    info('Removing existing wiki files...');
-    removeDirectoryContents((0,external_node_path_.join)(context.workspaceDir, WIKI_SUBDIRECTORY_NAME), ['.git']);
-    // Set parallelism to slightly more than the number of CPU cores to ensure
-    // CPU-bound tasks (e.g., regex) and I/O-bound tasks (file writing)
-    // are handled efficiently, keeping the pipeline saturated.
-    const parallelism = (0,external_node_os_namespaceObject.cpus)().length + 2;
-    info(`Using parallelism: ${parallelism}`);
-    const limit = pLimit(parallelism);
-    const updatedFiles = [];
-    const tasks = terraformModules.map((module) => {
-        return limit(async () => {
-            updatedFiles.push(await generateWikiTerraformModule(module));
+    const startTime = performance.now();
+    startGroup('Generating wiki files');
+    try {
+        // Clears the contents of the Wiki directory to ensure no stale content remains,
+        // as the Wiki is fully regenerated during each run.
+        //
+        // This process:
+        // - Logs the cleanup action for tracking purposes.
+        // - Removes all files and directories within `WIKI_DIRECTORY` except `.git`,
+        //   which is preserved to maintain version control and Git history.
+        //
+        // This approach supports:
+        // - Ensuring the Wiki remains up-to-date without leftover or outdated files.
+        // - Avoiding conflicts or unexpected results due to stale data.
+        info('Removing existing wiki files...');
+        removeDirectoryContents((0,external_node_path_.join)(context.workspaceDir, WIKI_SUBDIRECTORY_NAME), ['.git']);
+        // Set parallelism to slightly more than the number of CPU cores to ensure
+        // CPU-bound tasks (e.g., regex) and I/O-bound tasks (file writing)
+        // are handled efficiently, keeping the pipeline saturated.
+        const parallelism = (0,external_node_os_namespaceObject.cpus)().length + 2;
+        info(`Using parallelism: ${parallelism}`);
+        const limit = pLimit(parallelism);
+        const moduleErrors = new Map();
+        const moduleTasks = terraformModules.map((module) => {
+            return limit(() => withBufferedLogs(async () => {
+                try {
+                    return await generateWikiTerraformModule(module);
+                }
+                catch (err) {
+                    const message = err instanceof Error ? err.message : String(err);
+                    bufferedError(`[${module.name}] ${message}`);
+                    moduleErrors.set(module.name, message);
+                    return;
+                }
+            }));
         });
-    });
-    await Promise.all(tasks);
-    updatedFiles.push(await generateWikiHome(terraformModules));
-    updatedFiles.push(await generateWikiSidebar(terraformModules));
-    const footerFile = await generateWikiFooter();
-    if (footerFile) {
-        updatedFiles.push(footerFile);
+        const sharedWikiTasks = [
+            limit(async () => await generateWikiHome(terraformModules)),
+            limit(async () => await generateWikiSidebar(terraformModules)),
+            limit(async () => await generateWikiFooter()),
+        ];
+        const generatedFiles = await Promise.all([...moduleTasks, ...sharedWikiTasks]);
+        const updatedFiles = generatedFiles.filter((file) => typeof file === 'string');
+        info('Wiki files generated:');
+        info(JSON.stringify(updatedFiles, null, 2));
+        const totalElapsed = ((performance.now() - startTime) / 1000).toFixed(2);
+        info(`Total wiki generation time: ${totalElapsed}s`);
+        return { updatedFiles, moduleErrors };
     }
-    info('Wiki files generated:');
-    info(JSON.stringify(updatedFiles, null, 2));
-    endGroup();
-    return updatedFiles;
+    finally {
+        endGroup();
+    }
 }
 /**
  * Commits and pushes changes to the wiki repository.
@@ -41396,39 +45168,98 @@ async function commitAndPushWikiChanges() {
 
 
 
+
 /**
- * Checks whether the pull request already has a comment containing the release marker.
+ * GraphQL mutation to minimize (collapse) an issue/pull request comment as outdated.
  *
- * @returns {Promise<boolean>} - Returns true if a comment with the release marker is found, false otherwise.
+ * The GitHub REST API does not expose a way to collapse a comment, so we use the GraphQL
+ * `minimizeComment` mutation. Minimizing edits the existing comment in place (it does not send a
+ * new email notification) and keeps the comment expandable.
  */
-async function hasReleaseComment() {
-    try {
-        const { octokit, repo: { owner, repo }, issueNumber: issue_number, } = context;
-        // Fetch all comments on the pull request
-        const iterator = octokit.paginate.iterator(octokit.rest.issues.listComments, {
-            owner,
-            repo,
-            issue_number,
-        });
-        for await (const { data } of iterator) {
-            for (const comment of data) {
-                if (comment.body?.includes(PR_RELEASE_MARKER)) {
-                    return true;
-                }
-            }
+const MINIMIZE_COMMENT_MUTATION = `
+  mutation MinimizeComment($id: ID!) {
+    minimizeComment(input: { classifier: OUTDATED, subjectId: $id }) {
+      minimizedComment {
+        isMinimized
+      }
+    }
+  }
+`;
+/**
+ * Lists every comment on the pull request, following pagination to completion.
+ *
+ * Always requests `per_page: 100` (GitHub's default is 30), matching `getAllTags()`/`getAllReleases()`.
+ * On a busy pull request this is the difference between ~16 requests and ~3 — directly relevant to the
+ * rate-limit pressure reported for high-traffic monorepos.
+ *
+ * Note: we deliberately do **not** memoize across calls within a run. The two merge-path readers
+ * (`hasLegacyPostReleaseComment` before releases, `findReleaseComments` after) are cheap at
+ * `per_page: 100`, and a process-lifetime cache would be a silent staleness hazard for future callers.
+ *
+ * @returns {Promise<PullRequestComment[]>} All comments, oldest first (GitHub's listing order).
+ * @throws {Error} If the comments cannot be read. Callers decide whether that is fatal.
+ */
+async function listAllPullRequestComments() {
+    const { octokit, repo: { owner, repo }, issueNumber: issue_number, } = context;
+    const comments = [];
+    const iterator = octokit.paginate.iterator(octokit.rest.issues.listComments, {
+        owner,
+        repo,
+        issue_number,
+        per_page: 100,
+    });
+    for await (const { data } of iterator) {
+        for (const comment of data) {
+            comments.push({
+                id: comment.id,
+                nodeId: comment.node_id,
+                body: comment.body ?? '',
+                createdAt: comment.created_at,
+            });
         }
-        return false;
+    }
+    return comments;
+}
+/**
+ * Finds existing post-release comments (current scheme) on the pull request, identified by
+ * {@link PR_RELEASE_COMMENT_MARKER}. Comments are returned in the order GitHub lists them (oldest first), so
+ * callers can take the most recent with `.at(-1)`.
+ *
+ * @returns {Promise<PullRequestComment[]>} The matching post-release comments.
+ */
+async function findReleaseComments() {
+    const comments = await listAllPullRequestComments();
+    return comments.filter((comment) => hasStandaloneMarkerLine(comment.body, PR_RELEASE_COMMENT_MARKER));
+}
+/**
+ * Returns true if the pull request has a post-release comment written by a PRE-marker-scheme version of
+ * the action (identified by {@link LEGACY_PR_RELEASE_COMMENT_MARKER}).
+ *
+ * Used by the self-heal gate in `createTaggedReleases` to recognize a pull request that completed its
+ * release under an older version of the action — so we preserve the old "don't double-release" behavior
+ * instead of re-releasing. This reads only our own marker, never the editable release-note text.
+ *
+ * **Fails closed.** Any error reading the comment list propagates and fails the run. Returning `false`
+ * on a transient error would be indistinguishable from "not legacy" and would convert a single 502 or
+ * secondary-rate-limit response into an irreversible over-bump plus a duplicate release on a legacy
+ * pull request. Failing is cheap precisely because of this refactor: the re-run is idempotent and
+ * self-healing, so it creates nothing extra.
+ *
+ * @returns {Promise<boolean>} Whether a legacy post-release comment exists.
+ * @throws {Error} If the pull request comments cannot be read.
+ */
+async function hasLegacyPostReleaseComment() {
+    try {
+        const comments = await listAllPullRequestComments();
+        return comments.some((comment) => hasStandaloneMarkerLine(comment.body, LEGACY_PR_RELEASE_COMMENT_MARKER));
     }
     catch (error) {
         const requestError = error;
-        // If we got a 403 because the pull request doesn't have permissions. Let's really help wrap this error
-        // and make it clear to the consumer what actions need to be taken.
+        // Wrap a permissions failure with actionable remediation, matching the other readers in this module.
         if (requestError.status === 403) {
             throw new Error(`Unable to read and write pull requests due to insufficient permissions. Ensure the workflow permissions.pull-requests is set to "write".\n${requestError.message}`, { cause: error });
         }
-        throw new Error(`Error checking PR comments: ${error instanceof Error ? error.message : String(error)}`, {
-            cause: error,
-        });
+        throw new Error(`Failed to check for a legacy release comment: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
     }
 }
 /**
@@ -41553,9 +45384,8 @@ async function addReleasePlanComment(terraformModules, releasesToDelete, tagsToD
         const terraformModulesToRelese = TerraformModule.getModulesNeedingRelease(terraformModules);
         // Initialize the comment body as an array of strings with appropriate header based on wiki status
         const commentBody = [PR_SUMMARY_MARKER];
-        if (wikiStatus.status === WIKI_STATUS.FAILURE) {
-            commentBody.push('\n# ⚠️ Release Plan\n');
-            commentBody.push('> ⚠️ **IMPORTANT**: _See Wiki Status error below._\n');
+        if (isWikiCheckFailure(wikiStatus.status)) {
+            commentBody.push('\n# ⚠️ Release Plan\n', '> ⚠️ **IMPORTANT**: _See Wiki Status error below._\n');
         }
         else {
             commentBody.push('\n# 📋 Release Plan\n');
@@ -41606,13 +45436,37 @@ async function addReleasePlanComment(terraformModules, releasesToDelete, tagsToD
             case WIKI_STATUS.SUCCESS:
                 commentBody.push('✅ Enabled');
                 break;
-            case WIKI_STATUS.FAILURE:
-                commentBody.push('**⚠️ Failed to checkout wiki:**');
-                commentBody.push('```');
-                commentBody.push(`${wikiStatus.errorSummary}`);
-                commentBody.push('```');
-                commentBody.push(`Please consult the [README.md](${PROJECT_URL}/blob/main/README.md#getting-started) for additional information (**Ensure the Wiki is initialized**).`);
+            case WIKI_STATUS.FAILURE_CHECKOUT:
+                commentBody.push('**⚠️ Failed to checkout wiki:**', '```', `${wikiStatus.errorMessage}`, '```', `Please consult the [README.md](${PROJECT_URL}/blob/main/README.md#getting-started) for additional information (**Ensure the Wiki is initialized**).`);
                 break;
+            case WIKI_STATUS.FAILURE_TERRAFORM_DOCS_INSTALL:
+                commentBody.push('**⚠️ terraform-docs installation failed:**', '```', `${wikiStatus.errorMessage}`, '```', `Please consult the [README.md](${PROJECT_URL}/blob/main/README.md#terraform-docs-installation) for troubleshooting terraform-docs installation on the runner.`);
+                break;
+            case WIKI_STATUS.FAILURE_TERRAFORM_DOCS_RUN: {
+                const terraformDocsErrors = wikiStatus.terraformDocsErrors;
+                if (!terraformDocsErrors || terraformDocsErrors.size === 0) {
+                    const errorMessage = wikiStatus.errorMessage ?? 'Unknown terraform-docs validation failure.';
+                    commentBody.push('**⚠️ terraform-docs validation failed:**', '```', errorMessage, '```');
+                    break;
+                }
+                const count = terraformDocsErrors.size;
+                const terraformDocsValidationLines = [
+                    `⚠️ Wiki enabled, but terraform-docs validation failed for **${count}** module${count > 1 ? 's' : ''}:\n`,
+                    '| Module | Error |',
+                    '|--|--|',
+                ];
+                for (const [moduleName, errorMessage] of terraformDocsErrors) {
+                    const sanitized = errorMessage
+                        .replaceAll('|', String.raw `\|`)
+                        .replaceAll('\r', ' ')
+                        .replaceAll('\n', ' ')
+                        .trim();
+                    terraformDocsValidationLines.push(`| \`${moduleName}\` | ${sanitized} |`);
+                }
+                terraformDocsValidationLines.push('\nPlease fix the terraform-docs errors above (often caused by `.terraform-docs.yml`) before merging to avoid broken wiki pages.');
+                commentBody.push(...terraformDocsValidationLines);
+                break;
+            }
         }
         // Automated Tag Cleanup
         commentBody.push('\n<h2><sub>Automated Tag/Release Cleanup<sup title="Controls whether obsolete tags and releases will be automatically deleted">ℹ️</sup></sub></h2>\n');
@@ -41628,8 +45482,7 @@ async function addReleasePlanComment(terraformModules, releasesToDelete, tagsToD
                 const releaseText = releasesToDelete.length === 1 ? 'release is' : 'releases are';
                 const pronounText = releasesToDelete.length === 1 ? 'It' : 'They';
                 const releaseList = releasesToDelete.map((release) => `\`${release.title}\``).join(', ');
-                commentBody.push(`**⚠️ The following ${releaseText} no longer referenced by any source Terraform modules. ${pronounText} will be automatically deleted.**`);
-                commentBody.push(` - ${releaseList}`);
+                commentBody.push(`**⚠️ The following ${releaseText} no longer referenced by any source Terraform modules. ${pronounText} will be automatically deleted.**`, ` - ${releaseList}`);
             }
             if (tagsToDelete.length > 0) {
                 // Add an extra newline if we already added releases content
@@ -41639,13 +45492,54 @@ async function addReleasePlanComment(terraformModules, releasesToDelete, tagsToD
                 const tagText = tagsToDelete.length === 1 ? 'tag is' : 'tags are';
                 const pronounText = tagsToDelete.length === 1 ? 'It' : 'They';
                 const tagList = tagsToDelete.map((tag) => `\`${tag}\``).join(', ');
-                commentBody.push(`**⚠️ The following ${tagText} no longer referenced by any source Terraform modules. ${pronounText} will be automatically deleted.**`);
-                commentBody.push(` - ${tagList}`);
+                commentBody.push(`**⚠️ The following ${tagText} no longer referenced by any source Terraform modules. ${pronounText} will be automatically deleted.**`, ` - ${tagList}`);
             }
         }
         // Branding
         if (config.disableBranding === false) {
             commentBody.push(`\n${BRANDING_COMMENT}`);
+        }
+        // When `hide-no-changes-pr-comment` is enabled and this pull request has nothing to report,
+        // avoid spamming reviewers with a "Release Plan" comment. A pull request has "nothing to report"
+        // when no modules need a release, no tag/release cleanup is pending, and the wiki check did not fail.
+        const wikiCheckFailed = isWikiCheckFailure(wikiStatus.status);
+        const hasPendingCleanup = config.deleteLegacyTags && (releasesToDelete.length > 0 || tagsToDelete.length > 0);
+        const nothingToReport = terraformModulesToRelese.length === 0 && !hasPendingCleanup && !wikiCheckFailed;
+        if (config.hideNoChangesPrComment && nothingToReport) {
+            const allComments = await listAllPullRequestComments();
+            const existingSummaryComments = allComments.filter((comment) => hasStandaloneMarkerLine(comment.body, PR_SUMMARY_MARKER));
+            // Keep the most recent existing Release Plan comment, if any. `.at(-1)` returns undefined when
+            // none exist, in which case we post nothing (no comment, no email notification).
+            const commentToKeep = existingSummaryComments.at(-1);
+            if (!commentToKeep) {
+                info('Hide no-changes PR comment enabled and nothing to report. Skipping comment creation.');
+                return;
+            }
+            // An existing Release Plan comment is present (e.g. an earlier push had changes that were later
+            // removed). Update it in place and minimize/collapse it. Editing rather than recreating avoids
+            // sending a new email notification while keeping the comment expandable. Keep the most recent
+            // comment and remove any older duplicates.
+            const body = commentBody.join('\n').trim();
+            info(`Hide no-changes PR comment enabled and nothing to report. Minimizing existing comment ${commentToKeep.id}.`);
+            // Best-effort: update + minimize should never fail the action.
+            try {
+                await octokit.rest.issues.updateComment({ owner, repo, comment_id: commentToKeep.id, body });
+            }
+            catch (error) {
+                warning(`Failed to update release plan comment ${commentToKeep.id}: ${error instanceof Error ? error.message : String(error)}`);
+            }
+            try {
+                await octokit.graphql(MINIMIZE_COMMENT_MUTATION, { id: commentToKeep.nodeId });
+            }
+            catch (error) {
+                warning(`Failed to minimize release plan comment ${commentToKeep.id}: ${error instanceof Error ? error.message : String(error)}`);
+            }
+            // Remove any older summary comments so only the single minimized comment remains.
+            for (const comment of existingSummaryComments.slice(0, -1)) {
+                info(`Deleting previous PR comment from ${comment.createdAt}`);
+                await octokit.rest.issues.deleteComment({ comment_id: comment.id, owner, repo });
+            }
+            return;
         }
         // Create new PR comment (Requires permission > pull-requests: write)
         const { data: newComment } = await octokit.rest.issues.createComment({
@@ -41656,11 +45550,11 @@ async function addReleasePlanComment(terraformModules, releasesToDelete, tagsToD
         });
         info(`Posted comment ${newComment.id} @ ${newComment.html_url}`);
         // Filter out the comments that contain the PR summary marker and are not the current comment
-        const { data: allComments } = await octokit.rest.issues.listComments({ issue_number, owner, repo });
-        const commentsToDelete = allComments.filter((comment) => comment.body?.includes(PR_SUMMARY_MARKER) && comment.id !== newComment.id);
+        const allComments = await listAllPullRequestComments();
+        const commentsToDelete = allComments.filter((comment) => hasStandaloneMarkerLine(comment.body, PR_SUMMARY_MARKER) && comment.id !== newComment.id);
         // Delete all our previous comments
         for (const comment of commentsToDelete) {
-            info(`Deleting previous PR comment from ${comment.created_at}`);
+            info(`Deleting previous PR comment from ${comment.createdAt}`);
             await octokit.rest.issues.deleteComment({ comment_id: comment.id, owner, repo });
         }
     }
@@ -41682,14 +45576,19 @@ async function addReleasePlanComment(terraformModules, releasesToDelete, tagsToD
     }
 }
 /**
- * Adds a comment to the pull request with details about the releases created as specified via the
- * releasedTerraformModules.
+ * Adds a comment to the pull request with details about the releases attributed to this pull request.
  *
- * @param {TerraformModule[]} releasedTerraformModules - Array of released/updated Terraform modules.
+ * Takes {@link ReleaseOutcome}s rather than modules because a module's highest release is not
+ * necessarily *this* pull request's release: once releases are self-healing, a re-run may skip a module
+ * that a later pull request has since bumped past. Reporting `module.releases[0]` in that situation
+ * would rewrite this pull request's own comment to cite another pull request's version, tag link and
+ * release notes — and would do so again on every subsequent re-run, since the body never converges.
+ *
+ * @param {ReleaseOutcome[]} releaseOutcomes - What was created, recovered, or skipped for each module.
  * @returns {Promise<void>}
  */
-async function addPostReleaseComment(releasedTerraformModules) {
-    if (releasedTerraformModules.length === 0) {
+async function addPostReleaseComment(releaseOutcomes) {
+    if (releaseOutcomes.length === 0) {
         info('No released modules. Skipping post release PR comment.');
         return;
     }
@@ -41699,30 +45598,59 @@ async function addPostReleaseComment(releasedTerraformModules) {
         const { octokit, repo: { owner, repo }, repoUrl, issueNumber: issue_number, } = context;
         // Construct the comment body as an array of strings
         const commentBody = [
-            PR_RELEASE_MARKER,
+            PR_RELEASE_COMMENT_MARKER,
             '\n## :rocket: Terraform Module Releases\n',
             'The following Terraform modules have been released:\n',
         ];
-        for (const terraformModule of releasedTerraformModules) {
-            const latestRelease = terraformModule.releases[0];
-            const extra = [`[Release Notes](${repoUrl}/releases/tag/${latestRelease.tagName})`];
+        for (const { module, release } of releaseOutcomes) {
+            const extra = [`[Release Notes](${repoUrl}/releases/tag/${release.tagName})`];
             if (config.disableWiki === false) {
-                extra.push(`[Wiki/Usage](${getWikiLink(terraformModule.name, false)})`);
+                extra.push(`[Wiki/Usage](${getWikiLink(module.name, false)})`);
             }
-            commentBody.push(`- **\`${latestRelease.title}\`** • ${extra.join(' • ')}`);
+            commentBody.push(`- **\`${release.title}\`** • ${extra.join(' • ')}`);
         }
         // Branding
         if (config.disableBranding === false) {
             commentBody.push(`\n${BRANDING_COMMENT}`);
         }
-        // Post the comment on the pull request
-        const { data: newComment } = await octokit.rest.issues.createComment({
-            owner,
-            repo,
-            issue_number,
-            body: commentBody.join('\n').trim(),
-        });
-        info(`Posted comment ${newComment.id} @ ${newComment.html_url}`);
+        const body = commentBody.join('\n').trim();
+        // Idempotent: update the existing post-release comment in place rather than posting a duplicate on a
+        // re-run. Editing keeps the comment's timeline position and sends no new email notification. The body
+        // must reflect the full set of this pull request's released modules — note that the caller is
+        // responsible for that completeness, since a re-run only processes modules that still need a
+        // release (see `withPriorReleasesForThisPullRequest` in src/main.ts). Best-effort lookup: if listing comments fails, fall back to
+        // creating a new comment instead of failing the merge.
+        let existingComments = [];
+        try {
+            existingComments = await findReleaseComments();
+        }
+        catch (error) {
+            warning(`Failed to list existing post-release comments; will create a new one: ${error instanceof Error ? error.message : String(error)}`);
+        }
+        const commentToKeep = existingComments.at(-1);
+        if (commentToKeep) {
+            if (commentToKeep.body.trim() === body) {
+                info(`Post-release comment ${commentToKeep.id} is already up to date. Nothing to do.`);
+            }
+            else {
+                await octokit.rest.issues.updateComment({ owner, repo, comment_id: commentToKeep.id, body });
+                info(`Updated post-release comment ${commentToKeep.id} in place.`);
+            }
+            // Consolidate: remove any older duplicate post-release comments so only the most recent remains.
+            for (const comment of existingComments.slice(0, -1)) {
+                info(`Deleting duplicate post-release comment ${comment.id}`);
+                try {
+                    await octokit.rest.issues.deleteComment({ owner, repo, comment_id: comment.id });
+                }
+                catch (error) {
+                    warning(`Failed to delete duplicate post-release comment ${comment.id}: ${error instanceof Error ? error.message : String(error)}`);
+                }
+            }
+        }
+        else {
+            const { data: newComment } = await octokit.rest.issues.createComment({ owner, repo, issue_number, body });
+            info(`Posted comment ${newComment.id} @ ${newComment.html_url}`);
+        }
     }
     catch (error) {
         if (error instanceof RequestError) {
@@ -41757,6 +45685,17 @@ async function addPostReleaseComment(releasedTerraformModules) {
 
 
 
+
+
+/**
+ * How many of a module's orphan tags (tags with no release) are checked for recoverability on a merge.
+ *
+ * Each check costs one Git Data API request, and only tags without a release are candidates — so in a
+ * healthy repository this is zero. The cap bounds the worst case (a repository full of hand-made tags)
+ * so one merge cannot fan out into an unbounded number of lookups. When it truncates, the run says so
+ * rather than silently checking fewer.
+ */
+const MAX_ORPHAN_TAG_LOOKUPS = 3;
 /**
  * Retrieves all releases from the specified GitHub repository.
  *
@@ -41815,13 +45754,90 @@ async function getAllReleases(options = { per_page: 100, page: 1 }) {
     }
 }
 /**
- * Creates a GitHub release and corresponding git tag for each Terraform modules that needs a release.
+ * Determines how confidently an existing git tag can be attributed to the **current** pull request.
+ *
+ * This is the provenance check that makes self-healing safe. A tag with no release is not
+ * automatically ours: it may be a tag pushed by hand, a tag that predates adoption of this action, or
+ * a tag left behind by a *different* pull request whose run died between `git push` and
+ * `createRelease`. Adopting such a tag would attach this pull request's changelog to another commit's
+ * tree and, worse, leave this pull request's own changes unreleased forever.
+ *
+ * Resolution order, most certain first:
+ * 1. The tag's commit message carries **this** pull request's marker → `marker`.
+ * 2. The tag's commit message carries a marker naming a **different** pull request → `unknown`.
+ * 3. No marker at all (the tag predates the marker scheme) → require the exact shape this action
+ *    writes: line 1 is the tag name and line 3 is this pull request's title → `heuristic`.
+ *
+ * The pre-marker case is deliberately shape-exact rather than a substring test. `line 1 === tagName`
+ * holds for *every* release commit this action has ever written, so a loose `includes(prTitle)` would
+ * leave the pull request title as the only discriminator — and bots such as Renovate and Dependabot
+ * reuse titles byte-for-byte across pull requests, which would make a collision routine rather than
+ * theoretical.
+ *
+ * Any failure to resolve the commit (a tag pointing at an annotated tag object, a deleted commit, a
+ * transient API error) is treated as **not attributable**. Failing to adopt is always recoverable —
+ * the owning pull request's own re-run will heal it — whereas wrongly adopting is not.
+ *
+ * @param {string} tagName - The tag being considered for adoption.
+ * @param {string | null} commitSHA - The commit the tag points at.
+ * @returns {Promise<TagProvenance>} How strongly the tag ties to the current pull request.
+ */
+async function getTagProvenance(tagName, commitSHA) {
+    // No resolvable commit means no proof of ownership. Treat an empty SHA the same as a missing one.
+    if (!commitSHA) {
+        return 'unknown';
+    }
+    const { octokit, repo: { owner, repo }, prNumber, prTitle, } = context;
+    let commitMessage;
+    try {
+        // Use the Git Data API rather than repos.getCommit: we only need the message, and a release commit
+        // is built in a temp directory with `git add .`, so its diff nominally deletes every other file in
+        // the repository. repos.getCommit would return that entire `files[]` array (with patches) to read
+        // one string.
+        const { data } = await octokit.rest.git.getCommit({ owner, repo, commit_sha: commitSHA });
+        commitMessage = data.message ?? '';
+    }
+    catch (error) {
+        warning(`Could not resolve commit ${commitSHA} for tag '${tagName}' to verify ownership; treating it as not belonging to this pull request: ${error instanceof Error ? error.message : String(error)}`);
+        return 'unknown';
+    }
+    if (matchesPrMarker(commitMessage, prNumber)) {
+        return 'marker';
+    }
+    if (hasAnyPrMarker(commitMessage)) {
+        return 'unknown';
+    }
+    // Pre-marker fallback: the release commit shape this action has always written, matched exactly.
+    const lines = commitMessage.split('\n');
+    const shapeMatches = lines[0]?.trim() === tagName && prTitle.length > 0 && lines[2]?.trim() === prTitle;
+    return shapeMatches ? 'heuristic' : 'unknown';
+}
+/**
+ * Creates a GitHub release and corresponding git tag for each Terraform module that needs a release.
+ *
+ * This operation is self-healing and idempotent. For each module that needs a release, it converges to
+ * the correct state rather than blindly creating a release (which would over-bump versions on a re-run):
+ *
+ * 1. If the module already has a release for the current pull request (its body carries our marker),
+ *    it is skipped — no bump, no create — but still reported so the post-release comment lists it.
+ * 1b. If the latest tag is provably this pull request's and already has a release, the module is also
+ *    skipped. This covers a release whose body was edited or regenerated, which strips the marker and
+ *    would otherwise re-arm a bump and a duplicate release.
+ * 2. Otherwise, if the latest tag is provably this pull request's and has **no** release (an orphan
+ *    tag from a partial failure, or a manually-deleted release), the missing release is created for
+ *    that existing tag without bumping the version or pushing a new commit/tag.
+ * 3. Otherwise, a normal release is performed: the version is bumped and a commit, tag, and release
+ *    are created.
+ *
+ * A tag that cannot be attributed to this pull request is never adopted; the run bumps past it and
+ * leaves it for its owning pull request's re-run to heal. See `docs/state-management.md`.
  *
  * Note: Requires GitHub action permissions > contents: write
  *
  * @param {TerraformModule[]} terraformModules - An array of Terraform module objects containing
  *  module metadata, version information, and release status.
- * @returns {Promise<TerraformModule[]>} Updated TerraformModule instances with new releases and tags
+ * @returns {Promise<ReleaseOutcome[]>} What was actually done for each module, including the tag that
+ *  really exists and the release attributed to this pull request.
  */
 async function createTaggedReleases(terraformModules) {
     const terraformModulesToRelease = TerraformModule.getModulesNeedingRelease(terraformModules);
@@ -41832,15 +45848,132 @@ async function createTaggedReleases(terraformModules) {
     }
     // We can be sure based on our type definitions that each module now is a module that
     // needs to be released. It has GitHub commits.
-    const { octokit, repo: { owner, repo }, prBody, prTitle, workspaceDir, } = context;
+    const { octokit, repo: { owner, repo }, prBody, prNumber, prTitle, workspaceDir, } = context;
+    // Each release we create embeds a hidden, schema-versioned marker tying it to this pull request (see
+    // src/utils/markers.ts). The same marker is written into the release commit message, which is what
+    // later lets us prove that an existing tag was produced by this pull request. We scan for it so that
+    // re-runs converge to the correct state instead of over-bumping or duplicating releases.
+    const releaseMarker = buildPrMarker(prNumber);
+    // Legacy gate: if this pull request was already completed under the pre-marker scheme (its post-release
+    // comment uses LEGACY_PR_RELEASE_COMMENT_MARKER) and none of its releases carry our marker, preserve the old
+    // "don't double-release" behavior by skipping. This reads only our own markers — never the editable
+    // release-note text — so it is robust and unambiguous. A pull request released under the current scheme
+    // carries the new comment marker, so it is not treated as legacy and continues to self-heal.
+    const anyReleaseHasMarker = terraformModulesToRelease.some((module) => module.releases.some((release) => matchesPrMarker(release.body, prNumber)));
+    if (!anyReleaseHasMarker && (await hasLegacyPostReleaseComment())) {
+        info('Legacy release marker found; this pull request completed under the pre-marker scheme. Skipping release creation to avoid double-releasing.');
+        return [];
+    }
     console.time('Elapsed time pushing new tags & release');
     startGroup('Creating releases & tags for modules');
+    const outcomes = [];
     try {
         for (const module of terraformModulesToRelease) {
             const moduleName = module.name;
+            info(`Processing module: ${moduleName}`);
+            // Step 1: Has this module already been released for this pull request? This makes re-runs
+            // idempotent — a retried or re-run merge will not bump or re-create a release for a module that
+            // was already released by this pull request (which would otherwise over-bump the version). It is
+            // still reported (returned below) so the post-release comment lists it.
+            const existingPrRelease = module.releases.find((release) => matchesPrMarker(release.body, prNumber));
+            if (existingPrRelease) {
+                info(`Module '${moduleName}' already released for this pull request (${existingPrRelease.title}). Skipping.`);
+                module.clearCommits();
+                outcomes.push({
+                    module,
+                    action: 'skipped',
+                    releaseTag: existingPrRelease.tagName,
+                    release: existingPrRelease,
+                });
+                continue;
+            }
+            const latestTag = module.getLatestTag();
+            const releaseForLatestTag = latestTag === null ? undefined : module.releases.find((release) => release.tagName === latestTag);
+            // Step 1b: the latest tag is ours and already has a release, but that release's body no longer
+            // carries our marker (edited by hand, or replaced by GitHub's "Generate release notes"). Without
+            // this, step 1 would miss and step 3 would bump and publish a duplicate release.
+            //
+            // A release carrying another pull request's marker is unambiguously not ours, so no lookup is
+            // needed — which means the steady state (every release body carrying a marker) costs nothing.
+            //
+            // This requires a real `marker`, never the pre-marker heuristic. Skipping is irreversible: a
+            // wrong answer here silently drops a genuine release forever, whereas a wrong answer in step 2
+            // leaves a state a re-run can still correct.
+            if (latestTag !== null && releaseForLatestTag !== undefined && !hasAnyPrMarker(releaseForLatestTag.body)) {
+                const latestProvenance = await getTagProvenance(latestTag, module.getLatestTagCommitSHA());
+                if (latestProvenance === 'marker') {
+                    info(`Module '${moduleName}' was already released by this pull request as '${releaseForLatestTag.tagName}' (verified via the release commit; the release body no longer carries the marker). Skipping.`);
+                    module.clearCommits();
+                    outcomes.push({
+                        module,
+                        action: 'skipped',
+                        releaseTag: releaseForLatestTag.tagName,
+                        release: releaseForLatestTag,
+                    });
+                    continue;
+                }
+            }
+            // Step 2: recover an orphan tag (a tag with no release) that this pull request produced — from a
+            // partial failure where the tag was pushed but the release was never created, or where the
+            // release was deleted by hand. The release is created for the existing tag, at its existing
+            // version, without bumping or pushing a new commit/tag.
+            //
+            // We search every orphan tag newest-first, not just the latest one, because a later pull request
+            // may already have bumped past ours: if PR #5's tag was orphaned and PR #6 then released a higher
+            // version, #5's orphan is no longer the latest and would otherwise never be healed (#5 would
+            // instead bump again and publish its older tree as the newest version). Only tags *without* a
+            // release are candidates, so in the steady state there is nothing to scan and no request is made.
+            // The scan is capped so a repository with many orphan tags cannot turn one merge into an
+            // unbounded number of lookups.
+            const orphanTags = module.tags.filter((tag) => !module.releases.some((release) => release.tagName === tag.name));
+            const orphanTagsToInspect = orphanTags.slice(0, MAX_ORPHAN_TAG_LOOKUPS);
+            if (orphanTags.length > orphanTagsToInspect.length) {
+                info(`Module '${moduleName}' has ${orphanTags.length} tags without releases; only the newest ${MAX_ORPHAN_TAG_LOOKUPS} are checked for recovery.`);
+            }
+            let recoverableTag = null;
+            for (const tag of orphanTagsToInspect) {
+                if ((await getTagProvenance(tag.name, tag.commitSHA)) !== 'unknown') {
+                    recoverableTag = tag.name;
+                    break;
+                }
+            }
+            if (recoverableTag !== null) {
+                const recoveredVersion = TerraformModule.getVersionFromTag(recoverableTag);
+                info(`Module '${moduleName}' has tag '${recoverableTag}' without a release. Creating the missing release.`);
+                const changelog = createTerraformModuleChangelogEntry(recoveredVersion, module.commitMessages);
+                const body = `${changelog}\n\n${releaseMarker}`;
+                const response = await octokit.rest.repos.createRelease({
+                    owner,
+                    repo,
+                    tag_name: recoverableTag,
+                    name: recoverableTag,
+                    body,
+                    draft: false,
+                    prerelease: config.preRelease,
+                });
+                const release = {
+                    id: response.data.id,
+                    title: response.data.name ?? recoverableTag,
+                    tagName: response.data.tag_name,
+                    body: response.data.body ?? body,
+                };
+                module.setReleases([release, ...module.releases]);
+                module.clearCommits();
+                outcomes.push({ module, action: 'recovered', releaseTag: recoverableTag, release });
+                continue;
+            }
+            // Orphan tags we could NOT attribute to this pull request are deliberately left alone: they
+            // belong to a different pull request (or predate this action), and their owner's re-run is what
+            // should heal them. Claiming one would attach this pull request's notes to another commit's tree
+            // and leave this pull request's own changes unreleased.
+            if (orphanTagsToInspect.length > 0) {
+                const isSingle = orphanTagsToInspect.length === 1;
+                const tagList = orphanTagsToInspect.map((tag) => `'${tag.name}'`).join(', ');
+                warning(`Module '${moduleName}' has ${isSingle ? 'a tag' : 'tags'} without a release (${tagList}) that ${isSingle ? 'was' : 'were'} not produced by this pull request. Leaving ${isSingle ? 'it' : 'them'} untouched and releasing a new version instead.`);
+            }
+            // Step 3: Normal release — bump the version, then commit, tag, push, and create the release.
             const releaseTag = module.getReleaseTag();
             const releaseTagVersion = module.getReleaseTagVersion();
-            info(`Processing module: ${moduleName}`);
             info(`Release type: ${module.getReleaseType()}`);
             info(`Next tag version: ${releaseTagVersion}`);
             // Create a temporary working directory
@@ -41852,8 +45985,17 @@ async function createTaggedReleases(terraformModules) {
             copyModuleContents(module.directory, tmpDir, config.moduleAssetExcludePatterns);
             // Copy the module's .git directory
             (0,external_node_fs_.cpSync)((0,external_node_path_.join)(workspaceDir, '.git'), (0,external_node_path_.join)(tmpDir, '.git'), { recursive: true });
-            // Git operations: commit the changes and tag the release
-            const commitMessage = `${module.getReleaseTag()}\n\n${prTitle}\n\n${prBody}`.trim();
+            // Git operations: commit the changes and tag the release.
+            //
+            // The hidden marker is appended as the final line so this commit — and therefore the tag pointing
+            // at it — can later be proven to belong to this pull request. That proof is what makes step 2's
+            // orphan-tag recovery safe; without it we could not distinguish our own interrupted release from
+            // another pull request's, or from a tag pushed by hand.
+            //
+            // The title and body are untrusted and MUST be neutralized first. `git commit -m` uses
+            // `cleanup=whitespace`, so a marker planted on its own line in a pull request description would
+            // survive verbatim into the very text this provenance check trusts.
+            const commitMessage = `${releaseTag}\n\n${neutralizePrMarkers(prTitle)}\n\n${neutralizePrMarkers(prBody)}\n\n${releaseMarker}`.trim();
             const gitPath = await lib_default()('git');
             const githubActionsBotEmail = await getGitHubActionsBotEmail();
             // Execute git commands in temp directory without inheriting stdio to avoid output pollution
@@ -41874,7 +46016,8 @@ async function createTaggedReleases(terraformModules) {
             const commitSHA = (0,external_node_child_process_namespaceObject.execFileSync)(gitPath, ['rev-parse', 'HEAD'], gitOpts).toString().trim();
             // Create a GitHub release using the tag
             info(`Creating GitHub release for ${moduleName}@${releaseTagVersion}`);
-            const body = createTerraformModuleChangelog(module);
+            const changelog = createTerraformModuleChangelog(module);
+            const body = `${changelog}\n\n${releaseMarker}`;
             const response = await octokit.rest.repos.createRelease({
                 owner,
                 repo,
@@ -41900,21 +46043,26 @@ async function createTaggedReleases(terraformModules) {
             // We also need to ensure that this module can't be released anymore. Thus, we need to clear existing commits
             // as this is the primary driver for determining release status.
             module.clearCommits();
+            outcomes.push({ module, action: 'created', releaseTag, release });
         }
-        return terraformModulesToRelease;
+        return outcomes;
     }
     catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
-        // Handle GitHub permissions or any error related to pushing tags
-        if (errorMessage.includes('The requested URL returned error: 403')) {
+        // Handle GitHub permissions or any error related to creating tags or releases. The git CLI reports a
+        // permissions failure in the push output, whereas the Releases API surfaces it as a 403 RequestError;
+        // match both so the remediation is shown either way.
+        const isPermissionsError = errorMessage.includes('The requested URL returned error: 403') ||
+            (error instanceof RequestError && error.status === 403);
+        if (isPermissionsError) {
             throw new Error([
-                `Failed to create tags in repository: ${errorMessage}.`,
-                'Ensure that the GitHub Actions workflow has the correct permissions to create tags.',
+                `Failed to create releases/tags in repository: ${errorMessage}.`,
+                'Ensure that the GitHub Actions workflow has the correct permissions to create tags and releases.',
                 'Update your workflow YAML file with the following block under "permissions":',
                 '\n\npermissions:\n  contents: write',
             ].join(' '), { cause: error });
         }
-        throw new Error(`Failed to create tags in repository: ${errorMessage}`, { cause: error });
+        throw new Error(`Failed to create releases/tags in repository: ${errorMessage}`, { cause: error });
     }
     finally {
         console.timeEnd('Elapsed time pushing new tags & release');
@@ -42097,7 +46245,89 @@ async function deleteTags(tagsToDelete) {
     }
 }
 
+;// CONCATENATED MODULE: ./src/utils/freshness.ts
+
+
+/**
+ * Determines whether the checked-out workspace still represents the current tip of the base branch.
+ *
+ * **Why this exists.** The merge handler mixes two sources of truth. The set of Terraform modules is
+ * derived from the **checked-out tree** (`parseTerraformModules` walks `context.workspaceDir`), while
+ * tags and releases are fetched **live** from the API. That asymmetry is harmless on a normal merge,
+ * because the checkout *is* the current tree. It is destructive on a re-run of an older merged pull
+ * request: `actions/checkout` restores that pull request's merge commit, so every module added since is
+ * absent from the tree, and the cleanup step then classifies their tags and releases as orphaned and
+ * deletes them. Wiki regeneration has the same problem — it rewrites the wiki from the stale module
+ * list, removing pages for modules added later — and is not covered by `delete-legacy-tags`.
+ *
+ * Previously this was masked by an unconditional early-exit whenever a post-release comment existed.
+ * That exit was removed so that releases could self-heal, which is what exposed the hazard; releases
+ * are safe to re-run, but deletions computed from a stale tree are not.
+ *
+ * **Failure policy: fails open.** A null merge commit or any API error returns `true`, preserving the
+ * pre-existing behavior rather than silently disabling wiki generation and cleanup on a transient blip.
+ * The guard exists to prevent a rare, destructive mistake, not to become a new single point of failure.
+ *
+ * @returns {Promise<boolean>} `true` when the checkout is current (or freshness cannot be determined).
+ */
+async function isCheckoutCurrent() {
+    const { octokit, repo: { owner, repo }, baseRef, mergeCommitSha, } = context;
+    if (mergeCommitSha === null) {
+        warning("Unable to determine this pull request's merge commit; assuming the checkout is current. Obsolete tag/release cleanup and wiki regeneration will proceed.");
+        return true;
+    }
+    try {
+        const { data } = await octokit.rest.repos.compareCommitsWithBasehead({
+            owner,
+            repo,
+            basehead: `${mergeCommitSha}...${baseRef}`,
+        });
+        // 'identical' means the base branch tip is exactly this pull request's merge commit, so the tree we
+        // checked out is the current tree. Anything else ('ahead', 'behind', 'diverged') means it is not.
+        if (data.status === 'identical') {
+            return true;
+        }
+        info(`Base branch '${baseRef}' has advanced ${data.ahead_by} commit(s) beyond this pull request's merge commit (${mergeCommitSha}); status: ${data.status}.`);
+        return false;
+    }
+    catch (error) {
+        warning(`Unable to compare this pull request's merge commit against '${baseRef}'; assuming the checkout is current: ${error instanceof Error ? error.message : String(error)}`);
+        return true;
+    }
+}
+/**
+ * Returns whether a repository-relative path still exists on the base branch.
+ *
+ * Used only on the stale-checkout path, to avoid "resurrecting" a module that was deleted by a later
+ * pull request. On a stale checkout such a module reappears in the tree with no tags (its tags were
+ * cleaned up when it was removed), which reads as a brand-new module and would otherwise be released
+ * afresh — and, because cleanup is skipped on that same run, the resurrected tag would survive.
+ *
+ * Fails open (`true`) on anything other than a definitive 404, so a transient error never silently
+ * suppresses a legitimate initial release.
+ *
+ * @param {string} relativePath - The module directory, relative to the workspace root.
+ * @returns {Promise<boolean>} Whether the path exists on the base branch.
+ */
+async function pathExistsOnBaseRef(relativePath) {
+    const { octokit, repo: { owner, repo }, baseRef, } = context;
+    try {
+        await octokit.rest.repos.getContent({ owner, repo, path: relativePath, ref: baseRef });
+        return true;
+    }
+    catch (error) {
+        if (error.status === 404) {
+            return false;
+        }
+        warning(`Unable to verify whether '${relativePath}' still exists on '${baseRef}'; assuming it does: ${error instanceof Error ? error.message : String(error)}`);
+        return true;
+    }
+}
+
 ;// CONCATENATED MODULE: ./src/main.ts
+
+
+
 
 
 
@@ -42120,8 +46350,9 @@ function initialize() {
     return { config: configInstance, context: contextInstance };
 }
 /**
- * Handles wiki-related operations, including checkout, generating release plan comments,
- * and error handling for failures.
+ * Handles pull request open/sync events: determines wiki status (including terraform-docs
+ * pre-flight validation), posts a release plan comment, and re-throws wiki pre-flight
+ * failures when present.
  *
  * @param {TerraformModule[]} terraformModules - List of Terraform modules associated with this workspace.
  * @param {GitHubRelease[]} releasesToDelete - List of Terraform releases to delete.
@@ -42129,25 +46360,109 @@ function initialize() {
  * @returns {Promise<void>} Resolves when wiki-related operations are completed.
  */
 async function handlePullRequestEvent(terraformModules, releasesToDelete, tagsToDelete) {
-    const wikiStatusResult = getWikiStatus();
+    const wikiStatusResult = await getWikiStatus(terraformModules);
     await addReleasePlanComment(terraformModules, releasesToDelete, tagsToDelete, wikiStatusResult);
-    if (wikiStatusResult.error) {
-        throw wikiStatusResult.error;
+    if (wikiStatusResult.errorMessage) {
+        throw new Error(wikiStatusResult.errorMessage);
     }
+}
+/**
+ * Withholds modules that would be "resurrected" by a stale checkout.
+ *
+ * Only an *initial* release can resurrect a deleted module: a module that still exists keeps its tags,
+ * whereas one removed by a later pull request had its tags cleaned up and therefore reappears looking
+ * brand new. On a stale checkout we confirm each such module still exists on the base branch before
+ * releasing it.
+ *
+ * @param {TerraformModule[]} terraformModules - All modules detected in the (stale) workspace.
+ * @returns {Promise<TerraformModule[]>} The modules that are safe to release.
+ */
+async function withholdResurrectedModules(terraformModules) {
+    const { baseRef, workspaceDir } = context;
+    const safeModules = [];
+    for (const module of terraformModules) {
+        const isInitialRelease = module.needsRelease() && module.getLatestTag() === null;
+        if (!isInitialRelease || (await pathExistsOnBaseRef((0,external_node_path_.relative)(workspaceDir, module.directory)))) {
+            safeModules.push(module);
+            continue;
+        }
+        warning(`Module '${module.name}' no longer exists on '${baseRef}' and has no existing tags; it was most likely removed after this pull request merged. Skipping its release to avoid resurrecting a deleted module.`);
+    }
+    return safeModules;
+}
+/**
+ * Adds back modules this pull request released on an earlier run but did not process on this one.
+ *
+ * `createTaggedReleases()` only ever sees modules that currently `needsRelease()`. That set shrinks
+ * between runs: a module released solely because it was an *initial* release has a tag afterwards, so
+ * on a re-run it is neither an initial release nor directly changed and drops out entirely. Rendering
+ * the post-release comment from this run's outcomes alone would therefore quietly delete such modules
+ * from the comment, making the pull request's audit trail claim fewer releases than it actually
+ * produced — and it would degrade further on each subsequent re-run.
+ *
+ * The release marker already records the truth durably, so we recover the missing entries from it. The
+ * releases were fetched at the start of the run, so this costs nothing.
+ *
+ * @param {TerraformModule[]} terraformModules - Every module detected in the workspace.
+ * @param {ReleaseOutcome[]} releaseOutcomes - What this run actually created, recovered, or skipped.
+ * @returns {ReleaseOutcome[]} The full set of releases attributable to this pull request.
+ */
+function withPriorReleasesForThisPullRequest(terraformModules, releaseOutcomes) {
+    const { prNumber } = context;
+    const processed = new Set(releaseOutcomes.map((outcome) => outcome.module.name));
+    const priorOutcomes = [];
+    for (const module of terraformModules) {
+        if (processed.has(module.name)) {
+            continue;
+        }
+        const priorRelease = module.releases.find((release) => matchesPrMarker(release.body, prNumber));
+        if (priorRelease) {
+            priorOutcomes.push({ module, action: 'skipped', releaseTag: priorRelease.tagName, release: priorRelease });
+        }
+    }
+    return [...priorOutcomes, ...releaseOutcomes];
 }
 /**
  * Handles merge-event-specific operations, including tagging new releases, deleting legacy resources,
  * and optionally generating Terraform Docs-based wiki documentation.
  *
+ * Release creation always runs: it is idempotent and self-healing, so re-running it converges rather
+ * than duplicating. The **destructive** steps — obsolete tag/release cleanup and wiki regeneration —
+ * are gated on the checked-out tree still being current, because both derive their "what should exist"
+ * set from that tree while comparing it against live tags, releases, and wiki pages. See
+ * {@link isCheckoutCurrent}.
+ *
  * @param {Config} config - The configuration object.
  * @param {TerraformModule[]} terraformModules - List of Terraform modules associated with this workspace.
  * @param {GitHubRelease[]} releasesToDelete - List of Terraform releases to delete.
  * @param {string[]} tagsToDelete - List of Terraform tags to delete.
- * @returns {Promise<void>} Resolves when merge-event operations are complete.
+ * @returns {Promise<ReleaseOutcome[]>} What was created, recovered, or skipped for each module.
  */
-async function handlePullRequestMergedEvent(config, terraformModules, releasesToDelete, tagsToDelete) {
-    const releasedTerraformModules = await createTaggedReleases(terraformModules);
-    await addPostReleaseComment(releasedTerraformModules);
+async function handlePullRequestMergedEvent(config, terraformModules, releasesToDelete, tagsToDelete, changedModulesMap) {
+    const checkoutIsCurrent = await isCheckoutCurrent();
+    const modulesToRelease = checkoutIsCurrent ? terraformModules : await withholdResurrectedModules(terraformModules);
+    const releaseOutcomes = await createTaggedReleases(modulesToRelease);
+    const reportedOutcomes = withPriorReleasesForThisPullRequest(terraformModules, releaseOutcomes);
+    await addPostReleaseComment(reportedOutcomes);
+    // Re-emit outputs as soon as the release outcomes are known, before the steps that can throw (wiki
+    // generation in particular). Otherwise a wiki failure would leave the optimistic pre-release map —
+    // with a releaseTag that may not exist — as the final value consumers read.
+    setReleaseOutcomeOutputs(changedModulesMap, reportedOutcomes);
+    if (!checkoutIsCurrent) {
+        // A bump publishes whatever is in the workspace. On a stale checkout that tree is older than the
+        // module's current state, so the new (highest) version can silently revert changes made after this
+        // pull request merged. Name the affected modules — the run-level warning below does not.
+        for (const { module, releaseTag } of releaseOutcomes.filter((outcome) => outcome.action === 'created')) {
+            warning(`Module '${module.name}' was released as '${releaseTag}' from a checkout that is no longer current, so the published tree may be older than the module's latest state on '${context.baseRef}'.`);
+        }
+        warning([
+            "The base branch has advanced past this pull request's merge commit, so the checked-out tree is not current.",
+            'Skipping obsolete tag/release cleanup and wiki regeneration to avoid deleting tags, releases, or wiki pages',
+            'belonging to modules added after this pull request merged. Re-run the most recently merged pull request to',
+            'perform cleanup and regenerate the wiki.',
+        ].join(' '));
+        return reportedOutcomes;
+    }
     if (!config.deleteLegacyTags) {
         info('Deletion of legacy tags/releases is disabled. Skipping.');
     }
@@ -42160,11 +46475,14 @@ async function handlePullRequestMergedEvent(config, terraformModules, releasesTo
     }
     else {
         installTerraformDocs(config.terraformDocsVersion);
-        ensureTerraformDocsConfigDoesNotExist();
         checkoutWiki();
-        await generateWikiFiles(terraformModules);
+        const { moduleErrors } = await generateWikiFiles(terraformModules);
+        if (moduleErrors.size > 0) {
+            throw new Error(`terraform-docs generation failed for ${moduleErrors.size} module${moduleErrors.size > 1 ? 's' : ''} (see errors above)`);
+        }
         await commitAndPushWikiChanges();
     }
+    return reportedOutcomes;
 }
 /**
  * Sets GitHub Action outputs with comprehensive information about Terraform modules.
@@ -42190,7 +46508,8 @@ async function handlePullRequestMergedEvent(config, terraformModules, releasesTo
  * - `releaseType`: The type of release (major, minor, patch) (changed modules only)
  *
  * @param {TerraformModule[]} terraformModules - Array of all Terraform modules detected in the workspace
- * @returns {void} This function has no return value but sets GitHub Action outputs as side effects
+ * @returns {Record<string, ChangedModuleOutput>} The changed-modules map that was emitted, so the merge
+ *  path can re-emit it with the tag that actually ended up being published.
  */
 function setActionOutputs(terraformModules) {
     const modulesToRelease = TerraformModule.getModulesNeedingRelease(terraformModules);
@@ -42233,17 +46552,53 @@ function setActionOutputs(terraformModules) {
     setOutput('all-module-names', allModuleNames);
     setOutput('all-module-paths', allModulePaths);
     setOutput('all-modules-map', allModulesMap);
+    return changedModulesMap;
+}
+/**
+ * Re-emits `changed-modules-map` after a merge so it reflects what was actually published.
+ *
+ * The map emitted before releases run carries the optimistically computed next version for every
+ * changed module. That is the right value to expose if the release step then fails — but once releases
+ * are self-healing it is frequently not what gets published: a re-run may skip a module that this pull
+ * request already released, or recover a release onto an existing tag, in both cases leaving
+ * `releaseTag` naming a ref that does not exist. Downstream jobs that check out `releaseTag` would fail.
+ *
+ * Each entry gains an `action` field so consumers can distinguish a fresh release from a skip or a
+ * heal. Modules with no outcome (the legacy gate skipped the pull request, or the module was withheld
+ * on a stale checkout) are reported as `action: 'none'` with a `null` `releaseTag`.
+ *
+ * @param {Record<string, ChangedModuleOutput>} changedModulesMap - The pre-release map.
+ * @param {ReleaseOutcome[]} releaseOutcomes - What actually happened per module.
+ * @returns {void}
+ */
+function setReleaseOutcomeOutputs(changedModulesMap, releaseOutcomes) {
+    const outcomesByModuleName = new Map(releaseOutcomes.map((outcome) => [outcome.module.name, outcome]));
+    const resolvedModulesMap = Object.fromEntries(Object.entries(changedModulesMap).map(([moduleName, entry]) => {
+        const outcome = outcomesByModuleName.get(moduleName);
+        return [
+            moduleName,
+            outcome
+                ? { ...entry, releaseTag: outcome.releaseTag, action: outcome.action }
+                : { ...entry, releaseTag: null, action: 'none' },
+        ];
+    }));
+    startGroup('GitHub Action Outputs (post-release)');
+    info(`Changed modules map: ${JSON.stringify(resolvedModulesMap, null, 2)}`);
+    endGroup();
+    setOutput('changed-modules-map', resolvedModulesMap);
 }
 /**
  * Executes the main process of the terraform-module-releaser action.
  *
  * This function handles the Terraform module release workflow by:
- * 1. Checking if a release comment already exists to prevent duplicate releases
- * 2. Collecting pull request commits, tags, and existing releases
- * 3. Identifying Terraform modules and which ones have changed
- * 4. Determining modules that need to be removed
- * 5. Handling either release planning (commenting on PR) or the actual merge event
- * 6. Setting GitHub Action outputs with information about changed and all modules
+ * 1. Collecting pull request commits, tags, and existing releases
+ * 2. Identifying Terraform modules and which ones have changed
+ * 3. Determining modules that need to be removed
+ * 4. Handling either release planning (commenting on PR) or the actual merge event
+ * 5. Setting GitHub Action outputs with information about changed and all modules
+ *
+ * Idempotency is handled per-module during release creation (see createTaggedReleases), so re-runs
+ * converge to the correct state without over-bumping or duplicating releases.
  *
  * The function sets the following outputs:
  * - changed-module-names: Names of modules that changed
@@ -42259,23 +46614,12 @@ function setActionOutputs(terraformModules) {
 async function run() {
     try {
         const { config, context } = initialize();
-        if (await hasReleaseComment()) {
-            // Prevent duplicate releases by checking for existing release comments.
-            // This serves as a lightweight state mechanism for the Terraform Release Action.
-            // When a release is completed, a comment is added to the PR. If this comment exists,
-            // it indicates the release has already been processed, preventing:
-            // - Manual workflow re-runs from creating duplicate releases
-            // - Automatic workflow retries from re-releasing the same modules
-            // - Race conditions in concurrent workflow executions
-            //
-            // This approach is preferred over artifact storage as it requires no additional
-            // dependencies, storage permissions, or cleanup - the comment persists with the PR
-            // and provides a clear audit trail of release activity. Another potential solution
-            // might be to add a label to the PR. However, these are easier modified by users
-            // with write permissions while the comment modification would require an admin.
-            info('Release comment found. Exiting.');
-            return;
-        }
+        // Note: We intentionally do NOT short-circuit when a post-release comment already exists. Releases
+        // are made idempotent and self-healing per-module in createTaggedReleases(), which detects what has
+        // already been released for this pull request and only (re)creates what is missing. This is required
+        // so that a re-run can restore a release that was manually deleted (deleting a release does not
+        // remove the post-release comment, so a blind comment-based guard would miss it). The post-release
+        // comment remains as an audit trail; it simply no longer gates control flow.
         const commits = await getPullRequestCommits();
         const allTags = await getAllTags();
         const allReleases = await getAllReleases();
@@ -42285,10 +46629,11 @@ async function run() {
         // Important: Let's set the action outputs prior to performing the closed/merge request release.
         // This is because the changed modules filters on [module.needsRelease()] which will be false
         // after the release is created. By setting the outputs here, we ensure they accurately reflect
-        // the modules that were changed and needed release at this point in time.
-        setActionOutputs(terraformModules);
+        // the modules that were changed and needed release at this point in time (and that outputs still
+        // exist if the release step throws).
+        const changedModulesMap = setActionOutputs(terraformModules);
         if (context.isPrMergeEvent) {
-            await handlePullRequestMergedEvent(config, terraformModules, releasesToDelete, tagsToDelete);
+            await handlePullRequestMergedEvent(config, terraformModules, releasesToDelete, tagsToDelete, changedModulesMap);
         }
         else {
             await handlePullRequestEvent(terraformModules, releasesToDelete, tagsToDelete);
