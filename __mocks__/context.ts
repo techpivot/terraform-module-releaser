@@ -32,6 +32,8 @@ const defaultContext: Context = {
   prBody: 'This is a test pull request body.',
   issueNumber: 1,
   workspaceDir: process.cwd(),
+  baseRef: 'main',
+  mergeCommitSha: 'merge-commit-sha',
   isPrMergeEvent: false,
 };
 
@@ -47,6 +49,8 @@ const validContextKeys = [
   'prBody',
   'issueNumber',
   'workspaceDir',
+  'baseRef',
+  'mergeCommitSha',
   'isPrMergeEvent',
 ] as const;
 
@@ -67,7 +71,12 @@ const contextProxyHandler: ProxyHandler<ContextWithMethods> = {
     const typedKey = key as keyof Context;
     const expectedValue = defaultContext[typedKey];
 
-    if (typeof expectedValue === typeof value || (typedKey === 'octokit' && typeof value === 'object')) {
+    // `mergeCommitSha` is nullable, so `typeof` alone cannot validate it.
+    if (
+      typeof expectedValue === typeof value ||
+      (typedKey === 'octokit' && typeof value === 'object') ||
+      (typedKey === 'mergeCommitSha' && (value === null || typeof value === 'string'))
+    ) {
       // @ts-expect-error - we know the key is valid and value type is correct
       currentContext[typedKey] = value;
       return true;
@@ -132,6 +141,8 @@ const defaultPullRequestPayload = {
     title: 'Test PR',
     body: 'Test PR body',
     merged: false,
+    base: { ref: 'main' },
+    merge_commit_sha: 'abc123merge',
   },
   repository: {
     full_name: 'techpivot/terraform-module-releaser',

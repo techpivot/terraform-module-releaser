@@ -10,7 +10,7 @@ import { context } from '@/context';
 import { getExecErrorMessage, getModuleSource, renderTemplate } from '@/utils/string';
 import { generateTerraformDocs, installTerraformDocs } from '@/terraform-docs';
 import type { TerraformModule } from '@/terraform-module';
-import type { WikiGenerationResult, WikiStatusResult } from '@/types';
+import type { WikiGenerationResult, WikiStatus, WikiStatusResult } from '@/types';
 import {
   BRANDING_WIKI,
   GITHUB_ACTIONS_BOT_NAME,
@@ -32,6 +32,21 @@ import which from 'which';
 
 // Special subdirectory inside the primary repository where the wiki is checked out.
 const WIKI_SUBDIRECTORY_NAME = '.wiki';
+
+/**
+ * Returns true if a wiki status represents a failure (any `FAILURE_*` status).
+ *
+ * Centralizes the "did the wiki check fail?" decision so it cannot drift between call sites (the release
+ * plan comment header and the `hide-no-changes-pr-comment` nothing-to-report guard). The prefix check
+ * intentionally covers every current and future `FAILURE_*` status, so a newly added failure mode can
+ * never be silently treated as success (and have its error comment suppressed).
+ *
+ * @param {WikiStatus} status - The wiki status to evaluate.
+ * @returns {boolean} Whether the status is a failure.
+ */
+export function isWikiCheckFailure(status: WikiStatus): boolean {
+  return status.startsWith('FAILURE');
+}
 
 /**
  * Clones the wiki repository for the current GitHub repository into a specified subdirectory.

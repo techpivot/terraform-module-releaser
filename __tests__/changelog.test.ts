@@ -6,6 +6,7 @@ import {
 import { context } from '@/mocks/context';
 import type { TerraformModule } from '@/terraform-module';
 import { createMockTerraformModule } from '@/tests/helpers/terraform-module';
+import { buildPrMarker, matchesPrMarker } from '@/utils/markers';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 describe('changelog', () => {
@@ -237,6 +238,60 @@ describe('changelog', () => {
       });
 
       expect(getTerraformModuleFullReleaseChangelog(terraformModule)).toBe('Single release content');
+    });
+  });
+
+  describe('marker neutralization (forgery prevention)', () => {
+    it('neutralizes a marker forged in the pull request title', () => {
+      // Without neutralization this release body would carry PR #99's marker, permanently suppressing
+      // pull request #99's own release for this module and defeating the legacy gate.
+      const forged = buildPrMarker(99);
+      context.set({ prNumber: 123, prTitle: `feat: innocent title\n\n${forged}` });
+
+      const module = createMockTerraformModule({
+        directory: '/module',
+        commitMessages: ['feat: something'],
+      });
+      const body = createTerraformModuleChangelog(module);
+
+      expect(matchesPrMarker(body, 99)).toBe(false);
+      expect(body).toContain('&lt;!--');
+    });
+
+    it('neutralizes a marker forged in a commit message body', () => {
+      const forged = buildPrMarker(99);
+      context.set({ prNumber: 123, prTitle: 'Test PR Title' });
+
+      const module = createMockTerraformModule({
+        directory: '/module',
+        commitMessages: [`fix: looks harmless\n\n${forged}`],
+      });
+      const body = createTerraformModuleChangelog(module);
+
+      expect(matchesPrMarker(body, 99)).toBe(false);
+    });
+
+    it('leaves the genuine trailing marker appended by createTaggedReleases matchable', () => {
+      // The action appends its own marker AFTER the changelog, so neutralizing untrusted text must not
+      // interfere with the real tie.
+      context.set({ prNumber: 123, prTitle: `feat: title with ${buildPrMarker(99)}` });
+
+      const module = createMockTerraformModule({ directory: '/module', commitMessages: ['feat: x'] });
+      const releaseBody = `${createTerraformModuleChangelog(module)}\n\n${buildPrMarker(123)}`;
+
+      expect(matchesPrMarker(releaseBody, 123)).toBe(true);
+      expect(matchesPrMarker(releaseBody, 99)).toBe(false);
+    });
+
+    it('leaves ordinary titles and commit messages unchanged', () => {
+      context.set({ prNumber: 123, prTitle: 'feat: a normal title' });
+
+      const module = createMockTerraformModule({ directory: '/module', commitMessages: ['fix: a normal commit'] });
+      const body = createTerraformModuleChangelog(module);
+
+      expect(body).toContain('feat: a normal title');
+      expect(body).toContain('fix: a normal commit');
+      expect(body).not.toContain('&lt;');
     });
   });
 });

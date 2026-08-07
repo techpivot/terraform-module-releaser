@@ -2,10 +2,18 @@ import { getPullRequestChangelog } from '@/changelog';
 import { config } from '@/config';
 import { context } from '@/context';
 import { TerraformModule } from '@/terraform-module';
-import type { CommitDetails, GitHubRelease, WikiStatusResult } from '@/types';
-import { BRANDING_COMMENT, PROJECT_URL, PR_RELEASE_MARKER, PR_SUMMARY_MARKER, WIKI_STATUS } from '@/utils/constants';
+import type { CommitDetails, GitHubRelease, ReleaseOutcome, WikiStatusResult } from '@/types';
+import {
+  BRANDING_COMMENT,
+  LEGACY_PR_RELEASE_COMMENT_MARKER,
+  PROJECT_URL,
+  PR_RELEASE_COMMENT_MARKER,
+  PR_SUMMARY_MARKER,
+  WIKI_STATUS,
+} from '@/utils/constants';
 
-import { getWikiLink } from '@/wiki';
+import { hasStandaloneMarkerLine } from '@/utils/markers';
+import { getWikiLink, isWikiCheckFailure } from '@/wiki';
 import { debug, endGroup, info, startGroup, warning } from '@actions/core';
 import { RequestError } from '@octokit/request-error';
 
@@ -27,38 +35,95 @@ const MINIMIZE_COMMENT_MUTATION = `
 `;
 
 /**
- * Checks whether the pull request already has a comment containing the release marker.
- *
- * @returns {Promise<boolean>} - Returns true if a comment with the release marker is found, false otherwise.
+ * A pull request comment, reduced to the fields this module needs.
  */
-export async function hasReleaseComment(): Promise<boolean> {
-  try {
-    const {
-      octokit,
-      repo: { owner, repo },
-      issueNumber: issue_number,
-    } = context;
+interface PullRequestComment {
+  id: number;
+  nodeId: string;
+  body: string;
+  createdAt: string;
+}
 
-    // Fetch all comments on the pull request
-    const iterator = octokit.paginate.iterator(octokit.rest.issues.listComments, {
-      owner,
-      repo,
-      issue_number,
-    });
+/**
+ * Lists every comment on the pull request, following pagination to completion.
+ *
+ * Always requests `per_page: 100` (GitHub's default is 30), matching `getAllTags()`/`getAllReleases()`.
+ * On a busy pull request this is the difference between ~16 requests and ~3 — directly relevant to the
+ * rate-limit pressure reported for high-traffic monorepos.
+ *
+ * Note: we deliberately do **not** memoize across calls within a run. The two merge-path readers
+ * (`hasLegacyPostReleaseComment` before releases, `findReleaseComments` after) are cheap at
+ * `per_page: 100`, and a process-lifetime cache would be a silent staleness hazard for future callers.
+ *
+ * @returns {Promise<PullRequestComment[]>} All comments, oldest first (GitHub's listing order).
+ * @throws {Error} If the comments cannot be read. Callers decide whether that is fatal.
+ */
+async function listAllPullRequestComments(): Promise<PullRequestComment[]> {
+  const {
+    octokit,
+    repo: { owner, repo },
+    issueNumber: issue_number,
+  } = context;
 
-    for await (const { data } of iterator) {
-      for (const comment of data) {
-        if (comment.body?.includes(PR_RELEASE_MARKER)) {
-          return true;
-        }
-      }
+  const comments: PullRequestComment[] = [];
+  const iterator = octokit.paginate.iterator(octokit.rest.issues.listComments, {
+    owner,
+    repo,
+    issue_number,
+    per_page: 100,
+  });
+  for await (const { data } of iterator) {
+    for (const comment of data) {
+      comments.push({
+        id: comment.id,
+        nodeId: comment.node_id,
+        body: comment.body ?? '',
+        createdAt: comment.created_at,
+      });
     }
+  }
 
-    return false;
+  return comments;
+}
+
+/**
+ * Finds existing post-release comments (current scheme) on the pull request, identified by
+ * {@link PR_RELEASE_COMMENT_MARKER}. Comments are returned in the order GitHub lists them (oldest first), so
+ * callers can take the most recent with `.at(-1)`.
+ *
+ * @returns {Promise<PullRequestComment[]>} The matching post-release comments.
+ */
+async function findReleaseComments(): Promise<PullRequestComment[]> {
+  const comments = await listAllPullRequestComments();
+
+  return comments.filter((comment) => hasStandaloneMarkerLine(comment.body, PR_RELEASE_COMMENT_MARKER));
+}
+
+/**
+ * Returns true if the pull request has a post-release comment written by a PRE-marker-scheme version of
+ * the action (identified by {@link LEGACY_PR_RELEASE_COMMENT_MARKER}).
+ *
+ * Used by the self-heal gate in `createTaggedReleases` to recognize a pull request that completed its
+ * release under an older version of the action — so we preserve the old "don't double-release" behavior
+ * instead of re-releasing. This reads only our own marker, never the editable release-note text.
+ *
+ * **Fails closed.** Any error reading the comment list propagates and fails the run. Returning `false`
+ * on a transient error would be indistinguishable from "not legacy" and would convert a single 502 or
+ * secondary-rate-limit response into an irreversible over-bump plus a duplicate release on a legacy
+ * pull request. Failing is cheap precisely because of this refactor: the re-run is idempotent and
+ * self-healing, so it creates nothing extra.
+ *
+ * @returns {Promise<boolean>} Whether a legacy post-release comment exists.
+ * @throws {Error} If the pull request comments cannot be read.
+ */
+export async function hasLegacyPostReleaseComment(): Promise<boolean> {
+  try {
+    const comments = await listAllPullRequestComments();
+
+    return comments.some((comment) => hasStandaloneMarkerLine(comment.body, LEGACY_PR_RELEASE_COMMENT_MARKER));
   } catch (error) {
     const requestError = error as RequestError;
-    // If we got a 403 because the pull request doesn't have permissions. Let's really help wrap this error
-    // and make it clear to the consumer what actions need to be taken.
+    // Wrap a permissions failure with actionable remediation, matching the other readers in this module.
     if (requestError.status === 403) {
       throw new Error(
         `Unable to read and write pull requests due to insufficient permissions. Ensure the workflow permissions.pull-requests is set to "write".\n${requestError.message}`,
@@ -66,9 +131,10 @@ export async function hasReleaseComment(): Promise<boolean> {
       );
     }
 
-    throw new Error(`Error checking PR comments: ${error instanceof Error ? error.message : String(error)}`, {
-      cause: error,
-    });
+    throw new Error(
+      `Failed to check for a legacy release comment: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
+    );
   }
 }
 
@@ -234,11 +300,7 @@ export async function addReleasePlanComment(
     // Initialize the comment body as an array of strings with appropriate header based on wiki status
     const commentBody: string[] = [PR_SUMMARY_MARKER];
 
-    if (
-      wikiStatus.status === WIKI_STATUS.FAILURE_CHECKOUT ||
-      wikiStatus.status === WIKI_STATUS.FAILURE_TERRAFORM_DOCS_RUN ||
-      wikiStatus.status === WIKI_STATUS.FAILURE_TERRAFORM_DOCS_INSTALL
-    ) {
+    if (isWikiCheckFailure(wikiStatus.status)) {
       commentBody.push('\n# ⚠️ Release Plan\n', '> ⚠️ **IMPORTANT**: _See Wiki Status error below._\n');
     } else {
       commentBody.push('\n# 📋 Release Plan\n');
@@ -399,16 +461,15 @@ export async function addReleasePlanComment(
     // When `hide-no-changes-pr-comment` is enabled and this pull request has nothing to report,
     // avoid spamming reviewers with a "Release Plan" comment. A pull request has "nothing to report"
     // when no modules need a release, no tag/release cleanup is pending, and the wiki check did not fail.
-    const wikiCheckFailed =
-      wikiStatus.status === WIKI_STATUS.FAILURE_CHECKOUT ||
-      wikiStatus.status === WIKI_STATUS.FAILURE_TERRAFORM_DOCS_RUN ||
-      wikiStatus.status === WIKI_STATUS.FAILURE_TERRAFORM_DOCS_INSTALL;
+    const wikiCheckFailed = isWikiCheckFailure(wikiStatus.status);
     const hasPendingCleanup = config.deleteLegacyTags && (releasesToDelete.length > 0 || tagsToDelete.length > 0);
     const nothingToReport = terraformModulesToRelese.length === 0 && !hasPendingCleanup && !wikiCheckFailed;
 
     if (config.hideNoChangesPrComment && nothingToReport) {
-      const { data: allComments } = await octokit.rest.issues.listComments({ issue_number, owner, repo });
-      const existingSummaryComments = allComments.filter((comment) => comment.body?.includes(PR_SUMMARY_MARKER));
+      const allComments = await listAllPullRequestComments();
+      const existingSummaryComments = allComments.filter((comment) =>
+        hasStandaloneMarkerLine(comment.body, PR_SUMMARY_MARKER),
+      );
 
       // Keep the most recent existing Release Plan comment, if any. `.at(-1)` returns undefined when
       // none exist, in which case we post nothing (no comment, no email notification).
@@ -436,7 +497,7 @@ export async function addReleasePlanComment(
         );
       }
       try {
-        await octokit.graphql(MINIMIZE_COMMENT_MUTATION, { id: commentToKeep.node_id });
+        await octokit.graphql(MINIMIZE_COMMENT_MUTATION, { id: commentToKeep.nodeId });
       } catch (error) {
         warning(
           `Failed to minimize release plan comment ${commentToKeep.id}: ${error instanceof Error ? error.message : String(error)}`,
@@ -445,7 +506,7 @@ export async function addReleasePlanComment(
 
       // Remove any older summary comments so only the single minimized comment remains.
       for (const comment of existingSummaryComments.slice(0, -1)) {
-        info(`Deleting previous PR comment from ${comment.created_at}`);
+        info(`Deleting previous PR comment from ${comment.createdAt}`);
         await octokit.rest.issues.deleteComment({ comment_id: comment.id, owner, repo });
       }
 
@@ -462,14 +523,14 @@ export async function addReleasePlanComment(
     info(`Posted comment ${newComment.id} @ ${newComment.html_url}`);
 
     // Filter out the comments that contain the PR summary marker and are not the current comment
-    const { data: allComments } = await octokit.rest.issues.listComments({ issue_number, owner, repo });
+    const allComments = await listAllPullRequestComments();
     const commentsToDelete = allComments.filter(
-      (comment) => comment.body?.includes(PR_SUMMARY_MARKER) && comment.id !== newComment.id,
+      (comment) => hasStandaloneMarkerLine(comment.body, PR_SUMMARY_MARKER) && comment.id !== newComment.id,
     );
 
     // Delete all our previous comments
     for (const comment of commentsToDelete) {
-      info(`Deleting previous PR comment from ${comment.created_at}`);
+      info(`Deleting previous PR comment from ${comment.createdAt}`);
       await octokit.rest.issues.deleteComment({ comment_id: comment.id, owner, repo });
     }
   } catch (error) {
@@ -494,14 +555,19 @@ export async function addReleasePlanComment(
 }
 
 /**
- * Adds a comment to the pull request with details about the releases created as specified via the
- * releasedTerraformModules.
+ * Adds a comment to the pull request with details about the releases attributed to this pull request.
  *
- * @param {TerraformModule[]} releasedTerraformModules - Array of released/updated Terraform modules.
+ * Takes {@link ReleaseOutcome}s rather than modules because a module's highest release is not
+ * necessarily *this* pull request's release: once releases are self-healing, a re-run may skip a module
+ * that a later pull request has since bumped past. Reporting `module.releases[0]` in that situation
+ * would rewrite this pull request's own comment to cite another pull request's version, tag link and
+ * release notes — and would do so again on every subsequent re-run, since the body never converges.
+ *
+ * @param {ReleaseOutcome[]} releaseOutcomes - What was created, recovered, or skipped for each module.
  * @returns {Promise<void>}
  */
-export async function addPostReleaseComment(releasedTerraformModules: TerraformModule[]): Promise<void> {
-  if (releasedTerraformModules.length === 0) {
+export async function addPostReleaseComment(releaseOutcomes: ReleaseOutcome[]): Promise<void> {
+  if (releaseOutcomes.length === 0) {
     info('No released modules. Skipping post release PR comment.');
     return;
   }
@@ -519,19 +585,18 @@ export async function addPostReleaseComment(releasedTerraformModules: TerraformM
 
     // Construct the comment body as an array of strings
     const commentBody: string[] = [
-      PR_RELEASE_MARKER,
+      PR_RELEASE_COMMENT_MARKER,
       '\n## :rocket: Terraform Module Releases\n',
       'The following Terraform modules have been released:\n',
     ];
 
-    for (const terraformModule of releasedTerraformModules) {
-      const latestRelease: GitHubRelease = terraformModule.releases[0];
-      const extra = [`[Release Notes](${repoUrl}/releases/tag/${latestRelease.tagName})`];
+    for (const { module, release } of releaseOutcomes) {
+      const extra = [`[Release Notes](${repoUrl}/releases/tag/${release.tagName})`];
       if (config.disableWiki === false) {
-        extra.push(`[Wiki/Usage](${getWikiLink(terraformModule.name, false)})`);
+        extra.push(`[Wiki/Usage](${getWikiLink(module.name, false)})`);
       }
 
-      commentBody.push(`- **\`${latestRelease.title}\`** • ${extra.join(' • ')}`);
+      commentBody.push(`- **\`${release.title}\`** • ${extra.join(' • ')}`);
     }
 
     // Branding
@@ -539,14 +604,47 @@ export async function addPostReleaseComment(releasedTerraformModules: TerraformM
       commentBody.push(`\n${BRANDING_COMMENT}`);
     }
 
-    // Post the comment on the pull request
-    const { data: newComment } = await octokit.rest.issues.createComment({
-      owner,
-      repo,
-      issue_number,
-      body: commentBody.join('\n').trim(),
-    });
-    info(`Posted comment ${newComment.id} @ ${newComment.html_url}`);
+    const body = commentBody.join('\n').trim();
+
+    // Idempotent: update the existing post-release comment in place rather than posting a duplicate on a
+    // re-run. Editing keeps the comment's timeline position and sends no new email notification. The body
+    // must reflect the full set of this pull request's released modules — note that the caller is
+    // responsible for that completeness, since a re-run only processes modules that still need a
+    // release (see `withPriorReleasesForThisPullRequest` in src/main.ts). Best-effort lookup: if listing comments fails, fall back to
+    // creating a new comment instead of failing the merge.
+    let existingComments: { id: number; body: string }[] = [];
+    try {
+      existingComments = await findReleaseComments();
+    } catch (error) {
+      warning(
+        `Failed to list existing post-release comments; will create a new one: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+
+    const commentToKeep = existingComments.at(-1);
+    if (commentToKeep) {
+      if (commentToKeep.body.trim() === body) {
+        info(`Post-release comment ${commentToKeep.id} is already up to date. Nothing to do.`);
+      } else {
+        await octokit.rest.issues.updateComment({ owner, repo, comment_id: commentToKeep.id, body });
+        info(`Updated post-release comment ${commentToKeep.id} in place.`);
+      }
+
+      // Consolidate: remove any older duplicate post-release comments so only the most recent remains.
+      for (const comment of existingComments.slice(0, -1)) {
+        info(`Deleting duplicate post-release comment ${comment.id}`);
+        try {
+          await octokit.rest.issues.deleteComment({ owner, repo, comment_id: comment.id });
+        } catch (error) {
+          warning(
+            `Failed to delete duplicate post-release comment ${comment.id}: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      }
+    } else {
+      const { data: newComment } = await octokit.rest.issues.createComment({ owner, repo, issue_number, body });
+      info(`Posted comment ${newComment.id} @ ${newComment.html_url}`);
+    }
   } catch (error) {
     if (error instanceof RequestError) {
       throw new Error(

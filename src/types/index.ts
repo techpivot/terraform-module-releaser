@@ -19,5 +19,8 @@ export * from './github.types';
 // Node:child_process types
 export * from './node-child-process.types';
 
+// Release and self-healing types
+export * from './release.types';
+
 // Wiki related types
 export * from './wiki.types';

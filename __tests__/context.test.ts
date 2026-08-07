@@ -113,8 +113,50 @@ describe('context', () => {
         prBody: 'Test PR body',
         issueNumber: 1323,
         workspaceDir: '/workspace',
+        baseRef: 'main',
+        mergeCommitSha: 'abc123merge',
         isPrMergeEvent: false,
       });
+    });
+
+    it('should expose a null merge commit sha when the payload has none', () => {
+      mockReadFileSync.mockImplementation(() => {
+        return JSON.stringify(
+          createPullRequestMock({
+            pull_request: {
+              merge_commit_sha: null,
+            },
+          }),
+        );
+      });
+
+      expect(getContext().mergeCommitSha).toBeNull();
+    });
+
+    it('should expose the base ref the pull request targets', () => {
+      mockReadFileSync.mockImplementation(() => {
+        return JSON.stringify(
+          createPullRequestMock({
+            pull_request: {
+              base: { ref: 'release/1.x' },
+            },
+          }),
+        );
+      });
+
+      expect(getContext().baseRef).toBe('release/1.x');
+    });
+
+    it('should throw when the payload has no base ref', () => {
+      mockReadFileSync.mockReturnValue(
+        JSON.stringify({
+          action: 'opened',
+          pull_request: { number: 1, title: 'T', body: 'B', merged: false },
+          repository: { full_name: 'techpivot/terraform-module-releaser' },
+        }),
+      );
+
+      expect(() => getContext()).toThrow('Event payload did not match expected pull_request event payload');
     });
 
     it('should initialize as merge event', () => {
@@ -206,7 +248,7 @@ describe('context', () => {
       const getterRepo = getContext().repo;
       expect(proxyRepo).toEqual(getterRepo);
       expect(startGroup).toHaveBeenCalledWith('Initializing Context');
-      expect(info).toHaveBeenCalledTimes(11);
+      expect(info).toHaveBeenCalledTimes(13);
 
       // Reset mock call counts/history via mockClear()
       vi.mocked(info).mockClear();

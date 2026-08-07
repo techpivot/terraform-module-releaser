@@ -1,5 +1,5 @@
 import { TerraformModule } from '@/terraform-module';
-import type { CommitDetails, GitHubRelease, GitHubTag } from '@/types';
+import type { CommitDetails, GitHubRelease, GitHubTag, ReleaseAction, ReleaseOutcome } from '@/types';
 
 /**
  * Helper function to create a GitHubTag from a tag name.
@@ -68,4 +68,35 @@ export function createMockTerraformModule(options: {
   module.setReleases(releases);
 
   return module;
+}
+
+/**
+ * Helper function to build a ReleaseOutcome for testing.
+ *
+ * Defaults to a `created` outcome derived from the module's own state, so most callers only need to
+ * pass the module.
+ *
+ * @param module - The Terraform module the outcome describes
+ * @param overrides - Optional overrides for the action, tag, or release
+ * @returns A ReleaseOutcome suitable for passing to addPostReleaseComment or main's output handling
+ */
+export function createMockReleaseOutcome(
+  module: TerraformModule,
+  overrides: { action?: ReleaseAction; releaseTag?: string; release?: GitHubRelease } = {},
+): ReleaseOutcome {
+  const fallbackTag = overrides.releaseTag ?? module.releases[0]?.tagName ?? (module.getLatestTag() as string);
+  const release: GitHubRelease = overrides.release ??
+    module.releases[0] ?? {
+      id: 1,
+      title: fallbackTag,
+      tagName: fallbackTag,
+      body: 'Mock release body',
+    };
+
+  return {
+    module,
+    action: overrides.action ?? 'created',
+    releaseTag: overrides.releaseTag ?? release.tagName,
+    release,
+  };
 }

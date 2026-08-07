@@ -92,7 +92,30 @@ export const GITHUB_ACTIONS_BOT_NAME = 'GitHub Actions';
 export const GITHUB_ACTIONS_BOT_USERNAME = 'github-actions[bot]';
 
 export const PR_SUMMARY_MARKER = '<!-- techpivot/terraform-module-releaser — pr-summary-marker -->';
-export const PR_RELEASE_MARKER = '<!-- techpivot/terraform-module-releaser — release-marker -->';
+
+/**
+ * Current post-release comment identity marker (written and read by this version of the action). The
+ * schema digit makes future changes detectable, and it is intentionally distinct from
+ * {@link LEGACY_PR_RELEASE_COMMENT_MARKER} so new and legacy post-release comments are trivially distinguishable.
+ */
+export const PR_RELEASE_COMMENT_MARKER = '<!-- techpivot/terraform-module-releaser:release:1 -->';
+
+/**
+ * The previous (pre-marker-scheme) post-release comment marker. READ-ONLY: never written by current
+ * code. The legacy gate in `createTaggedReleases` uses it to recognize pull requests that completed
+ * their release under an older version of the action, preserving the old "don't double-release"
+ * behavior without parsing editable release-note text.
+ */
+export const LEGACY_PR_RELEASE_COMMENT_MARKER = '<!-- techpivot/terraform-module-releaser — release-marker -->';
+
+/**
+ * Hidden, schema-versioned marker embedded in each release BODY this action creates, tying the release
+ * to the pull request that produced it. This is the durable idempotency key for self-healing releases:
+ * `createTaggedReleases` scans release bodies for it (version-agnostically) to decide what to (re)create.
+ * See `buildPrMarker` / `matchesPrMarker` in `src/utils/markers.ts`.
+ */
+export const RELEASE_BODY_PR_MARKER_PREFIX = '<!-- techpivot/terraform-module-releaser:release-pr:';
+export const RELEASE_BODY_PR_MARKER_SCHEMA = 1;
 
 export const PROJECT_URL = 'https://github.com/techpivot/terraform-module-releaser';
 

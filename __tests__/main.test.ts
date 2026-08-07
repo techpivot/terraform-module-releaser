@@ -2,16 +2,19 @@ import { run } from '@/main';
 import { config } from '@/mocks/config';
 import { context } from '@/mocks/context';
 import { parseTerraformModules } from '@/parser';
-import { addPostReleaseComment, addReleasePlanComment, getPullRequestCommits, hasReleaseComment } from '@/pull-request';
+import { addPostReleaseComment, addReleasePlanComment, getPullRequestCommits } from '@/pull-request';
 import { createTaggedReleases, deleteReleases, getAllReleases } from '@/releases';
 import { deleteTags, getAllTags } from '@/tags';
 import { installTerraformDocs } from '@/terraform-docs';
 import { TerraformModule } from '@/terraform-module';
-import { createMockTerraformModule } from '@/tests/helpers/terraform-module';
+import { stubOctokitReturnData } from '@/tests/helpers/octokit';
+import { createMockReleaseOutcome, createMockTerraformModule } from '@/tests/helpers/terraform-module';
 import type { GitHubRelease } from '@/types';
 import { WIKI_STATUS } from '@/utils/constants';
+import { buildPrMarker } from '@/utils/markers';
 import { checkoutWiki, commitAndPushWikiChanges, generateWikiFiles, getWikiStatus } from '@/wiki';
-import { info, setFailed, setOutput } from '@actions/core';
+import { info, setFailed, setOutput, warning } from '@actions/core';
+import { RequestError } from '@octokit/request-error';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock most dependencies that are tested elsewhere
@@ -65,7 +68,6 @@ describe('main', () => {
     config.deleteLegacyTags = true;
 
     // Reset mocks with default values
-    vi.mocked(hasReleaseComment).mockResolvedValue(false);
     vi.mocked(getPullRequestCommits).mockResolvedValue([]);
     vi.mocked(getAllTags).mockResolvedValue([]);
     vi.mocked(getAllReleases).mockResolvedValue([]);
@@ -77,17 +79,23 @@ describe('main', () => {
     vi.mocked(generateWikiFiles).mockResolvedValue({ updatedFiles: [], moduleErrors: new Map() });
   });
 
-  it('should exit early if release comment exists', async () => {
-    vi.mocked(hasReleaseComment).mockResolvedValue(true);
+  it('should not short-circuit on a merge event; idempotency is handled during release creation', async () => {
+    // The early-exit based on an existing release comment was removed in favor of per-module
+    // self-healing in createTaggedReleases. The run always performs its read work and delegates
+    // idempotency to release creation rather than exiting early.
+    context.isPrMergeEvent = true;
+    vi.mocked(parseTerraformModules).mockReturnValue([mockTerraformModule]);
+    vi.mocked(createTaggedReleases).mockResolvedValue([createMockReleaseOutcome(mockTerraformModule)]);
 
     await run();
 
-    expect(info).toHaveBeenCalledWith('Release comment found. Exiting.');
-    expect(setOutput).not.toHaveBeenCalled();
+    expect(getPullRequestCommits).toHaveBeenCalled();
+    expect(createTaggedReleases).toHaveBeenCalledWith([mockTerraformModule]);
+    expect(setOutput).toHaveBeenCalled();
   });
 
   it('should handle errors', async () => {
-    vi.mocked(hasReleaseComment).mockRejectedValue(new Error('Test error'));
+    vi.mocked(getPullRequestCommits).mockRejectedValue(new Error('Test error'));
 
     await run();
 
@@ -110,9 +118,8 @@ describe('main', () => {
   });
 
   it('should call checkoutWiki when wiki is enabled during merge event', async () => {
-    vi.mocked(hasReleaseComment).mockResolvedValue(false);
     vi.mocked(parseTerraformModules).mockReturnValue([mockTerraformModule]);
-    vi.mocked(createTaggedReleases).mockResolvedValue([mockTerraformModule]); // Mock the release creation
+    vi.mocked(createTaggedReleases).mockResolvedValue([createMockReleaseOutcome(mockTerraformModule)]); // Mock the release creation
     context.isPrMergeEvent = true; // Changed to merge event
     config.disableWiki = false;
 
@@ -122,9 +129,8 @@ describe('main', () => {
   });
 
   it('should not call checkoutWiki when wiki is disabled', async () => {
-    vi.mocked(hasReleaseComment).mockResolvedValue(false);
     vi.mocked(parseTerraformModules).mockReturnValue([mockTerraformModule]);
-    vi.mocked(createTaggedReleases).mockResolvedValue([mockTerraformModule]);
+    vi.mocked(createTaggedReleases).mockResolvedValue([createMockReleaseOutcome(mockTerraformModule)]);
     context.isPrMergeEvent = true; // Set to merge event so checkoutWiki logic is evaluated
     config.disableWiki = true;
 
@@ -223,7 +229,6 @@ describe('main', () => {
   describe('non-merge event handling', () => {
     beforeEach(() => {
       context.isPrMergeEvent = false;
-      vi.mocked(hasReleaseComment).mockResolvedValue(false);
       vi.mocked(parseTerraformModules).mockReturnValue([mockTerraformModule]);
       vi.mocked(TerraformModule.getReleasesToDelete).mockReturnValue([]);
       vi.mocked(TerraformModule.getTagsToDelete).mockReturnValue([]);
@@ -284,9 +289,8 @@ describe('main', () => {
     beforeEach(() => {
       context.isPrMergeEvent = true;
 
-      vi.mocked(hasReleaseComment).mockResolvedValue(false);
       vi.mocked(parseTerraformModules).mockReturnValue([mockTerraformModule]);
-      vi.mocked(createTaggedReleases).mockResolvedValue([mockTerraformModule]);
+      vi.mocked(createTaggedReleases).mockResolvedValue([createMockReleaseOutcome(mockTerraformModule)]);
     });
 
     it('should handle merge event with wiki enabled', async () => {
@@ -295,7 +299,9 @@ describe('main', () => {
       await run();
 
       expect(createTaggedReleases).toHaveBeenCalledWith([mockTerraformModule]);
-      expect(addPostReleaseComment).toHaveBeenCalledWith([mockTerraformModule]);
+      expect(addPostReleaseComment).toHaveBeenCalledWith([
+        expect.objectContaining({ module: mockTerraformModule, action: 'created' }),
+      ]);
       expect(deleteReleases).toHaveBeenCalledWith([]);
       expect(deleteTags).toHaveBeenCalledWith([]);
       expect(installTerraformDocs).toHaveBeenCalledWith(config.terraformDocsVersion);
@@ -313,7 +319,9 @@ describe('main', () => {
       await run();
 
       expect(createTaggedReleases).toHaveBeenCalledWith([mockTerraformModule]);
-      expect(addPostReleaseComment).toHaveBeenCalledWith([mockTerraformModule]);
+      expect(addPostReleaseComment).toHaveBeenCalledWith([
+        expect.objectContaining({ module: mockTerraformModule, action: 'created' }),
+      ]);
       expect(deleteReleases).toHaveBeenCalledWith([]);
       expect(deleteTags).toHaveBeenCalledWith([]);
       expect(installTerraformDocs).not.toHaveBeenCalled();
@@ -359,7 +367,9 @@ describe('main', () => {
       await run();
 
       expect(createTaggedReleases).toHaveBeenCalledWith([mockTerraformModule]);
-      expect(addPostReleaseComment).toHaveBeenCalledWith([mockTerraformModule]);
+      expect(addPostReleaseComment).toHaveBeenCalledWith([
+        expect.objectContaining({ module: mockTerraformModule, action: 'created' }),
+      ]);
       expect(deleteReleases).not.toHaveBeenCalled();
       expect(deleteTags).not.toHaveBeenCalled();
       expect(info).toHaveBeenCalledWith('Deletion of legacy tags/releases is disabled. Skipping.');
@@ -375,7 +385,7 @@ describe('main', () => {
 
       vi.mocked(TerraformModule.getReleasesToDelete).mockReturnValue(mockReleasesToDelete);
       vi.mocked(TerraformModule.getTagsToDelete).mockReturnValue(mockTagsToDelete);
-      vi.mocked(createTaggedReleases).mockResolvedValue([mockTerraformModule]);
+      vi.mocked(createTaggedReleases).mockResolvedValue([createMockReleaseOutcome(mockTerraformModule)]);
 
       await run();
 
@@ -386,7 +396,9 @@ describe('main', () => {
 
       // Verify correct arguments
       expect(createTaggedReleasesMock).toHaveBeenCalledWith([mockTerraformModule]);
-      expect(addPostReleaseCommentMock).toHaveBeenCalledWith([mockTerraformModule]);
+      expect(addPostReleaseCommentMock).toHaveBeenCalledWith([
+        expect.objectContaining({ module: mockTerraformModule, action: 'created' }),
+      ]);
       expect(deleteReleasesMock).toHaveBeenCalledWith(mockReleasesToDelete);
       expect(deleteTagsMock).toHaveBeenCalledWith(mockTagsToDelete);
 
@@ -400,6 +412,294 @@ describe('main', () => {
 
       // Should still set outputs
       expect(setOutput).toHaveBeenCalled();
+    });
+  });
+
+  describe('stale checkout guard (merge event)', () => {
+    beforeEach(() => {
+      context.isPrMergeEvent = true;
+      context.useMockOctokit();
+      context.set({ workspaceDir: '/workspace', baseRef: 'main', mergeCommitSha: 'merge-sha' });
+      vi.mocked(parseTerraformModules).mockReturnValue([mockTerraformModule]);
+      vi.mocked(createTaggedReleases).mockResolvedValue([createMockReleaseOutcome(mockTerraformModule)]);
+      vi.spyOn(TerraformModule, 'getReleasesToDelete').mockReturnValue([
+        { id: 9, title: 'modules/gone/v1.0.0', body: '', tagName: 'modules/gone/v1.0.0' },
+      ]);
+      vi.spyOn(TerraformModule, 'getTagsToDelete').mockReturnValue(['modules/gone/v1.0.0']);
+    });
+
+    it('skips cleanup and wiki regeneration when the base branch has advanced past the merge commit', async () => {
+      // Re-running an older merged pull request restores a stale tree; the modules added since are
+      // absent from it, so cleanup would delete their tags/releases and the wiki rewrite would drop
+      // their pages. Releases must still run (they self-heal); the destructive steps must not.
+      stubOctokitReturnData('repos.compareCommitsWithBasehead', {
+        data: { status: 'ahead', ahead_by: 7, behind_by: 0 },
+      });
+
+      await run();
+
+      expect(createTaggedReleases).toHaveBeenCalled();
+      expect(addPostReleaseComment).toHaveBeenCalled();
+      expect(deleteReleases).not.toHaveBeenCalled();
+      expect(deleteTags).not.toHaveBeenCalled();
+      expect(installTerraformDocs).not.toHaveBeenCalled();
+      expect(checkoutWiki).not.toHaveBeenCalled();
+      expect(generateWikiFiles).not.toHaveBeenCalled();
+      expect(commitAndPushWikiChanges).not.toHaveBeenCalled();
+      expect(warning).toHaveBeenCalledWith(expect.stringContaining('the checked-out tree is not current'));
+    });
+
+    it('performs cleanup and wiki regeneration when the checkout is current', async () => {
+      // Guards against the freshness check being over-eager and disabling normal merge behavior.
+      stubOctokitReturnData('repos.compareCommitsWithBasehead', {
+        data: { status: 'identical', ahead_by: 0, behind_by: 0 },
+      });
+
+      await run();
+
+      expect(deleteReleases).toHaveBeenCalled();
+      expect(deleteTags).toHaveBeenCalled();
+      expect(generateWikiFiles).toHaveBeenCalled();
+      expect(commitAndPushWikiChanges).toHaveBeenCalled();
+    });
+
+    it('treats an errored freshness check as current (fails open)', async () => {
+      vi.mocked(context.octokit.rest.repos.compareCommitsWithBasehead).mockRejectedValueOnce(
+        new RequestError('compare boom', 500, {
+          request: { method: 'GET', url: '', headers: {} },
+          response: { status: 500, url: '', headers: {}, data: {} },
+        }),
+      );
+
+      await run();
+
+      expect(deleteReleases).toHaveBeenCalled();
+      expect(generateWikiFiles).toHaveBeenCalled();
+    });
+  });
+
+  describe('resurrection guard (stale checkout)', () => {
+    const deletedModule = createMockTerraformModule({
+      directory: '/workspace/modules/deleted-module',
+      commitMessages: ['feat: originally added here'],
+    });
+
+    beforeEach(() => {
+      context.isPrMergeEvent = true;
+      context.useMockOctokit();
+      context.set({ workspaceDir: '/workspace', baseRef: 'main', mergeCommitSha: 'merge-sha' });
+      // Stale checkout: the base branch has moved on.
+      stubOctokitReturnData('repos.compareCommitsWithBasehead', {
+        data: { status: 'ahead', ahead_by: 5, behind_by: 0 },
+      });
+      vi.mocked(createTaggedReleases).mockResolvedValue([]);
+    });
+
+    it('withholds an initial-release module that no longer exists on the base branch', async () => {
+      // The module was deleted by a later pull request (its tags were cleaned up then), so on a stale
+      // checkout it reappears with no tags and looks brand new.
+      vi.mocked(parseTerraformModules).mockReturnValue([deletedModule]);
+      vi.mocked(context.octokit.rest.repos.getContent).mockRejectedValueOnce(
+        new RequestError('Not Found', 404, {
+          request: { method: 'GET', url: '', headers: {} },
+          response: { status: 404, url: '', headers: {}, data: {} },
+        }),
+      );
+
+      await run();
+
+      expect(context.octokit.rest.repos.getContent).toHaveBeenCalledWith(
+        expect.objectContaining({ path: 'modules/deleted-module', ref: 'main' }),
+      );
+      expect(createTaggedReleases).toHaveBeenCalledWith([]);
+      expect(warning).toHaveBeenCalledWith(expect.stringContaining('resurrecting a deleted module'));
+    });
+
+    it('still releases an initial-release module that does exist on the base branch', async () => {
+      // A racing merge: pull request A added the module and B merged first. The module is present at
+      // the base tip, so it must still be released.
+      vi.mocked(parseTerraformModules).mockReturnValue([deletedModule]);
+
+      await run();
+
+      expect(createTaggedReleases).toHaveBeenCalledWith([deletedModule]);
+    });
+
+    it('does not check existence for modules that already have tags', async () => {
+      // Only an initial release can resurrect a deleted module; anything with tags is left alone.
+      vi.mocked(parseTerraformModules).mockReturnValue([mockTerraformModule]);
+
+      await run();
+
+      expect(context.octokit.rest.repos.getContent).not.toHaveBeenCalled();
+      expect(createTaggedReleases).toHaveBeenCalledWith([mockTerraformModule]);
+    });
+  });
+
+  describe('action outputs reflect what was actually released', () => {
+    beforeEach(() => {
+      context.isPrMergeEvent = true;
+      context.useMockOctokit();
+      context.set({ workspaceDir: '/workspace', baseRef: 'main', mergeCommitSha: 'merge-sha' });
+      vi.mocked(parseTerraformModules).mockReturnValue([mockTerraformModule]);
+      vi.spyOn(TerraformModule, 'getModulesNeedingRelease').mockReturnValue([mockTerraformModule]);
+    });
+
+    const lastChangedModulesMap = () => {
+      const calls = vi.mocked(setOutput).mock.calls.filter(([name]) => name === 'changed-modules-map');
+      return calls.at(-1)?.[1] as Record<string, { releaseTag: string | null; action?: string }>;
+    };
+
+    it('reports the existing tag and action "skipped" when the module was already released', async () => {
+      vi.mocked(createTaggedReleases).mockResolvedValue([
+        createMockReleaseOutcome(mockTerraformModule, {
+          action: 'skipped',
+          releaseTag: 'modules/test-module/v1.0.0',
+        }),
+      ]);
+
+      await run();
+
+      expect(lastChangedModulesMap()['modules/test-module']).toMatchObject({
+        releaseTag: 'modules/test-module/v1.0.0',
+        action: 'skipped',
+      });
+    });
+
+    it('reports the healed tag and action "recovered"', async () => {
+      vi.mocked(createTaggedReleases).mockResolvedValue([
+        createMockReleaseOutcome(mockTerraformModule, {
+          action: 'recovered',
+          releaseTag: 'modules/test-module/v1.0.0',
+        }),
+      ]);
+
+      await run();
+
+      expect(lastChangedModulesMap()['modules/test-module']).toMatchObject({
+        releaseTag: 'modules/test-module/v1.0.0',
+        action: 'recovered',
+      });
+    });
+
+    it('reports a null releaseTag and action "none" when nothing was released for the module', async () => {
+      // e.g. the legacy gate skipped this pull request entirely.
+      vi.mocked(createTaggedReleases).mockResolvedValue([]);
+
+      await run();
+
+      expect(lastChangedModulesMap()['modules/test-module']).toMatchObject({
+        releaseTag: null,
+        action: 'none',
+      });
+    });
+
+    it('leaves the non-merge path outputs untouched (no action field)', async () => {
+      context.isPrMergeEvent = false;
+
+      await run();
+
+      expect(lastChangedModulesMap()['modules/test-module']).not.toHaveProperty('action');
+    });
+  });
+
+  describe('post-release comment fidelity across re-runs (regression: B1)', () => {
+    // Found by live testing. On a re-run, createTaggedReleases only sees modules that still
+    // needsRelease(). A module released solely because it was an INITIAL release has a tag afterwards,
+    // so it drops out entirely — and rendering the comment from this run's outcomes alone silently
+    // deleted it from the pull request's audit trail, degrading further on every subsequent re-run.
+    const prMarker = buildPrMarker(1);
+
+    // Released by THIS pull request on an earlier run; no longer needs a release.
+    const priorModule = createMockTerraformModule({
+      directory: '/workspace/modules/prior-module',
+      tags: ['modules/prior-module/v1.0.0'],
+      releases: [
+        {
+          id: 50,
+          title: 'modules/prior-module/v1.0.0',
+          tagName: 'modules/prior-module/v1.0.0',
+          body: `notes\n\n${prMarker}`,
+        },
+      ],
+    });
+
+    // Released by a DIFFERENT pull request; must never be attributed to this one.
+    const foreignModule = createMockTerraformModule({
+      directory: '/workspace/modules/foreign-module',
+      tags: ['modules/foreign-module/v3.0.0'],
+      releases: [
+        {
+          id: 51,
+          title: 'modules/foreign-module/v3.0.0',
+          tagName: 'modules/foreign-module/v3.0.0',
+          body: `notes\n\n${buildPrMarker(2)}`,
+        },
+      ],
+    });
+
+    beforeEach(() => {
+      context.isPrMergeEvent = true;
+      context.useMockOctokit();
+      context.set({ workspaceDir: '/workspace', baseRef: 'main', mergeCommitSha: 'merge-sha' });
+    });
+
+    it('still lists a module this pull request released earlier, even when it is no longer processed', async () => {
+      vi.mocked(parseTerraformModules).mockReturnValue([priorModule, mockTerraformModule, foreignModule]);
+      // Only mockTerraformModule is processed on this re-run; it is skipped (already released).
+      vi.mocked(createTaggedReleases).mockResolvedValue([
+        createMockReleaseOutcome(mockTerraformModule, { action: 'skipped' }),
+      ]);
+
+      await run();
+
+      const reported = vi.mocked(addPostReleaseComment).mock.calls[0][0];
+      const names = reported.map((outcome) => outcome.module.name);
+
+      expect(names).toContain('modules/prior-module');
+      expect(names).toContain('modules/test-module');
+      // A release carrying another pull request's marker must NOT be claimed.
+      expect(names).not.toContain('modules/foreign-module');
+
+      const recovered = reported.find((outcome) => outcome.module.name === 'modules/prior-module');
+      expect(recovered).toMatchObject({ action: 'skipped', releaseTag: 'modules/prior-module/v1.0.0' });
+    });
+
+    it('does not duplicate a module that was processed this run', async () => {
+      vi.mocked(parseTerraformModules).mockReturnValue([priorModule]);
+      vi.mocked(createTaggedReleases).mockResolvedValue([createMockReleaseOutcome(priorModule, { action: 'skipped' })]);
+
+      await run();
+
+      const reported = vi.mocked(addPostReleaseComment).mock.calls[0][0];
+      expect(reported.filter((outcome) => outcome.module.name === 'modules/prior-module')).toHaveLength(1);
+    });
+
+    it('reports nothing extra when no prior release carries this pull request marker', async () => {
+      vi.mocked(parseTerraformModules).mockReturnValue([foreignModule]);
+      vi.mocked(createTaggedReleases).mockResolvedValue([]);
+
+      await run();
+
+      expect(vi.mocked(addPostReleaseComment).mock.calls[0][0]).toStrictEqual([]);
+    });
+
+    it('includes the recovered module in the re-emitted outputs map', async () => {
+      vi.mocked(parseTerraformModules).mockReturnValue([priorModule]);
+      vi.spyOn(TerraformModule, 'getModulesNeedingRelease').mockReturnValue([priorModule]);
+      vi.mocked(createTaggedReleases).mockResolvedValue([]);
+
+      await run();
+
+      const calls = vi.mocked(setOutput).mock.calls.filter(([name]) => name === 'changed-modules-map');
+      const finalMap = calls.at(-1)?.[1] as Record<string, { releaseTag: string | null; action?: string }>;
+
+      // Without the fix this would be action 'none' with a null releaseTag, contradicting the release
+      // that demonstrably exists and carries this pull request's marker.
+      expect(finalMap['modules/prior-module']).toMatchObject({
+        releaseTag: 'modules/prior-module/v1.0.0',
+        action: 'skipped',
+      });
     });
   });
 });

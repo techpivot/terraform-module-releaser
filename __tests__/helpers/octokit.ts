@@ -15,10 +15,17 @@ type DeepPartial<T> = T extends object
 
 // Names of the supported endpoints across different namespaces (e.g., git, issues, pulls, repos).
 type EndpointNames = {
-  git: 'createTag' | 'deleteRef';
+  git: 'createTag' | 'deleteRef' | 'getCommit';
   issues: 'createComment' | 'deleteComment' | 'listComments' | 'updateComment';
   pulls: 'listCommits' | 'listFiles';
-  repos: 'getCommit' | 'listTags' | 'listReleases' | 'createRelease' | 'deleteRelease';
+  repos:
+    | 'getCommit'
+    | 'listTags'
+    | 'listReleases'
+    | 'createRelease'
+    | 'deleteRelease'
+    | 'compareCommitsWithBasehead'
+    | 'getContent';
   users: 'getByUsername';
 };
 
@@ -87,6 +94,14 @@ export function resetMockStore() {
           url: 'https://api.github.com/repos/techpivot/terraform-module-releaser/git/refs',
           headers: {},
         },
+        getCommit: {
+          // Backs the orphan-tag provenance check. The default carries no marker and does not match the
+          // release-commit shape, so a tag is NOT attributable unless a test stubs it that way.
+          data: { message: 'Test commit message' },
+          status: 200,
+          url: 'https://api.github.com/repos/techpivot/terraform-module-releaser/git/commits',
+          headers: {},
+        },
       },
       issues: {
         createComment: {
@@ -135,9 +150,25 @@ export function resetMockStore() {
       },
       repos: {
         getCommit: {
-          data: { files: [{ filename: 'file1.tf' }] },
+          // Used by getPullRequestCommits for its `files` list. (Orphan-tag provenance reads commit
+          // messages through the lighter Git Data API instead — see `git.getCommit` above.)
+          data: { files: [{ filename: 'file1.tf' }], commit: { message: 'Test commit message' } },
           status: 200,
           url: 'https://api.github.com/repos/techpivot/terraform-module-releaser/commits',
+          headers: {},
+        },
+        compareCommitsWithBasehead: {
+          // Default: the checkout is current, so destructive merge steps are not skipped.
+          data: { status: 'identical', ahead_by: 0, behind_by: 0 },
+          status: 200,
+          url: 'https://api.github.com/repos/techpivot/terraform-module-releaser/compare',
+          headers: {},
+        },
+        getContent: {
+          // Default: the path exists on the base ref (module was not deleted).
+          data: {},
+          status: 200,
+          url: 'https://api.github.com/repos/techpivot/terraform-module-releaser/contents',
           headers: {},
         },
         listTags: {
@@ -304,13 +335,14 @@ export function createDefaultOctokitMock(): OctokitRestApi {
   const mockOctokit = {
     rest: {
       git: {
-        deleteRef: vi.fn().mockImplementation(() => getMockResponse('git.deleteRef')),
-        createTag: vi.fn().mockImplementation(() => getMockResponse('git.createTag')),
+        deleteRef: vi.fn().mockImplementation((params) => getMockResponse('git.deleteRef', params)),
+        createTag: vi.fn().mockImplementation((params) => getMockResponse('git.createTag', params)),
+        getCommit: vi.fn().mockImplementation((params) => getMockResponse('git.getCommit', params)),
       },
       issues: {
-        createComment: vi.fn().mockImplementation(() => getMockResponse('issues.createComment')),
-        deleteComment: vi.fn().mockImplementation(() => getMockResponse('issues.deleteComment')),
-        updateComment: vi.fn().mockImplementation(() => getMockResponse('issues.updateComment')),
+        createComment: vi.fn().mockImplementation((params) => getMockResponse('issues.createComment', params)),
+        deleteComment: vi.fn().mockImplementation((params) => getMockResponse('issues.deleteComment', params)),
+        updateComment: vi.fn().mockImplementation((params) => getMockResponse('issues.updateComment', params)),
         listComments: createPaginatedMockImplementation('issues.listComments', '/issues/comments'),
       },
       pulls: {
@@ -321,8 +353,12 @@ export function createDefaultOctokitMock(): OctokitRestApi {
         getCommit: vi.fn().mockImplementation((params) => getMockResponse('repos.getCommit', params)),
         listTags: createPaginatedMockImplementation('repos.listTags', '/tags'),
         listReleases: createPaginatedMockImplementation('repos.listReleases', '/releases'),
-        createRelease: vi.fn().mockImplementation(() => getMockResponse('repos.createRelease')),
-        deleteRelease: vi.fn().mockImplementation(() => getMockResponse('repos.deleteRelease')),
+        createRelease: vi.fn().mockImplementation((params) => getMockResponse('repos.createRelease', params)),
+        deleteRelease: vi.fn().mockImplementation((params) => getMockResponse('repos.deleteRelease', params)),
+        compareCommitsWithBasehead: vi
+          .fn()
+          .mockImplementation((params) => getMockResponse('repos.compareCommitsWithBasehead', params)),
+        getContent: vi.fn().mockImplementation((params) => getMockResponse('repos.getContent', params)),
       },
       users: {
         getByUsername: vi.fn().mockImplementation((params) => getMockResponse('users.getByUsername', params)),

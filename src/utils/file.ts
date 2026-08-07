@@ -44,13 +44,9 @@ export function findModuleTerraformDocsConfig(moduleDirectory: string, workspace
       break;
     }
 
-    // Move to parent directory, but don't go above workspace root
-    const parentDir = dirname(currentDir);
-    /* c8 ignore next 3 -- unreachable: isWithinWorkspace guarantees resolvedWorkspaceDir is traversed before filesystem root */
-    if (parentDir === currentDir) {
-      break;
-    }
-    currentDir = parentDir;
+    // Move to the parent directory. The loop always breaks at the workspace root above (guaranteed by
+    // the isWithinWorkspace check), so we never need a filesystem-root guard and never walk past it.
+    currentDir = dirname(currentDir);
   }
 
   return null;

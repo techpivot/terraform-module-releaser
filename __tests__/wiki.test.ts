@@ -11,7 +11,14 @@ import type { ExecSyncError } from '@/types';
 import { WIKI_STATUS } from '@/utils/constants';
 import { removeDirectoryContents } from '@/utils/file';
 
-import { checkoutWiki, commitAndPushWikiChanges, generateWikiFiles, getWikiLink, getWikiStatus } from '@/wiki';
+import {
+  checkoutWiki,
+  commitAndPushWikiChanges,
+  generateWikiFiles,
+  getWikiLink,
+  getWikiStatus,
+  isWikiCheckFailure,
+} from '@/wiki';
 import { endGroup, info, startGroup } from '@actions/core';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -64,6 +71,19 @@ describe('wiki', async () => {
       },
     ],
   );
+
+  describe('isWikiCheckFailure()', () => {
+    it('returns true for every FAILURE_* status', () => {
+      expect(isWikiCheckFailure(WIKI_STATUS.FAILURE_CHECKOUT)).toBe(true);
+      expect(isWikiCheckFailure(WIKI_STATUS.FAILURE_TERRAFORM_DOCS_INSTALL)).toBe(true);
+      expect(isWikiCheckFailure(WIKI_STATUS.FAILURE_TERRAFORM_DOCS_RUN)).toBe(true);
+    });
+
+    it('returns false for non-failure statuses', () => {
+      expect(isWikiCheckFailure(WIKI_STATUS.SUCCESS)).toBe(false);
+      expect(isWikiCheckFailure(WIKI_STATUS.DISABLED)).toBe(false);
+    });
+  });
 
   beforeEach(() => {
     tmpDir = mkdtempSync(join(tmpdir(), 'wiki-test-'));

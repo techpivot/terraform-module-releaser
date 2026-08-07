@@ -46,6 +46,8 @@ function isPullRequestEvent(payload: unknown): payload is PullRequestEvent {
     typeof (payload as PullRequestEvent).pull_request.title === 'string' &&
     ((payload as PullRequestEvent).pull_request.body === null ||
       typeof (payload as PullRequestEvent).pull_request.body === 'string') &&
+    typeof (payload as PullRequestEvent).pull_request.base === 'object' &&
+    typeof (payload as PullRequestEvent).pull_request.base.ref === 'string' &&
     'repository' in payload &&
     typeof (payload as PullRequestEvent).repository === 'object' &&
     typeof (payload as PullRequestEvent).repository.full_name === 'string'
@@ -134,6 +136,8 @@ function initializeContext(): Context {
       prBody: payload.pull_request.body ?? '',
       issueNumber: payload.pull_request.number,
       workspaceDir,
+      baseRef: payload.pull_request.base.ref,
+      mergeCommitSha: payload.pull_request.merge_commit_sha ?? null,
       isPrMergeEvent: payload.action === 'closed' && payload.pull_request.merged === true,
     };
 
@@ -150,6 +154,8 @@ function initializeContext(): Context {
     info(`Pull Request Body: ${truncatedBody}`);
     info(`Issue Number: ${contextInstance.issueNumber}`);
     info(`Workspace Directory: ${contextInstance.workspaceDir}`);
+    info(`Base Ref: ${contextInstance.baseRef}`);
+    info(`Merge Commit SHA: ${contextInstance.mergeCommitSha ?? '(none)'}`);
     info(`Is Pull Request Merge Event: ${contextInstance.isPrMergeEvent}`);
 
     return contextInstance;
