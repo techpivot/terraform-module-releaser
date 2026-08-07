@@ -474,14 +474,14 @@ jobs:
 
 The following outputs are available from this action:
 
-| Output                 | Type     | Description                                                                                                |
-| ---------------------- | -------- | ---------------------------------------------------------------------------------------------------------- |
-| `changed-module-names` | `string` | JSON array of module names that were changed in the current pull request                                   |
-| `changed-module-paths` | `string` | JSON array of file system paths to the modules that were changed                                           |
-| `changed-modules-map`  | `string` | JSON object mapping module names to their change details including current tag, next tag, and release type |
-| `all-module-names`     | `string` | JSON array of all module names found in the repository                                                     |
-| `all-module-paths`     | `string` | JSON array of file system paths to all modules in the repository                                           |
-| `all-modules-map`      | `string` | JSON object mapping all module names to their details including path, latest tag, and latest tag version   |
+| Output                 | Type     | Description                                                                                                                                  |
+| ---------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `changed-module-names` | `string` | JSON array of module names that were changed in the current pull request                                                                     |
+| `changed-module-paths` | `string` | JSON array of file system paths to the modules that were changed                                                                             |
+| `changed-modules-map`  | `string` | JSON object mapping module names to their change details including current tag, release tag, release type, and (on merge) the `action` taken |
+| `all-module-names`     | `string` | JSON array of all module names found in the repository                                                                                       |
+| `all-module-paths`     | `string` | JSON array of file system paths to all modules in the repository                                                                             |
+| `all-modules-map`      | `string` | JSON object mapping all module names to their details including path, latest tag, and latest tag version                                     |
 
 ### Example Output Structure
 
@@ -494,7 +494,8 @@ The following outputs are available from this action:
       "path": "modules/aws/vpc",
       "latestTag": "aws/vpc/v1.0.0",
       "releaseTag": "aws/vpc/v1.1.0",
-      "releaseType": "minor"
+      "releaseType": "minor",
+      "action": "created"
     }
   },
   "all-module-names": ["aws/s3", "aws/vpc"],
@@ -518,8 +519,34 @@ The following outputs are available from this action:
 ```
 
 > **Note**: When using outputs during the `closed` event, the `changed-modules-map` output will show `latestTag` as the
-> previous release version, while `releaseTag` and `releaseType` reflect the new release that was just created. To
-> reference the newly published version, use the value of `releaseTag`.
+> previous release version, while `releaseTag` reflects the tag that this pull request's release actually resolved to.
+> To reference the newly published version, use the value of `releaseTag`.
+
+#### The `action` field (`closed` event only)
+
+Releases are idempotent and self-healing, so a merge re-run does not always create a new version — it may find the
+module already released, or recover a release onto an existing tag. Each `changed-modules-map` entry therefore carries
+an `action` field on the `closed` event, and `releaseTag` always names a tag that **actually exists**:
+
+| `action`    | Meaning                                                                       | `releaseTag`     |
+| ----------- | ----------------------------------------------------------------------------- | ---------------- |
+| `created`   | A new version was bumped, tagged, and released.                               | the new tag      |
+| `recovered` | A missing release was created for a tag this pull request had already pushed. | the existing tag |
+| `skipped`   | This pull request had already released this module; nothing was created.      | the existing tag |
+| `none`      | Nothing was released for this module on this run.                             | `null`           |
+
+Branch on `action` before treating `releaseTag` as a newly published release — for example, to avoid re-publishing to a
+registry on a workflow re-run:
+
+```yaml
+- name: Publish newly released modules
+  run: |
+    echo '${{ steps.release.outputs.changed-modules-map }}' \
+      | jq -r 'to_entries[] | select(.value.action == "created") | .value.releaseTag'
+```
+
+> The `action` field is only present on the `closed` (merge) event. On `opened`/`synchronize` runs, `releaseTag` remains
+> the version that _would_ be created.
 
 ## Terraform Docs Configuration
 

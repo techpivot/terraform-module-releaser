@@ -1,113 +1,84 @@
 import { config } from '@/mocks/config';
 import { context } from '@/mocks/context';
-import { addPostReleaseComment, addReleasePlanComment, getPullRequestCommits, hasReleaseComment } from '@/pull-request';
+import {
+  addPostReleaseComment,
+  addReleasePlanComment,
+  getPullRequestCommits,
+  hasLegacyPostReleaseComment,
+} from '@/pull-request';
 import type { TerraformModule } from '@/terraform-module';
 import { stubOctokitImplementation, stubOctokitReturnData } from '@/tests/helpers/octokit';
-import { createMockTerraformModule } from '@/tests/helpers/terraform-module';
-import type { GitHubRelease } from '@/types';
-import { BRANDING_COMMENT, PR_RELEASE_MARKER, PR_SUMMARY_MARKER, WIKI_STATUS } from '@/utils/constants';
+import { createMockReleaseOutcome, createMockTerraformModule } from '@/tests/helpers/terraform-module';
+import type { GitHubRelease, ReleaseOutcome } from '@/types';
+import {
+  BRANDING_COMMENT,
+  LEGACY_PR_RELEASE_COMMENT_MARKER,
+  PR_RELEASE_COMMENT_MARKER,
+  PR_SUMMARY_MARKER,
+  WIKI_STATUS,
+} from '@/utils/constants';
 import { debug, endGroup, info, startGroup, warning } from '@actions/core';
 import { RequestError } from '@octokit/request-error';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 describe('pull-request', () => {
-  describe('hasReleaseComment() - real API queries', () => {
-    beforeAll(async () => {
-      if (!process.env.GITHUB_TOKEN) {
-        throw new Error('GITHUB_TOKEN environment variable must be set for these tests');
-      }
-      await context.useRealOctokit();
-    });
-
-    it('should return false for PR #111 (no release comment)', async () => {
-      context.set({ prNumber: 111, issueNumber: 111 });
-      expect(await hasReleaseComment()).toBe(false);
-    });
-
-    it('should return true for PR #8 (release comment)', async () => {
-      context.set({ repo: { owner: 'techpivot', repo: 'terraform-modules-demo' }, prNumber: 8, issueNumber: 8 });
-      expect(await hasReleaseComment()).toBe(true);
-    });
-
-    it('should return false for PR #1 (release comment - non github-actions)', async () => {
-      context.set({ repo: { owner: 'techpivot', repo: 'terraform-modules-demo' }, prNumber: 1, issueNumber: 1 });
-      expect(await hasReleaseComment()).toBe(false);
-    });
-
-    it('should handle 401 error gracefully', async () => {
-      // Temporarily clear token to force 401
-      vi.stubEnv('GITHUB_TOKEN', '');
-      await context.useRealOctokit(); // Initializes a new Octokit using the empty GITHUB_TOKEN
-      await expect(hasReleaseComment()).rejects.toThrow(
-        'Error checking PR comments: Bad credentials - https://docs.github.com/rest',
-      );
-    });
-  });
-
-  describe('hasReleaseComment()', () => {
-    beforeAll(() => {
+  describe('hasLegacyPostReleaseComment()', () => {
+    beforeEach(() => {
       context.useMockOctokit();
     });
 
-    it('should return true when release marker is found in comments', async () => {
+    it('returns true when a legacy (pre-marker-scheme) release comment is present', async () => {
       stubOctokitReturnData('issues.listComments', {
         data: [
-          { user: { id: 123 }, body: 'Some comment' },
-          { user: { id: 123 }, body: PR_RELEASE_MARKER },
-          { user: { id: 123 }, body: 'Another comment' },
+          { id: 1, body: 'Some comment' },
+          { id: 2, body: `${LEGACY_PR_RELEASE_COMMENT_MARKER}\nThe following modules have been released:` },
         ],
       });
-      expect(await hasReleaseComment()).toBe(true);
+      expect(await hasLegacyPostReleaseComment()).toBe(true);
     });
 
-    it('should return false when no release marker is found', async () => {
+    it('returns false when only the current (versioned) release marker is present', async () => {
       stubOctokitReturnData('issues.listComments', {
-        data: [
-          { user: { id: 4444 }, body: 'Some comment' },
-          { user: { id: 234234 }, body: 'Another comment' },
-        ],
+        data: [{ id: 1, body: `${PR_RELEASE_COMMENT_MARKER}\nThe following modules have been released:` }],
       });
-      expect(await hasReleaseComment()).toBe(false);
+      expect(await hasLegacyPostReleaseComment()).toBe(false);
     });
 
-    it('should handle empty comments array', async () => {
+    it('returns false when there are no release comments', async () => {
       stubOctokitReturnData('issues.listComments', { data: [] });
-      expect(await hasReleaseComment()).toBe(false);
+      expect(await hasLegacyPostReleaseComment()).toBe(false);
     });
 
-    it('should handle 403 errors', async () => {
-      const errorMessage = 'Permissions error testing';
+    it('fails closed (throws) when listing comments fails', async () => {
+      // A transient failure must never be reported as "not legacy": that is indistinguishable from a
+      // genuine absence and would let a legacy pull request over-bump and double-release. Failing is
+      // cheap because the re-run is idempotent.
       vi.mocked(context.octokit.rest.issues.listComments).mockRejectedValueOnce(
-        new RequestError(errorMessage, 403, {
+        new RequestError('boom', 500, {
+          request: { method: 'GET', url: '', headers: {} },
+          response: { status: 500, url: '', headers: {}, data: {} },
+        }),
+      );
+      await expect(hasLegacyPostReleaseComment()).rejects.toThrow('Failed to check for a legacy release comment: boom');
+
+      // Non-Error branch (String(error))
+      vi.mocked(context.octokit.rest.issues.listComments).mockRejectedValueOnce('string failure');
+      await expect(hasLegacyPostReleaseComment()).rejects.toThrow(
+        'Failed to check for a legacy release comment: string failure',
+      );
+    });
+
+    it('wraps a 403 with actionable permissions remediation', async () => {
+      vi.mocked(context.octokit.rest.issues.listComments).mockRejectedValueOnce(
+        new RequestError('Resource not accessible by integration', 403, {
           request: { method: 'GET', url: '', headers: {} },
           response: { status: 403, url: '', headers: {}, data: {} },
         }),
       );
-      await expect(hasReleaseComment()).rejects.toThrow(
-        `Unable to read and write pull requests due to insufficient permissions. Ensure the workflow permissions.pull-requests is set to "write".\n${errorMessage}`,
+
+      await expect(hasLegacyPostReleaseComment()).rejects.toThrow(
+        'Unable to read and write pull requests due to insufficient permissions',
       );
-    });
-
-    it('should handle request errors', async () => {
-      const errorMessage = 'Generic error testing';
-
-      vi.mocked(context.octokit.rest.issues.listComments).mockRejectedValueOnce(
-        new RequestError(errorMessage, 410, {
-          request: { method: 'GET', url: '', headers: {} },
-          response: { status: 410, url: '', headers: {}, data: {} },
-        }),
-      );
-      await expect(hasReleaseComment()).rejects.toThrow(`Error checking PR comments: ${errorMessage}`);
-
-      vi.mocked(context.octokit.rest.issues.listComments).mockRejectedValueOnce(errorMessage);
-
-      try {
-        await hasReleaseComment();
-      } catch (error) {
-        expect(error instanceof Error).toBe(true);
-        expect((error as Error).message).toBe(`Error checking PR comments: ${errorMessage}`);
-        expect((error as Error).cause).toBe(errorMessage);
-      }
     });
   });
 
@@ -1043,6 +1014,8 @@ describe('pull-request', () => {
       }),
     ];
 
+    const releasedOutcomes: ReleaseOutcome[] = releasedModules.map((module) => createMockReleaseOutcome(module));
+
     beforeEach(() => {
       context.useMockOctokit();
       vi.clearAllMocks();
@@ -1060,11 +1033,11 @@ describe('pull-request', () => {
         data: { id: 1, html_url: 'https://github.com/org/repo/pull/1#issuecomment-1' },
       });
 
-      await addPostReleaseComment(releasedModules);
+      await addPostReleaseComment(releasedOutcomes);
 
       expect(context.octokit.rest.issues.createComment).toHaveBeenCalledWith(
         expect.objectContaining({
-          body: expect.stringContaining(PR_RELEASE_MARKER),
+          body: expect.stringContaining(PR_RELEASE_COMMENT_MARKER),
         }),
       );
       expect(context.octokit.rest.issues.createComment).toHaveBeenCalledWith(
@@ -1085,7 +1058,7 @@ describe('pull-request', () => {
         data: { id: 1, html_url: 'https://github.com/org/repo/pull/1#issuecomment-1' },
       });
 
-      await addPostReleaseComment(releasedModules);
+      await addPostReleaseComment(releasedOutcomes);
 
       expect(context.octokit.rest.issues.createComment).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -1100,7 +1073,7 @@ describe('pull-request', () => {
         data: { id: 1, html_url: 'https://github.com/org/repo/pull/1#issuecomment-1' },
       });
 
-      await addPostReleaseComment(releasedModules);
+      await addPostReleaseComment(releasedOutcomes);
 
       expect(context.octokit.rest.issues.createComment).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -1115,7 +1088,7 @@ describe('pull-request', () => {
         data: { id: 1, html_url: 'https://github.com/org/repo/pull/1#issuecomment-1' },
       });
 
-      await addPostReleaseComment(releasedModules);
+      await addPostReleaseComment(releasedOutcomes);
 
       expect(context.octokit.rest.issues.createComment).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -1130,7 +1103,7 @@ describe('pull-request', () => {
         data: { id: 1, html_url: 'https://github.com/org/repo/pull/1#issuecomment-1' },
       });
 
-      await addPostReleaseComment(releasedModules);
+      await addPostReleaseComment(releasedOutcomes);
 
       expect(context.octokit.rest.issues.createComment).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -1148,7 +1121,7 @@ describe('pull-request', () => {
         }),
       );
 
-      await expect(addPostReleaseComment(releasedModules)).rejects.toThrow(
+      await expect(addPostReleaseComment(releasedOutcomes)).rejects.toThrow(
         'Failed to create a comment on the pull request',
       );
     });
@@ -1162,7 +1135,7 @@ describe('pull-request', () => {
       });
 
       try {
-        await addPostReleaseComment(releasedModules);
+        await addPostReleaseComment(releasedOutcomes);
       } catch (error) {
         expect(error instanceof Error).toBe(true);
         expect((error as Error).message).toBe(expectedErrorString);
@@ -1174,12 +1147,217 @@ describe('pull-request', () => {
       });
 
       try {
-        await addPostReleaseComment(releasedModules);
+        await addPostReleaseComment(releasedOutcomes);
       } catch (error) {
         expect(error instanceof Error).toBe(true);
         expect((error as Error).message).toBe(expectedErrorString);
         expect((error as Error).cause instanceof RequestError).toBe(false);
       }
+    });
+
+    it('updates the existing post-release comment in place on a re-run instead of creating a duplicate', async () => {
+      config.set({ disableWiki: false, disableBranding: false });
+      stubOctokitReturnData('issues.listComments', {
+        data: [{ id: 77, body: `${PR_RELEASE_COMMENT_MARKER}\nstale body` }],
+      });
+
+      await addPostReleaseComment(releasedOutcomes);
+
+      expect(context.octokit.rest.issues.updateComment).toHaveBeenCalledWith(
+        expect.objectContaining({ comment_id: 77, body: expect.stringContaining(PR_RELEASE_COMMENT_MARKER) }),
+      );
+      expect(context.octokit.rest.issues.createComment).not.toHaveBeenCalled();
+    });
+
+    it('is a no-op (no create, no edit) when the existing comment already matches', async () => {
+      config.set({ disableWiki: false, disableBranding: false });
+
+      // First run creates the comment; capture the exact body it produced.
+      stubOctokitReturnData('issues.createComment', { data: { id: 100, html_url: 'https://x/#100' } });
+      await addPostReleaseComment(releasedOutcomes);
+      const createdBody = vi.mocked(context.octokit.rest.issues.createComment).mock.calls[0][0]?.body ?? '';
+
+      // Re-run with an identical existing comment -> nothing to do.
+      stubOctokitReturnData('issues.listComments', { data: [{ id: 100, body: createdBody }] });
+      vi.mocked(context.octokit.rest.issues.createComment).mockClear();
+      vi.mocked(context.octokit.rest.issues.updateComment).mockClear();
+
+      await addPostReleaseComment(releasedOutcomes);
+
+      expect(context.octokit.rest.issues.createComment).not.toHaveBeenCalled();
+      expect(context.octokit.rest.issues.updateComment).not.toHaveBeenCalled();
+    });
+
+    it('consolidates duplicate post-release comments, updating the most recent and deleting the rest', async () => {
+      config.set({ disableWiki: false, disableBranding: false });
+      stubOctokitReturnData('issues.listComments', {
+        data: [
+          { id: 5, body: `${PR_RELEASE_COMMENT_MARKER}\nfirst` },
+          { id: 9, body: `${PR_RELEASE_COMMENT_MARKER}\nsecond` },
+        ],
+      });
+
+      await addPostReleaseComment(releasedOutcomes);
+
+      expect(context.octokit.rest.issues.updateComment).toHaveBeenCalledWith(
+        expect.objectContaining({ comment_id: 9 }),
+      );
+      expect(context.octokit.rest.issues.deleteComment).toHaveBeenCalledWith(
+        expect.objectContaining({ comment_id: 5 }),
+      );
+      expect(context.octokit.rest.issues.createComment).not.toHaveBeenCalled();
+    });
+
+    it('warns and continues when deleting a duplicate post-release comment fails', async () => {
+      config.set({ disableWiki: false, disableBranding: false });
+      stubOctokitReturnData('issues.listComments', {
+        data: [
+          { id: 5, body: `${PR_RELEASE_COMMENT_MARKER}\nfirst` },
+          { id: 9, body: `${PR_RELEASE_COMMENT_MARKER}\nsecond` },
+        ],
+      });
+      // Error branch (error.message): deletion failure during consolidation is best-effort and must not fail the merge.
+      vi.mocked(context.octokit.rest.issues.deleteComment).mockRejectedValueOnce(
+        new RequestError('delete boom', 500, {
+          request: { method: 'GET', url: '', headers: {} },
+          response: { status: 500, url: '', headers: {}, data: {} },
+        }),
+      );
+      await expect(addPostReleaseComment(releasedOutcomes)).resolves.toBeUndefined();
+
+      // Non-Error branch (String(error)).
+      vi.mocked(context.octokit.rest.issues.deleteComment).mockRejectedValueOnce('delete failure string');
+      await expect(addPostReleaseComment(releasedOutcomes)).resolves.toBeUndefined();
+
+      expect(context.octokit.rest.issues.updateComment).toHaveBeenCalledWith(
+        expect.objectContaining({ comment_id: 9 }),
+      );
+      expect(context.octokit.rest.issues.deleteComment).toHaveBeenCalledWith(
+        expect.objectContaining({ comment_id: 5 }),
+      );
+      expect(warning).toHaveBeenCalled();
+    });
+
+    it('reports the release attributed to THIS pull request, not the module’s highest release', async () => {
+      // A later pull request has since bumped this module to v1.2.0. Reporting `releases[0]` would
+      // rewrite this pull request's own comment to cite that other release — and would keep doing so on
+      // every re-run, because the body would never converge.
+      const module = createMockTerraformModule({
+        directory: '/module-shared',
+        releases: [
+          { id: 22, title: 'module-shared/v1.2.0', body: 'other PR notes', tagName: 'module-shared/v1.2.0' },
+          { id: 11, title: 'module-shared/v1.1.0', body: 'our notes', tagName: 'module-shared/v1.1.0' },
+        ],
+      });
+      // Sanity check: the module's highest release really is the other pull request's.
+      expect(module.releases[0].tagName).toBe('module-shared/v1.2.0');
+
+      stubOctokitReturnData('issues.createComment', { data: { id: 1, html_url: 'https://x/#1' } });
+
+      await addPostReleaseComment([
+        createMockReleaseOutcome(module, {
+          action: 'skipped',
+          release: { id: 11, title: 'module-shared/v1.1.0', body: 'our notes', tagName: 'module-shared/v1.1.0' },
+        }),
+      ]);
+
+      const body = vi.mocked(context.octokit.rest.issues.createComment).mock.calls[0][0]?.body ?? '';
+      expect(body).toContain('module-shared/v1.1.0');
+      expect(body).not.toContain('module-shared/v1.2.0');
+    });
+
+    it('falls back to creating a comment (and warns) when listing existing comments fails', async () => {
+      stubOctokitReturnData('issues.createComment', { data: { id: 1, html_url: 'https://x/#1' } });
+
+      // Error branch (error.message)
+      vi.mocked(context.octokit.rest.issues.listComments).mockRejectedValueOnce(
+        new RequestError('list boom', 500, {
+          request: { method: 'GET', url: '', headers: {} },
+          response: { status: 500, url: '', headers: {}, data: {} },
+        }),
+      );
+      await addPostReleaseComment(releasedOutcomes);
+
+      // Non-Error branch (String(error))
+      vi.mocked(context.octokit.rest.issues.listComments).mockRejectedValueOnce('list failure string');
+      await addPostReleaseComment(releasedOutcomes);
+
+      expect(warning).toHaveBeenCalled();
+      expect(context.octokit.rest.issues.createComment).toHaveBeenCalled();
+    });
+  });
+
+  describe('pull request comment pagination', () => {
+    beforeEach(() => {
+      context.useMockOctokit();
+      vi.clearAllMocks();
+    });
+
+    /** Builds `count` filler comments with an optional marked comment injected at `markedIndex`. */
+    const buildComments = (count: number, markedIndex: number, marker: string) =>
+      Array.from({ length: count }, (_, i) => ({
+        id: i + 1,
+        node_id: `node-${i + 1}`,
+        body: i === markedIndex ? `${marker}\nmarked` : `filler comment ${i + 1}`,
+        created_at: '2026-01-01T00:00:00Z',
+      }));
+
+    it('requests 100 comments per page rather than the API default of 30', async () => {
+      stubOctokitReturnData('issues.listComments', { data: buildComments(5, 0, LEGACY_PR_RELEASE_COMMENT_MARKER) });
+
+      await hasLegacyPostReleaseComment();
+
+      expect(context.octokit.rest.issues.listComments).toHaveBeenCalledWith(expect.objectContaining({ per_page: 100 }));
+    });
+
+    it('tolerates comments with a null body', async () => {
+      // The REST API returns `body: null` for some comments (e.g. those with only an attachment). The
+      // generated Octokit types model it as `string | undefined`, so the cast is needed to reproduce
+      // what the API actually sends.
+      stubOctokitReturnData('issues.listComments', {
+        data: [
+          { id: 1, node_id: 'n1', body: null as unknown as string, created_at: '2026-01-01T00:00:00Z' },
+          { id: 2, node_id: 'n2', body: LEGACY_PR_RELEASE_COMMENT_MARKER, created_at: '2026-01-01T00:00:00Z' },
+        ],
+      });
+
+      await expect(hasLegacyPostReleaseComment()).resolves.toBe(true);
+    });
+
+    it('finds a legacy marker that lives beyond the first page', async () => {
+      // 250 comments: the legacy marker sits on page 3. An unpaginated read would miss it and the
+      // legacy pull request would double-release.
+      stubOctokitReturnData('issues.listComments', { data: buildComments(250, 240, LEGACY_PR_RELEASE_COMMENT_MARKER) });
+
+      await expect(hasLegacyPostReleaseComment()).resolves.toBe(true);
+    });
+
+    it('prunes an older release plan comment that lives beyond the first page', async () => {
+      // Regression: addReleasePlanComment used to read only the first page, so on a busy pull request
+      // stale Release Plan comments accumulated forever.
+      stubOctokitReturnData('issues.listComments', { data: buildComments(150, 10, PR_SUMMARY_MARKER) });
+      stubOctokitReturnData('issues.createComment', {
+        data: { id: 9999, html_url: 'https://x/#9999' },
+      });
+
+      await addReleasePlanComment([], [], [], { status: WIKI_STATUS.SUCCESS });
+
+      expect(context.octokit.rest.issues.deleteComment).toHaveBeenCalledWith(
+        expect.objectContaining({ comment_id: 11 }),
+      );
+    });
+
+    it('minimizes an existing release plan comment found beyond the first page', async () => {
+      config.set({ hideNoChangesPrComment: true });
+      stubOctokitReturnData('issues.listComments', { data: buildComments(150, 120, PR_SUMMARY_MARKER) });
+
+      await addReleasePlanComment([], [], [], { status: WIKI_STATUS.SUCCESS });
+
+      expect(context.octokit.rest.issues.updateComment).toHaveBeenCalledWith(
+        expect.objectContaining({ comment_id: 121 }),
+      );
+      expect(context.octokit.graphql).toHaveBeenCalledWith(expect.anything(), { id: 'node-121' });
+      expect(context.octokit.rest.issues.createComment).not.toHaveBeenCalled();
     });
   });
 });

@@ -51,6 +51,18 @@ export interface Context {
   workspaceDir: string;
 
   /**
+   * The branch this pull request targets (e.g. `main`). Used to determine whether the checked-out tree
+   * is still current before performing destructive merge steps.
+   */
+  baseRef: string;
+
+  /**
+   * The merge commit created when this pull request was merged, or `null` when the pull request is not
+   * merged (or GitHub has not yet computed it).
+   */
+  mergeCommitSha: string | null;
+
+  /**
    * Flag to indicate if the current event is a pull request merge event.
    */
   isPrMergeEvent: boolean;

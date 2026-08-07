@@ -253,7 +253,21 @@ export class TerraformModule {
       return null;
     }
 
-    const match = MODULE_TAG_REGEX.exec(latestTag);
+    return TerraformModule.getVersionFromTag(latestTag);
+  }
+
+  /**
+   * Extracts the version portion of a module tag, preserving any version prefix (such as "v").
+   *
+   * Static because the orphan-tag recovery path in `createTaggedReleases` needs the version of an
+   * arbitrary existing tag, not only the module's latest one.
+   *
+   * @param {string} tag - A module tag (e.g. `aws/vpc/v1.2.3`).
+   * @returns {string | null} The version including any prefix (e.g. `v1.2.3`), or null if the tag does
+   *  not match the expected module tag format.
+   */
+  public static getVersionFromTag(tag: string): string | null {
+    const match = MODULE_TAG_REGEX.exec(tag);
 
     return match ? match[3] : null;
   }

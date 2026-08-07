@@ -13,15 +13,16 @@ repo's branching model and mix unrelated module histories together.
 
 ## Key Files
 
-| File                      | Role                                                                   |
-| ------------------------- | ---------------------------------------------------------------------- |
-| `src/releases.ts`         | `createTaggedReleases()` — the main release engine                     |
-| `src/tags.ts`             | `getAllTags()`, `deleteTags()` — read/clean operations                 |
-| `src/terraform-module.ts` | `TerraformModule` domain model, computes next tag/version              |
-| `src/utils/github.ts`     | `configureGitAuthentication()`, `getGitHubActionsBotEmail()`           |
-| `src/utils/constants.ts`  | `GITHUB_ACTIONS_BOT_NAME`, `MODULE_TAG_REGEX`, tag separator constants |
-| `src/utils/file.ts`       | `copyModuleContents()` — excludes patterns before release commit       |
-| `src/changelog.ts`        | `createTerraformModuleChangelog()` — release body generation           |
+| File                      | Role                                                                       |
+| ------------------------- | -------------------------------------------------------------------------- |
+| `src/releases.ts`         | `createTaggedReleases()` — the main release engine                         |
+| `src/tags.ts`             | `getAllTags()`, `deleteTags()` — read/clean operations                     |
+| `src/terraform-module.ts` | `TerraformModule` domain model, computes next tag/version                  |
+| `src/utils/github.ts`     | `configureGitAuthentication()`, `getGitHubActionsBotEmail()`               |
+| `src/utils/constants.ts`  | `GITHUB_ACTIONS_BOT_NAME`, `MODULE_TAG_REGEX`, tag separator constants     |
+| `src/utils/file.ts`       | `copyModuleContents()` — excludes patterns before release commit           |
+| `src/changelog.ts`        | `createTerraformModuleChangelog()` — release body generation               |
+| `src/utils/markers.ts`    | `buildPrMarker()` / `matchesPrMarker()` — release + commit idempotency tie |
 
 ## Tag Naming Convention
 
@@ -57,7 +58,24 @@ The regular expression used is `MODULE_TAG_REGEX`:
 
 ## Release Creation Flow (`createTaggedReleases`)
 
-For each module that `needsRelease()` returns `true`, the action:
+Before the per-module loop, a **legacy gate** runs: if the pull request was completed under a pre-marker version of the
+action (its post-release comment uses `LEGACY_PR_RELEASE_COMMENT_MARKER`) and no release carries the current marker, the
+function returns without releasing, preserving the old "don't double-release" behavior. Otherwise, for each module that
+`needsRelease()` returns `true`, the action converges to the correct state:
+
+- **Step 1 — already released for this PR?** A release body carries this PR's marker → skip (no bump, no create).
+- **Step 1b — latest tag is ours and already released?** The tag's release commit carries this PR's marker but the
+  release body no longer does (edited or regenerated notes) → skip.
+- **Step 2 — orphan tag that is ours?** Searching tags without releases newest-first, the first one provably this PR's →
+  recreate the release for that existing tag, no bump. Bounded by `MAX_ORPHAN_TAG_LOOKUPS`.
+- **Step 3 — otherwise** → live-bump and perform the full release described below.
+
+A tag that cannot be attributed to this pull request — one pushed by hand, predating adoption of this action, or left
+behind by a different pull request that crashed after pushing — is **never** adopted. The run warns, bumps past it, and
+leaves it for its owning pull request's re-run to heal.
+
+The steps below detail **Step 3** (the bump path). See [state-management.md](state-management.md) for the full
+idempotency/self-heal model. For each module released via Step 3, the action:
 
 1. **Creates a temporary directory** (`mkdtempSync`) named after the module.
 2. **Copies module files** into the temp dir using `copyModuleContents()`, respecting `module-asset-exclude-patterns`.
@@ -71,14 +89,15 @@ For each module that `needsRelease()` returns `true`, the action:
    git config --local user.name  "GitHub Actions"
    git config --local user.email "<id>+github-actions[bot]@users.noreply.github.com"
    git add .
-   git commit -m "<releaseTag>\n\n<prTitle>\n\n<prBody>"
+   git commit -m "<releaseTag>\n\n<prTitle>\n\n<prBody>\n\n<hidden PR marker>"
    git tag <releaseTag>
    git push origin <releaseTag>
    ```
 7. **Reads the commit SHA** via `git rev-parse HEAD` immediately after the push (the GitHub API for `createRelease` does
    not return the underlying commit SHA).
 8. **Creates a GitHub Release** via `octokit.rest.repos.createRelease()` using the tag name and a fully rendered
-   changelog body.
+   changelog body **with the hidden PR marker appended** (`buildPrMarker`), so subsequent re-runs detect that this
+   module was already released for this pull request.
 9. **Updates the in-memory `TerraformModule`** with the new release and tag objects, then calls `clearCommits()` to
    prevent re-releasing the same module in the same run.
 
@@ -169,9 +188,19 @@ numeric user ID, making this compatible with any GitHub server.
 - Releases are created **sequentially** (one module at a time) to avoid concurrent `git push` and GitHub API calls
   across modules. Each module gets its own temp dir and `.git` copy, but running releases in parallel would increase the
   risk of API rate limiting and add significant error-handling complexity with no meaningful throughput benefit.
-- **Idempotency on re-runs**: If the workflow re-runs after a partial success, the action checks for a hidden HTML
-  marker in the PR's release comment (`PR_RELEASE_MARKER`) via `hasReleaseComment()`. If the marker exists in any
-  comment, the entire merge handler exits early to avoid duplicate releases.
+- **Idempotency and self-healing on re-runs**: `createTaggedReleases()` is idempotent and self-healing **per module**.
+  Each release we create embeds a hidden, schema-versioned marker tying it to the pull request — in both the release
+  **body** and the release **commit message** (see `src/utils/markers.ts`). On a re-run the function skips modules
+  already released for this PR, recreates a deleted release for an orphan tag **it can prove it created**, and otherwise
+  live-bumps — so re-runs converge instead of over-bumping or double-releasing. There is **no blind early-exit for
+  releases**; a legacy gate preserves the old "don't double-release" behavior for pull requests released by pre-marker
+  versions of the action.
+- **Destructive steps are gated on checkout freshness**: obsolete tag/release cleanup and wiki regeneration derive their
+  "what should exist" set from the checked-out tree while comparing it against live tags, releases, and wiki pages. On a
+  re-run of an older merged pull request that tree is stale, so both steps are skipped (with a warning) when the base
+  branch has advanced past the pull request's merge commit. See `src/utils/freshness.ts`.
+- See [state-management.md](state-management.md) for the full model, the provenance rules, the
+  backward/forward-compatibility contract, and the concurrency analysis.
 
 ## Relationship to `TerraformModule`
 
@@ -186,11 +215,12 @@ immediately, without re-fetching from the API.
 
 ## Relevant Tests
 
-| Test file                            | Coverage focus                                                                          |
-| ------------------------------------ | --------------------------------------------------------------------------------------- |
-| `__tests__/releases.test.ts`         | `createTaggedReleases`, `getAllReleases`, `deleteReleases`, pagination, 403 error paths |
-| `__tests__/tags.test.ts`             | `getAllTags`, `deleteTags`, pagination, 403 error paths                                 |
-| `__tests__/terraform-module.test.ts` | `getReleaseTag`, `getReleaseTagVersion`, `isModuleAssociatedWithTag`, tag normalization |
+| Test file                            | Coverage focus                                                                                   |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------ |
+| `__tests__/releases.test.ts`         | `createTaggedReleases` (self-healing steps 1–3, legacy gate), `getAllReleases`, `deleteReleases` |
+| `__tests__/tags.test.ts`             | `getAllTags`, `deleteTags`, pagination, 403 error paths                                          |
+| `__tests__/terraform-module.test.ts` | `getReleaseTag`, `getReleaseTagVersion`, `isModuleAssociatedWithTag`, tag normalization          |
+| `__tests__/utils/markers.test.ts`    | `buildPrMarker` / `matchesPrMarker` (version-agnostic marker match)                              |
 
 ## Design Decisions and Trade-offs
 

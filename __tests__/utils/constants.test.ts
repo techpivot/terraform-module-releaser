@@ -7,7 +7,10 @@ import {
   GITHUB_ACTIONS_BOT_NAME,
   GITHUB_ACTIONS_BOT_USERNAME,
   PROJECT_URL,
-  PR_RELEASE_MARKER,
+  PR_RELEASE_COMMENT_MARKER,
+  LEGACY_PR_RELEASE_COMMENT_MARKER,
+  RELEASE_BODY_PR_MARKER_PREFIX,
+  RELEASE_BODY_PR_MARKER_SCHEMA,
   PR_SUMMARY_MARKER,
   WIKI_TITLE_REPLACEMENTS,
 } from '@/utils/constants';
@@ -38,8 +41,17 @@ describe('utils/constants', () => {
     expect(PR_SUMMARY_MARKER).toBe('<!-- techpivot/terraform-module-releaser — pr-summary-marker -->');
   });
 
-  it('should have the correct PR release marker', () => {
-    expect(PR_RELEASE_MARKER).toBe('<!-- techpivot/terraform-module-releaser — release-marker -->');
+  it('should have the correct (current, versioned) PR release marker', () => {
+    expect(PR_RELEASE_COMMENT_MARKER).toBe('<!-- techpivot/terraform-module-releaser:release:1 -->');
+  });
+
+  it('should preserve the legacy PR release marker content for backward-compatible detection', () => {
+    expect(LEGACY_PR_RELEASE_COMMENT_MARKER).toBe('<!-- techpivot/terraform-module-releaser — release-marker -->');
+  });
+
+  it('should have the correct release-pr marker prefix and schema', () => {
+    expect(RELEASE_BODY_PR_MARKER_PREFIX).toBe('<!-- techpivot/terraform-module-releaser:release-pr:');
+    expect(RELEASE_BODY_PR_MARKER_SCHEMA).toBe(1);
   });
 
   it('should have the correct project URL', () => {

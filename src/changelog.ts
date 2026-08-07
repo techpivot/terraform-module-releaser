@@ -1,16 +1,22 @@
 import { context } from '@/context';
 import type { TerraformModule } from '@/terraform-module';
+import { neutralizePrMarkers } from '@/utils/markers';
 
 /**
  * Creates a changelog entry for a Terraform module.
  *
  * The changelog contains a heading and a list of commits formatted with a timestamp.
  *
+ * Note: the pull request title and commit messages are untrusted input that ends up verbatim in a
+ * release body — which is where the hidden idempotency marker also lives. Both are passed through
+ * {@link neutralizePrMarkers} so a crafted title or commit message can never forge that marker and
+ * suppress another pull request's release. See `src/utils/markers.ts`.
+ *
  * @param {string} heading - The version or tag heading for the changelog entry.
  * @param {readonly string[]} commits - An array of commit messages to include in the changelog.
  * @returns {string} A formatted changelog entry as a string.
  */
-function createTerraformModuleChangelogEntry(heading: string, commits: readonly string[]): string {
+export function createTerraformModuleChangelogEntry(heading: string, commits: readonly string[]): string {
   const { prNumber, prTitle, repoUrl } = context;
   const currentDate = new Date().toISOString().split('T')[0]; // Format: YYYY-MM-DD
   const changelogContent: string[] = [`## \`${heading}\` (${currentDate})\n`];
@@ -19,7 +25,9 @@ function createTerraformModuleChangelogEntry(heading: string, commits: readonly 
   // links the PR in the pull request comments but not automatically in the wiki markdown. In the releases section
   // it will automatically link just the #9 portion but not the PR part. If we link the whole section it
   // ends up being much cleaner.
-  changelogContent.push(`- :twisted_rightwards_arrows:**[PR #${prNumber}](${repoUrl}/pull/${prNumber})** - ${prTitle}`);
+  changelogContent.push(
+    `- :twisted_rightwards_arrows:**[PR #${prNumber}](${repoUrl}/pull/${prNumber})** - ${neutralizePrMarkers(prTitle)}`,
+  );
 
   // Perform some normalization
   const normalizedCommitMessages = commits
@@ -28,7 +36,7 @@ function createTerraformModuleChangelogEntry(heading: string, commits: readonly 
 
     // Trim the commit message and for markdown, newlines that are part of a list format
     // better if they use a <br> tag instead of a newline character.
-    .map((commitMessage) => commitMessage.trim().replace(/\n/g, '<br>'));
+    .map((commitMessage) => neutralizePrMarkers(commitMessage.trim().replace(/\n/g, '<br>')));
 
   for (const normalizedCommit of normalizedCommitMessages) {
     changelogContent.push(`- ${normalizedCommit}`);

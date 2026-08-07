@@ -58,30 +58,41 @@ After parsing, the flow branches on event type:
 
 `handlePullRequestMergedEvent()`:
 
-1. **Idempotency check** — `hasReleaseComment()` looks for a hidden HTML comment marker in existing PR comments. If
-   found, exits early (prevents duplicate releases on workflow re-runs)
-2. **Create tagged releases** — For each module needing release:
-   - Copy module files to temp directory (excluding configured patterns)
-   - Copy `.git` directory
-   - Create new commit + tag in temp directory
-   - Push tag to remote
-   - Create GitHub release via API with changelog body
-3. **Post release comment** — Summary of created releases with marker for idempotency
-4. **Delete legacy tags/releases** — Remove orphaned tags from deleted modules (if `delete-legacy-tags` is enabled)
-5. **Generate wiki** — Clone wiki repository, generate/update all module pages, push changes
+1. **Check checkout freshness** — one `repos.compareCommitsWithBasehead` call determines whether the checked-out tree is
+   still the base branch tip. On a re-run of an older merged pull request it is not, and the destructive steps below are
+   skipped. Fails open. See `src/utils/freshness.ts`.
+2. **Create tagged releases** (self-healing & idempotent — see [state-management.md](state-management.md)) — a legacy
+   gate first preserves the old "don't double-release" behavior for pull requests completed under a pre-marker version;
+   then, for each module needing release, the action converges per module rather than blindly creating:
+   - **Already released for this PR?** (release body carries this PR's marker) → skip
+   - **Latest tag is ours and released, but the body was edited?** (release commit carries this PR's marker) → skip
+   - **Orphan latest tag that is provably this PR's?** (tag with no release, release commit carries this PR's marker) →
+     recreate the release for that tag, no bump. A tag that cannot be attributed to this pull request is left alone.
+   - **Otherwise** → copy module files to a temp directory, copy `.git`, commit + tag, push, and create the GitHub
+     release via API with a changelog body plus the hidden PR marker appended
+3. **Post release comment** — idempotent total summary of the releases attributed to _this_ pull request (updated in
+   place on re-runs, never duplicated), carrying the marker
+4. **Delete legacy tags/releases** — Remove orphaned tags from deleted modules (if `delete-legacy-tags` is enabled).
+   _Skipped when the checkout is not current._
+5. **Generate wiki** — Clone wiki repository, generate/update all module pages, push changes. _Skipped when the checkout
+   is not current._
+6. **Re-emit `changed-modules-map`** — with the tag that actually exists plus an `action` field (`created` | `recovered`
+   | `skipped` | `none`).
 
 ### Action Outputs
 
-Six outputs are set via `core.setOutput()` before the merge/release operation:
+Six outputs are set via `core.setOutput()` before the merge/release operation. On a merge run, `changed-modules-map` is
+then **re-emitted** afterwards so `releaseTag` names a tag that really exists (see
+[state-management.md](state-management.md#action-outputs)):
 
-| Output                 | Type        | Description                                                         |
-| ---------------------- | ----------- | ------------------------------------------------------------------- |
-| `changed-module-names` | JSON array  | Module names changed in the PR                                      |
-| `changed-module-paths` | JSON array  | File system paths to changed modules                                |
-| `changed-modules-map`  | JSON object | Module names → change details (current tag, next tag, release type) |
-| `all-module-names`     | JSON array  | All discovered module names                                         |
-| `all-module-paths`     | JSON array  | All discovered module paths                                         |
-| `all-modules-map`      | JSON object | All module names → details (path, latest tag, version)              |
+| Output                 | Type        | Description                                                                      |
+| ---------------------- | ----------- | -------------------------------------------------------------------------------- |
+| `changed-module-names` | JSON array  | Module names changed in the PR                                                   |
+| `changed-module-paths` | JSON array  | File system paths to changed modules                                             |
+| `changed-modules-map`  | JSON object | Module names → change details (current tag, release tag, release type, `action`) |
+| `all-module-names`     | JSON array  | All discovered module names                                                      |
+| `all-module-paths`     | JSON array  | All discovered module paths                                                      |
+| `all-modules-map`      | JSON object | All module names → details (path, latest tag, version)                           |
 
 > **Note**: Outputs are set before `clearCommits()` is called during release, since `needsRelease()` checks commit
 > presence.
@@ -168,10 +179,21 @@ Benefits: Import at module scope without triggering initialization. Test-friendl
 The action filters commits to exclude "phantom" changes — when a file is modified and then reverted within the same PR.
 This prevents unnecessary version bumps from commits that have no net effect on a module.
 
-### Idempotency via PR Comments
+### Idempotency & Self-Healing
 
-A hidden HTML comment (`<!-- techpivot/terraform-module-releaser — release-marker -->`) is embedded in post-release
-comments. On re-runs, `hasReleaseComment()` checks for this marker and exits early if found.
+Releases are idempotent and self-healing per module. Each release we create embeds a hidden, schema-versioned marker
+tying it to the producing pull request — in the release **body** and in the release **commit message**, the latter being
+immutable and therefore the authoritative proof of tag ownership. On a re-run `createTaggedReleases()` skips modules
+already released for the PR, recreates a deleted release for an orphan tag it can prove it created, and otherwise
+live-bumps — so re-runs converge instead of double-releasing. A tag it cannot attribute to this pull request is never
+adopted. A legacy gate keeps the old comment-based protection for pull requests released before this scheme, and fails
+closed if the comment list cannot be read.
+
+The post-release comment is updated in place rather than duplicated, and reports the release attributed to _this_ pull
+request rather than the module's highest release. Because releases are now safe to re-run but stale-tree deletions are
+not, obsolete tag/release cleanup and wiki regeneration are gated on the checkout still being current. Full details
+(markers, provenance, gate, freshness, outputs, backward compatibility) are in
+[state-management.md](state-management.md).
 
 ### Tag Normalization
 

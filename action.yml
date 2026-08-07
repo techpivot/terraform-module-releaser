@@ -226,7 +226,7 @@ outputs:
   changed-module-paths:
     description: JSON array of file system paths to the modules that were changed
   changed-modules-map:
-    description: JSON object mapping module names to their change details including current tag, next tag, and release type
+    description: JSON object mapping module names to their change details including current tag, release tag, release type, and (on merge) the action taken (created, recovered, skipped, or none)
   all-module-names:
     description: JSON array of all module names found in the repository
   all-module-paths:
