@@ -492,6 +492,64 @@ async function getLatestReleaseTag() {
  * @returns {Promise<string>} - Generated changelog content
  * @throws {Error} - If environment variables are missing or API requests fail
  */
+/**
+ * Builds release notes locally, without a model.
+ *
+ * Used when AI generation is unavailable. Release notes are nice to have; a blocked release is not,
+ * so model access must never be a hard dependency of cutting a version. The output is deliberately
+ * plain: it groups commits by Conventional Commit type into the same H3 sections the prompt asks for,
+ * so a maintainer can polish the wording afterwards without restructuring anything.
+ *
+ * @param {{author: string, message: string, pullRequest: {number: number, title: string}|null}[]} commits
+ * @returns {string} Markdown release-note body.
+ */
+function buildFallbackChangelogBody(commits) {
+  const sections = [
+    { key: 'breaking', title: '### 🚨 Breaking Changes', entries: [] },
+    { key: 'feat', title: '### ✨ New Features', entries: [] },
+    { key: 'fix', title: '### 🐛 Bug Fixes', entries: [] },
+    { key: 'perf', title: '### ⚡ Performance', entries: [] },
+    { key: 'docs', title: '### 📚 Documentation', entries: [] },
+    { key: 'deps', title: '### 📦 Dependencies', entries: [] },
+    { key: 'other', title: '### 🛠 Improvements', entries: [] },
+  ];
+  const bucket = (key) => sections.find((section) => section.key === key).entries;
+
+  for (const commit of commits) {
+    const subject = (commit.pullRequest?.title ?? commit.message).split('\n')[0].trim();
+    if (/^Merge (pull request|branch)/i.test(subject)) {
+      continue;
+    }
+
+    const isDependency = commit.author === 'dependabot[bot]' || /^(build|chore)\(deps/i.test(subject);
+    let key = 'other';
+    if (/!:|BREAKING[ -]CHANGE/i.test(subject)) {
+      key = 'breaking';
+    } else if (isDependency) {
+      key = 'deps';
+    } else if (/^feat/i.test(subject)) {
+      key = 'feat';
+    } else if (/^fix/i.test(subject)) {
+      key = 'fix';
+    } else if (/^perf/i.test(subject)) {
+      key = 'perf';
+    } else if (/^docs/i.test(subject)) {
+      key = 'docs';
+    }
+
+    const reference = commit.pullRequest ? ` (#${commit.pullRequest.number})` : '';
+    const author = commit.author ? ` @${commit.author}` : '';
+    bucket(key).push(`- ${subject}${author}${reference}`);
+  }
+
+  const body = sections
+    .filter((section) => section.entries.length > 0)
+    .map((section) => `${section.title}\n\n${section.entries.join('\n')}`)
+    .join('\n\n');
+
+  return body.length > 0 ? body : '_No user-facing changes recorded for this release._';
+}
+
 async function generateChangelog(version) {
   validateEnvironment();
 
@@ -531,6 +589,10 @@ async function generateChangelog(version) {
   const estimatedInputTokens = Math.ceil((PROMPT.length + commitDataString.length) / 4);
   console.log(`\n📏 Estimated input size: ~${estimatedInputTokens} tokens (limit: 4000 for gpt-4.1)`);
 
+  // AI generation is best-effort. A model outage, a deprecated model id, a missing `models:read`
+  // scope or an exhausted quota must never block cutting a release, so any failure falls back to a
+  // locally generated changelog instead of failing the workflow.
+  let changelogBody;
   try {
     const client = new OpenAI({ baseURL: ENDPOINT, apiKey: process.env.GITHUB_TOKEN });
     const response = await client.chat.completions.create({
@@ -548,23 +610,28 @@ async function generateChangelog(version) {
     console.log(`  Completion tokens: ${response.usage.completion_tokens}`);
     console.log(`  Total tokens: ${response.usage.total_tokens}`);
 
-    console.log('\n✅ Generated changelog content:');
-    console.log(response.choices[0].message.content);
+    changelogBody = response.choices[0].message.content;
 
-    return [
-      '# ✨ Release Notes Preview',
-      `\n> **Important:** Upon merging this pull request, the following release notes will be automatically created for version v${versionNumber}.`,
-      '\n---\n',
-      `<!-- RELEASE-NOTES-VERSION: ${versionNumber} -->`,
-      '<!-- RELEASE-NOTES-MARKER-START -->',
-      `## ${versionNumber} (${getDateString()})\n`,
-      response.choices[0].message.content,
-      `\n###### Full Changelog: https://github.com/techpivot/terraform-module-releaser/compare/${latestVersionTag}...v${versionNumber}`,
-    ].join('\n');
+    console.log('\n✅ Generated changelog content:');
+    console.log(changelogBody);
   } catch (error) {
-    console.error('Error generating changelog:', error);
-    throw error;
+    console.warn(`\n⚠️  AI changelog generation unavailable (${error.message}). Falling back to a generated summary.`);
+    changelogBody = buildFallbackChangelogBody(cleanedCommits);
+
+    console.log('\n✅ Fallback changelog content:');
+    console.log(changelogBody);
   }
+
+  return [
+    '# ✨ Release Notes Preview',
+    `\n> **Important:** Upon merging this pull request, the following release notes will be automatically created for version v${versionNumber}.`,
+    '\n---\n',
+    `<!-- RELEASE-NOTES-VERSION: ${versionNumber} -->`,
+    '<!-- RELEASE-NOTES-MARKER-START -->',
+    `## ${versionNumber} (${getDateString()})\n`,
+    changelogBody,
+    `\n###### Full Changelog: https://github.com/techpivot/terraform-module-releaser/compare/${latestVersionTag}...v${versionNumber}`,
+  ].join('\n');
 }
 
 // Export the main function for external usage
