@@ -99,151 +99,134 @@ describe('utils/string', () => {
   });
 
   describe('renderTemplate', () => {
-    it('should replace a single placeholder', () => {
-      const template = 'Hello, {{name}}!';
-      const variables = { name: 'World' };
-      const result = renderTemplate(template, variables);
-      expect(result).toBe('Hello, World!');
-    });
+    const renderTemplateCases: Array<{
+      name: string;
+      template: string;
+      variables: Record<string, string | undefined | null>;
+      expected: string;
+    }> = [
+      // Basic replacement
+      {
+        name: 'replaces a single placeholder',
+        template: 'Hello, {{name}}!',
+        variables: { name: 'World' },
+        expected: 'Hello, World!',
+      },
+      {
+        name: 'replaces multiple placeholders',
+        template: '{{greeting}}, {{name}}!',
+        variables: { greeting: 'Hi', name: 'There' },
+        expected: 'Hi, There!',
+      },
+      {
+        name: 'handles templates with no placeholders',
+        template: 'Just a plain string.',
+        variables: { name: 'World' },
+        expected: 'Just a plain string.',
+      },
+      { name: 'handles empty string values', template: 'A{{key}}B', variables: { key: '' }, expected: 'AB' },
+      {
+        name: 'leaves unmapped placeholders untouched',
+        template: 'Hello, {{name}} and {{unmapped}}!',
+        variables: { name: 'World' },
+        expected: 'Hello, World and {{unmapped}}!',
+      },
+      {
+        name: 'handles complex templates with multiple variables',
+        template: 'Module: {{module}}, Version: {{version}}, Author: {{author}}',
+        variables: { module: 'vpc-endpoint', version: '1.0.0', author: 'TechPivot' },
+        expected: 'Module: vpc-endpoint, Version: 1.0.0, Author: TechPivot',
+      },
+      {
+        name: 'handles numeric values as strings',
+        template: 'Port: {{port}}, Count: {{count}}',
+        variables: { port: '8080', count: '3' },
+        expected: 'Port: 8080, Count: 3',
+      },
+      {
+        name: 'handles special characters in values',
+        template: 'Path: {{path}}, Command: {{cmd}}',
+        variables: { path: '/opt/bin/terraform', cmd: 'terraform init -backend=false' },
+        expected: 'Path: /opt/bin/terraform, Command: terraform init -backend=false',
+      },
+      { name: 'handles empty template', template: '', variables: { name: 'World' }, expected: '' },
+      {
+        name: 'handles empty variables object',
+        template: 'Hello, {{name}}!',
+        variables: {},
+        expected: 'Hello, {{name}}!',
+      },
+      {
+        name: 'handles placeholders with different casing',
+        template: 'Hello, {{Name}} and {{NAME}}!',
+        variables: { Name: 'World', NAME: 'UNIVERSE' },
+        expected: 'Hello, World and UNIVERSE!',
+      },
+      {
+        name: 'handles placeholders with numbers',
+        template: 'Item {{item1}} and {{item2}}',
+        variables: { item1: 'first', item2: 'second' },
+        expected: 'Item first and second',
+      },
+      // Undefined and null values leave placeholders unchanged
+      {
+        name: 'leaves placeholders with undefined values unchanged',
+        template: 'Hello, {{name}} and {{greeting}}!',
+        variables: { name: 'World', greeting: undefined },
+        expected: 'Hello, World and {{greeting}}!',
+      },
+      {
+        name: 'leaves all placeholders unchanged when every value is undefined',
+        template: '{{greeting}}, {{name}}!',
+        variables: { greeting: undefined, name: undefined },
+        expected: '{{greeting}}, {{name}}!',
+      },
+      {
+        name: 'handles mixed defined and undefined values',
+        template: 'Module: {{module}}, Version: {{version}}, Author: {{author}}',
+        variables: { module: 'vpc-endpoint', version: undefined, author: 'TechPivot' },
+        expected: 'Module: vpc-endpoint, Version: {{version}}, Author: TechPivot',
+      },
+      {
+        name: 'distinguishes empty string from undefined',
+        template: 'A{{key1}}B{{key2}}C',
+        variables: { key1: '', key2: undefined },
+        expected: 'AB{{key2}}C',
+      },
+      {
+        name: 'handles undefined values in complex templates',
+        template: 'Path: {{path}}, Command: {{cmd}}, Options: {{opts}}',
+        variables: { path: '/opt/bin/terraform', cmd: undefined, opts: '--verbose' },
+        expected: 'Path: /opt/bin/terraform, Command: {{cmd}}, Options: --verbose',
+      },
+      {
+        name: 'leaves placeholders with null values unchanged',
+        template: 'Hello, {{name}} and {{greeting}}!',
+        variables: { name: 'World', greeting: null },
+        expected: 'Hello, World and {{greeting}}!',
+      },
+      {
+        name: 'leaves all placeholders unchanged when every value is null',
+        template: '{{greeting}}, {{name}}!',
+        variables: { greeting: null, name: null },
+        expected: '{{greeting}}, {{name}}!',
+      },
+      {
+        name: 'handles mixed null, undefined, and defined values',
+        template: 'Module: {{module}}, Version: {{version}}, Author: {{author}}, License: {{license}}',
+        variables: { module: 'vpc-endpoint', version: null, author: 'TechPivot', license: undefined },
+        expected: 'Module: vpc-endpoint, Version: {{version}}, Author: TechPivot, License: {{license}}',
+      },
+      {
+        name: 'distinguishes empty string from null and undefined',
+        template: 'A{{key1}}B{{key2}}C{{key3}}D',
+        variables: { key1: '', key2: null, key3: undefined },
+        expected: 'AB{{key2}}C{{key3}}D',
+      },
+    ];
 
-    it('should replace multiple placeholders', () => {
-      const template = '{{greeting}}, {{name}}!';
-      const variables = { greeting: 'Hi', name: 'There' };
-      const result = renderTemplate(template, variables);
-      expect(result).toBe('Hi, There!');
-    });
-
-    it('should handle templates with no placeholders', () => {
-      const template = 'Just a plain string.';
-      const variables = { name: 'World' };
-      const result = renderTemplate(template, variables);
-      expect(result).toBe('Just a plain string.');
-    });
-
-    it('should handle empty string values', () => {
-      const template = 'A{{key}}B';
-      const variables = { key: '' };
-      const result = renderTemplate(template, variables);
-      expect(result).toBe('AB');
-    });
-
-    it('should leave unmapped placeholders untouched', () => {
-      const template = 'Hello, {{name}} and {{unmapped}}!';
-      const variables = { name: 'World' };
-      const result = renderTemplate(template, variables);
-      expect(result).toBe('Hello, World and {{unmapped}}!');
-    });
-
-    it('should handle complex templates with multiple variables', () => {
-      const template = 'Module: {{module}}, Version: {{version}}, Author: {{author}}';
-      const variables = { module: 'vpc-endpoint', version: '1.0.0', author: 'TechPivot' };
-      const result = renderTemplate(template, variables);
-      expect(result).toBe('Module: vpc-endpoint, Version: 1.0.0, Author: TechPivot');
-    });
-
-    it('should handle numeric values as strings', () => {
-      const template = 'Port: {{port}}, Count: {{count}}';
-      const variables = { port: '8080', count: '3' };
-      const result = renderTemplate(template, variables);
-      expect(result).toBe('Port: 8080, Count: 3');
-    });
-
-    it('should handle special characters in values', () => {
-      const template = 'Path: {{path}}, Command: {{cmd}}';
-      const variables = { path: '/opt/bin/terraform', cmd: 'terraform init -backend=false' };
-      const result = renderTemplate(template, variables);
-      expect(result).toBe('Path: /opt/bin/terraform, Command: terraform init -backend=false');
-    });
-
-    it('should handle empty template', () => {
-      const template = '';
-      const variables = { name: 'World' };
-      const result = renderTemplate(template, variables);
-      expect(result).toBe('');
-    });
-
-    it('should handle empty variables object', () => {
-      const template = 'Hello, {{name}}!';
-      const variables = {};
-      const result = renderTemplate(template, variables);
-      expect(result).toBe('Hello, {{name}}!');
-    });
-
-    it('should handle placeholders with different casing', () => {
-      const template = 'Hello, {{Name}} and {{NAME}}!';
-      const variables = { Name: 'World', NAME: 'UNIVERSE' };
-      const result = renderTemplate(template, variables);
-      expect(result).toBe('Hello, World and UNIVERSE!');
-    });
-
-    it('should handle placeholders with numbers', () => {
-      const template = 'Item {{item1}} and {{item2}}';
-      const variables = { item1: 'first', item2: 'second' };
-      const result = renderTemplate(template, variables);
-      expect(result).toBe('Item first and second');
-    });
-
-    it('should handle undefined values by leaving placeholders unchanged', () => {
-      const template = 'Hello, {{name}} and {{greeting}}!';
-      const variables = { name: 'World', greeting: undefined };
-      const result = renderTemplate(template, variables);
-      expect(result).toBe('Hello, World and {{greeting}}!');
-    });
-
-    it('should handle all undefined values', () => {
-      const template = '{{greeting}}, {{name}}!';
-      const variables = { greeting: undefined, name: undefined };
-      const result = renderTemplate(template, variables);
-      expect(result).toBe('{{greeting}}, {{name}}!');
-    });
-
-    it('should handle mixed defined and undefined values', () => {
-      const template = 'Module: {{module}}, Version: {{version}}, Author: {{author}}';
-      const variables = { module: 'vpc-endpoint', version: undefined, author: 'TechPivot' };
-      const result = renderTemplate(template, variables);
-      expect(result).toBe('Module: vpc-endpoint, Version: {{version}}, Author: TechPivot');
-    });
-
-    it('should handle empty string vs undefined distinction', () => {
-      const template = 'A{{key1}}B{{key2}}C';
-      const variables = { key1: '', key2: undefined };
-      const result = renderTemplate(template, variables);
-      expect(result).toBe('AB{{key2}}C');
-    });
-
-    it('should handle undefined values in complex templates', () => {
-      const template = 'Path: {{path}}, Command: {{cmd}}, Options: {{opts}}';
-      const variables = { path: '/opt/bin/terraform', cmd: undefined, opts: '--verbose' };
-      const result = renderTemplate(template, variables);
-      expect(result).toBe('Path: /opt/bin/terraform, Command: {{cmd}}, Options: --verbose');
-    });
-
-    it('should handle null values by leaving placeholders unchanged', () => {
-      const template = 'Hello, {{name}} and {{greeting}}!';
-      const variables = { name: 'World', greeting: null };
-      const result = renderTemplate(template, variables);
-      expect(result).toBe('Hello, World and {{greeting}}!');
-    });
-
-    it('should handle all null values', () => {
-      const template = '{{greeting}}, {{name}}!';
-      const variables = { greeting: null, name: null };
-      const result = renderTemplate(template, variables);
-      expect(result).toBe('{{greeting}}, {{name}}!');
-    });
-
-    it('should handle mixed null, undefined, and defined values', () => {
-      const template = 'Module: {{module}}, Version: {{version}}, Author: {{author}}, License: {{license}}';
-      const variables = { module: 'vpc-endpoint', version: null, author: 'TechPivot', license: undefined };
-      const result = renderTemplate(template, variables);
-      expect(result).toBe('Module: vpc-endpoint, Version: {{version}}, Author: TechPivot, License: {{license}}');
-    });
-
-    it('should handle empty string vs null vs undefined distinction', () => {
-      const template = 'A{{key1}}B{{key2}}C{{key3}}D';
-      const variables = { key1: '', key2: null, key3: undefined };
-      const result = renderTemplate(template, variables);
-      expect(result).toBe('AB{{key2}}C{{key3}}D');
+    it.each(renderTemplateCases)('$name', ({ template, variables, expected }) => {
+      expect(renderTemplate(template, variables)).toBe(expected);
     });
   });
 

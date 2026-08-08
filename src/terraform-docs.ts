@@ -2,7 +2,7 @@ import { execFile, execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, win32 } from 'node:path';
 import { promisify } from 'node:util';
 import { context } from '@/context';
 import type { TerraformModule } from '@/terraform-module';
@@ -184,14 +184,18 @@ export function installTerraformDocs(terraformDocsVersion: string): void {
         .toString()
         .trim();
 
+      // Build the Windows destination path with the win32 path module so the separator is
+      // correct by construction (this branch only runs on Windows, but tests run elsewhere)
+      const terraformDocsExePath = win32.join(systemDir, 'terraform-docs.exe');
+
       info(`Copying executable to system dir (${systemDir})...`);
       execFileSync(powershellPath, [
         '-Command',
-        `Move-Item -Path "./terraform-docs/terraform-docs.exe" -Destination "${systemDir}\\terraform-docs.exe"`,
+        `Move-Item -Path "./terraform-docs/terraform-docs.exe" -Destination "${terraformDocsExePath}"`,
       ]);
 
       // terraform-docs version v0.21.0 af31cc6 windows/amd64
-      execFileSync(`${systemDir}\\terraform-docs.exe`, ['--version'], { stdio: 'inherit' });
+      execFileSync(terraformDocsExePath, ['--version'], { stdio: 'inherit' });
     } else {
       const commands = ['curl', 'tar', 'chmod', 'sudo'];
       const paths: Record<string, string> = {};

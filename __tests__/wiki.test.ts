@@ -72,19 +72,6 @@ describe('wiki', async () => {
     ],
   );
 
-  describe('isWikiCheckFailure()', () => {
-    it('returns true for every FAILURE_* status', () => {
-      expect(isWikiCheckFailure(WIKI_STATUS.FAILURE_CHECKOUT)).toBe(true);
-      expect(isWikiCheckFailure(WIKI_STATUS.FAILURE_TERRAFORM_DOCS_INSTALL)).toBe(true);
-      expect(isWikiCheckFailure(WIKI_STATUS.FAILURE_TERRAFORM_DOCS_RUN)).toBe(true);
-    });
-
-    it('returns false for non-failure statuses', () => {
-      expect(isWikiCheckFailure(WIKI_STATUS.SUCCESS)).toBe(false);
-      expect(isWikiCheckFailure(WIKI_STATUS.DISABLED)).toBe(false);
-    });
-  });
-
   beforeEach(() => {
     tmpDir = mkdtempSync(join(tmpdir(), 'wiki-test-'));
     wikiDir = join(tmpDir, '.wiki');
@@ -108,6 +95,19 @@ describe('wiki', async () => {
     if (existsSync(tmpDir)) {
       rmSync(tmpDir, { recursive: true });
     }
+  });
+
+  describe('isWikiCheckFailure()', () => {
+    it('returns true for every FAILURE_* status', () => {
+      expect(isWikiCheckFailure(WIKI_STATUS.FAILURE_CHECKOUT)).toBe(true);
+      expect(isWikiCheckFailure(WIKI_STATUS.FAILURE_TERRAFORM_DOCS_INSTALL)).toBe(true);
+      expect(isWikiCheckFailure(WIKI_STATUS.FAILURE_TERRAFORM_DOCS_RUN)).toBe(true);
+    });
+
+    it('returns false for non-failure statuses', () => {
+      expect(isWikiCheckFailure(WIKI_STATUS.SUCCESS)).toBe(false);
+      expect(isWikiCheckFailure(WIKI_STATUS.DISABLED)).toBe(false);
+    });
   });
 
   describe('checkoutWiki()', () => {
@@ -264,7 +264,7 @@ describe('wiki', async () => {
       // With modulePathIgnore: [], all modules in tf-modules directory should be processed
       // tf-modules directory contains: animal, kms, kms/examples/complete, s3-bucket-object, vpc-endpoint, zoo
       // So we expect: 6 module files + Home.md + _Sidebar.md + _Footer.md = 9 files
-      expect(files.length).toBe(9);
+      expect(files).toHaveLength(9);
 
       // Verify the specific files that should be generated
       const fileBasenames = files.map((f) => basename(f)).sort();

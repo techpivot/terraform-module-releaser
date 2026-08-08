@@ -810,37 +810,19 @@ describe('TerraformModule', () => {
         expect(module.getReleaseTagVersion()).toBe('v0.1.0');
       });
 
-      it('should increment major version correctly', () => {
+      it.each([
+        { level: 'major', message: 'BREAKING CHANGE: major update', expected: 'v2.0.0' },
+        { level: 'minor', message: 'feat: new feature', expected: 'v1.3.0' },
+        { level: 'patch', message: 'fix: bug fix', expected: 'v1.2.4' },
+      ])('should increment $level version correctly', ({ message, expected }) => {
         module.setTags(createMockTags(['tf-modules/test-module/v1.2.3']));
         module.addCommit({
           sha: 'abc123',
-          message: 'BREAKING CHANGE: major update',
+          message,
           files: ['main.tf'],
         });
 
-        expect(module.getReleaseTagVersion()).toBe('v2.0.0');
-      });
-
-      it('should increment minor version correctly', () => {
-        module.setTags(createMockTags(['tf-modules/test-module/v1.2.3']));
-        module.addCommit({
-          sha: 'abc123',
-          message: 'feat: new feature',
-          files: ['main.tf'],
-        });
-
-        expect(module.getReleaseTagVersion()).toBe('v1.3.0');
-      });
-
-      it('should increment patch version correctly', () => {
-        module.setTags(createMockTags(['tf-modules/test-module/v1.2.3']));
-        module.addCommit({
-          sha: 'abc123',
-          message: 'fix: bug fix',
-          files: ['main.tf'],
-        });
-
-        expect(module.getReleaseTagVersion()).toBe('v1.2.4');
+        expect(module.getReleaseTagVersion()).toBe(expected);
       });
 
       it('should return null when no release is needed', () => {

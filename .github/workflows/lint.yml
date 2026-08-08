@@ -1,4 +1,4 @@
-name: Lint Codebase
+name: Lint
 
 on:
   pull_request:
@@ -18,10 +18,9 @@ env:
   GITLEAKS_VERSION: 8.30.1
 
 jobs:
-  lint:
-    name: Lint
+  format:
+    name: Format
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         id: checkout
@@ -40,35 +39,159 @@ jobs:
         id: npm-ci
         run: npm ci --no-fund
 
-      # Installed as binaries rather than via their GitHub Actions. actionlint publishes no action.yml at all.
-      # gitleaks-action is the paid product — the CLI is not — and it gates on GITLEAKS_LICENSE *before*
-      # scanning; since secrets are never exposed to workflows triggered from forked pull requests, that gate
-      # fails every external contribution with an error the contributor cannot fix. The CLI needs no license,
-      # so forks scan exactly like branches.
-      - name: Install external linters
-        id: install-external-linters
+      - name: Check Formatting
+        id: format-check
+        run: npm run format:check
+
+  code:
+    name: Code
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        id: setup-node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install Dependencies
+        id: npm-ci
+        run: npm ci --no-fund
+
+      - name: Lint Code
+        id: lint-code
+        run: npm run lint:code
+
+  types:
+    name: Types
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        id: setup-node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install Dependencies
+        id: npm-ci
+        run: npm ci --no-fund
+
+      - name: Lint Types
+        id: lint-types
+        run: npm run lint:types
+
+  text:
+    name: Text
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        id: setup-node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install Dependencies
+        id: npm-ci
+        run: npm ci --no-fund
+
+      - name: Lint Text
+        id: lint-text
+        run: npm run lint:text
+
+  actions:
+    name: Actions
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        id: setup-node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install Dependencies
+        id: npm-ci
+        run: npm ci --no-fund
+
+      # Installed as a binary rather than via a GitHub Action — actionlint publishes no action.yml at all.
+      - name: Install actionlint
+        id: install-actionlint
         run: |
           curl -sSfL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" \
             | sudo tar -xz -C /usr/local/bin actionlint
+          actionlint --version
+
+      # `external-linter.mjs` turns a missing binary into a hard failure when CI is set, so a broken
+      # install step above can never look like a passing lint.
+      - name: Lint Actions
+        id: lint-actions
+        run: npm run lint:actions
+
+  secrets:
+    name: Secrets
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Installed as a binary rather than via a GitHub Action. gitleaks-action is the paid product — the
+      # CLI is not — and it gates on GITLEAKS_LICENSE *before* scanning; since secrets are never exposed
+      # to workflows triggered from forked pull requests, that gate fails every external contribution with
+      # an error the contributor cannot fix. The CLI needs no license, so forks scan exactly like branches.
+      - name: Install gitleaks
+        id: install-gitleaks
+        run: |
           curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
             | sudo tar -xz -C /usr/local/bin gitleaks
-          actionlint --version
           gitleaks version
 
-      - name: Check formatting
-        id: format
-        run: npm run format:check
-
-      # Runs lint:code, lint:types, lint:text and lint:actions. `external-linter.mjs` turns a missing binary
-      # into a hard failure when CI is set, so a broken install step above can never look like a passing lint.
-      - name: Lint
-        id: lint
-        run: npm run lint
-
-      # Secret scanning is CI-only — it is not part of `npm run lint`, so contributors never need the binary.
-      # `dir` scans the whole working tree on every run, unlike the action's default of scanning only a pull
-      # request's own commit range, so a secret already sitting on main keeps failing CI until it is removed.
-      # Exclusions live in .gitleaks.toml.
-      - name: Scan for secrets
+      # Secret scanning is CI-only — it is not part of `npm run lint`, so contributors never need the
+      # binary. `dir` scans the whole working tree on every run, unlike the action's default of scanning
+      # only a pull request's own commit range, so a secret already sitting on main keeps failing CI until
+      # it is removed. Exclusions live in .gitleaks.toml.
+      - name: Scan for Secrets
         id: gitleaks
         run: gitleaks dir . --no-banner --redact
+
+  # Aggregate gate preserving the single "Lint" check name the previous one-job workflow exposed, so any
+  # branch-protection rule requiring "Lint" keeps working. Fails unless every lint job succeeded (a skipped
+  # or cancelled dependency is a failure here, closing the skipped-check loophole).
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    needs: [format, code, types, text, actions, secrets]
+    if: always()
+    steps:
+      - name: Verify All Lint Jobs Passed
+        id: verify
+        if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}
+        run: exit 1

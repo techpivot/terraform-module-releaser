@@ -315,9 +315,9 @@ describe('pull-request', () => {
       try {
         await getPullRequestCommits();
       } catch (error) {
-        expect(error instanceof Error).toBe(true);
+        expect(error).toBeInstanceOf(Error);
         expect((error as Error).message).toBe(expectedErrorString);
-        expect((error as Error).cause instanceof RequestError).toBe(false);
+        expect((error as Error).cause).not.toBeInstanceOf(RequestError);
       }
     });
   });
@@ -840,9 +840,9 @@ describe('pull-request', () => {
       try {
         await addReleasePlanComment([], [], [], { status: WIKI_STATUS.SUCCESS });
       } catch (error) {
-        expect(error instanceof Error).toBe(true);
+        expect(error).toBeInstanceOf(Error);
         expect((error as Error).message).toBe(expectedErrorString);
-        expect((error as Error).cause instanceof RequestError).toBe(false);
+        expect((error as Error).cause).not.toBeInstanceOf(RequestError);
       }
 
       vi.mocked(context.octokit.rest.issues.createComment).mockImplementationOnce(() => {
@@ -852,9 +852,9 @@ describe('pull-request', () => {
       try {
         await addReleasePlanComment([], [], [], { status: WIKI_STATUS.SUCCESS });
       } catch (error) {
-        expect(error instanceof Error).toBe(true);
+        expect(error).toBeInstanceOf(Error);
         expect((error as Error).message).toBe(expectedErrorString);
-        expect((error as Error).cause instanceof Error).toBe(true);
+        expect((error as Error).cause).toBeInstanceOf(Error);
       }
     });
   });
@@ -1162,9 +1162,9 @@ describe('pull-request', () => {
       try {
         await addPostReleaseComment(releasedOutcomes);
       } catch (error) {
-        expect(error instanceof Error).toBe(true);
+        expect(error).toBeInstanceOf(Error);
         expect((error as Error).message).toBe(expectedErrorString);
-        expect((error as Error).cause instanceof RequestError).toBe(false);
+        expect((error as Error).cause).not.toBeInstanceOf(RequestError);
       }
 
       vi.mocked(context.octokit.rest.issues.createComment).mockImplementationOnce(() => {
@@ -1174,9 +1174,9 @@ describe('pull-request', () => {
       try {
         await addPostReleaseComment(releasedOutcomes);
       } catch (error) {
-        expect(error instanceof Error).toBe(true);
+        expect(error).toBeInstanceOf(Error);
         expect((error as Error).message).toBe(expectedErrorString);
-        expect((error as Error).cause instanceof RequestError).toBe(false);
+        expect((error as Error).cause).not.toBeInstanceOf(RequestError);
       }
     });
 

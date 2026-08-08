@@ -50,15 +50,16 @@ function initializeConfig(): Config {
     configInstance = createConfigFromInputs();
 
     // Validate that *.tf is not in excludePatterns
-    if (configInstance.moduleChangeExcludePatterns.some((pattern) => pattern === '*.tf')) {
+    if (configInstance.moduleChangeExcludePatterns.includes('*.tf')) {
       throw new TypeError('Exclude patterns cannot contain "*.tf" as it is required for module detection');
     }
-    if (configInstance.moduleAssetExcludePatterns.some((pattern) => pattern === '*.tf')) {
+    if (configInstance.moduleAssetExcludePatterns.includes('*.tf')) {
       throw new TypeError('Asset exclude patterns cannot contain "*.tf" as these files are required');
     }
 
-    // Validate WikiSidebar Changelog Max is a number and greater than zero
-    if (configInstance.wikiSidebarChangelogMax < 1 || Number.isNaN(configInstance.wikiSidebarChangelogMax)) {
+    // Validate WikiSidebar Changelog Max is greater than zero. (createConfigFromInputs rejects
+    // non-numeric number inputs, so NaN cannot reach this comparison.)
+    if (configInstance.wikiSidebarChangelogMax < 1) {
       throw new TypeError('Wiki Sidebar Change Log Max must be an integer greater than or equal to one');
     }
 

@@ -1,4 +1,6 @@
 import {
+  MAX_COMMIT_MESSAGE_PARSE_LENGTH,
+  REVERT_PATTERN,
   computeReleaseType,
   detectConventionalCommitReleaseType,
   detectKeywordReleaseType,
@@ -176,22 +178,14 @@ describe('commit-analyzer', () => {
         });
       });
 
-      it('should return null for extra spaces around colon (not valid CC format)', () => {
-        // Conventional Commits spec requires type immediately followed by colon
-        const result = parseConventionalCommit('feat : extra space before colon');
-        expect(result).toBeNull();
-      });
-
-      it('should return null for no space after colon (not valid CC format)', () => {
-        // Conventional Commits spec requires a space after the colon
-        const result = parseConventionalCommit('feat:no space');
-        expect(result).toBeNull();
-      });
-
-      it('should return null for bang with no space after colon', () => {
-        // Even with bang indicator, space after colon is required
-        const result = parseConventionalCommit('feat!:no space after bang');
-        expect(result).toBeNull();
+      // The Conventional Commits spec requires the type to immediately touch the colon and the
+      // colon to be followed by a space — malformed spacing must not parse
+      it.each([
+        { reason: 'extra space before colon', message: 'feat : extra space before colon' },
+        { reason: 'no space after colon', message: 'feat:no space' },
+        { reason: 'bang with no space after colon', message: 'feat!:no space after bang' },
+      ])('should return null for $reason (not valid CC format)', ({ message }) => {
+        expect(parseConventionalCommit(message)).toBeNull();
       });
 
       it('should handle empty scope parentheses', () => {
@@ -299,28 +293,64 @@ describe('commit-analyzer', () => {
     });
 
     describe('non-conventional commit messages', () => {
-      it('should return null for plain text message', () => {
-        expect(parseConventionalCommit('update readme')).toBeNull();
+      it.each([
+        { reason: 'plain text message', message: 'update readme' },
+        { reason: 'message without colon', message: 'feat add new feature' },
+        { reason: 'empty string', message: '' },
+        { reason: 'message with only whitespace', message: '   ' },
+        { reason: 'merge commit', message: "Merge branch 'feature' into main" },
+        { reason: 'message with colon but no type', message: ': no type here' },
+      ])('should return null for $reason', ({ message }) => {
+        expect(parseConventionalCommit(message)).toBeNull();
+      });
+    });
+
+    describe('revert commit messages', () => {
+      it('should return null for a git-generated revert message (no conventional header)', () => {
+        expect(parseConventionalCommit('Revert "feat: add feature"\n\nThis reverts commit abc1234.')).toBeNull();
       });
 
-      it('should return null for message without colon', () => {
-        expect(parseConventionalCommit('feat add new feature')).toBeNull();
+      it('should extract the original header and hash from a revert message', () => {
+        const match = REVERT_PATTERN.exec('Revert "feat: add user endpoint"\n\nThis reverts commit abc1234.');
+        expect(match?.[1]).toBe('feat: add user endpoint');
+        expect(match?.[2]).toBe('abc1234');
       });
 
-      it('should return null for empty string', () => {
-        expect(parseConventionalCommit('')).toBeNull();
+      it('should match revert-style messages in linear time (no catastrophic backtracking)', () => {
+        // Guards the linearized REVERT_PATTERN: the upstream preset pattern backtracks in O(n²)
+        // on long whitespace runs (≈14s on this input) and would blow the test timeout, while
+        // the linear pattern completes in under a millisecond.
+        expect(REVERT_PATTERN.test(`Revert "x${' '.repeat(100_000)}y`)).toBe(false);
+      });
+    });
+
+    describe('pathological and oversized messages', () => {
+      it('should parse a long line without issue references quickly (issue-references regex disabled)', () => {
+        // With the library-default issuePrefixes, the reference-parts regex took ~10 seconds on
+        // this input; a regression re-enabling it shows up here as a test timeout.
+        const result = parseConventionalCommit(`fix: y\n\n${' '.repeat(2_000)}y`);
+        expect(result).toEqual({ type: 'fix', scope: null, breaking: false, description: 'y' });
       });
 
-      it('should return null for message with only whitespace', () => {
-        expect(parseConventionalCommit('   ')).toBeNull();
+      it('should parse a message far beyond the parse cap quickly', () => {
+        const result = parseConventionalCommit(`feat: x\n\n${' '.repeat(100_000)}y`);
+        expect(result).toEqual({ type: 'feat', scope: null, breaking: false, description: 'x' });
       });
 
-      it('should return null for merge commit', () => {
-        expect(parseConventionalCommit("Merge branch 'feature' into main")).toBeNull();
+      it('should preserve a breaking-change footer that sits beyond the parse cap', () => {
+        const filler = 'x'.repeat(MAX_COMMIT_MESSAGE_PARSE_LENGTH);
+        const result = parseConventionalCommit(`feat(api): add endpoint\n\n${filler}\n\nBREAKING CHANGE: drop v1`);
+        expect(result).toEqual({ type: 'feat', scope: 'api', breaking: true, description: 'add endpoint' });
       });
 
-      it('should return null for message with colon but no type', () => {
-        expect(parseConventionalCommit(': no type here')).toBeNull();
+      it('should preserve the header breaking indicator for oversized messages', () => {
+        const result = parseConventionalCommit(`fix!: patch\n\n${'x'.repeat(MAX_COMMIT_MESSAGE_PARSE_LENGTH)}`);
+        expect(result).toEqual({ type: 'fix', scope: null, breaking: true, description: 'patch' });
+      });
+
+      it('should still parse messages containing issue references normally', () => {
+        const result = parseConventionalCommit('fix: y\n\nFixes #123');
+        expect(result).toEqual({ type: 'fix', scope: null, breaking: false, description: 'y' });
       });
     });
 

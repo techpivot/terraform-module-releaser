@@ -32,6 +32,20 @@ deliberately not part of `npm run lint`.
 - `@actions/core` + `@octokit` for GitHub integration; Vitest for tests
 - Path aliases: `@/` → `src/`, `@/tests/` → `__tests__/`, `@/mocks/` → `__mocks__/`
 
+## Code quality
+
+SonarQube scans every PR (`test.yml`); write to these conventions up front rather than fixing findings after:
+
+- Regexes must be linear-time — no adjacent quantifiers that can match the same characters (see `REVERT_PATTERN` in
+  `src/commit-analyzer.ts` for the canonical fix pattern and its regression test)
+- Prefer `??` over equivalent ternaries · `replaceAll` over global-regex `replace` · `.includes(x)` over equality
+  `.some()` · one multi-argument `push()` over consecutive pushes · `node:path` joins (`win32.join` for Windows-only
+  paths) over hand-escaped separators
+- Never default a parameter to a non-empty object literal — take `options?` and spread it over inline defaults:
+  `{ per_page: 100, page: 1, ...options }`
+- Validate at the boundary: input parsing rejects bad values (e.g. non-integer number inputs) with the input name in the
+  error, instead of letting them flow into config
+
 ## Architecture
 
 Runs on `pull_request` events with two flows: PR open/sync → parse modules, post release plan comment; PR merged →

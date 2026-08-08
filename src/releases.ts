@@ -35,13 +35,12 @@ const MAX_ORPHAN_TAG_LOOKUPS = 3;
  * This function fetches the list of releases for the repository specified in the configuration.
  * It returns the releases as an array of objects containing the title, body, and tag name.
  *
- * @param {ListReleasesParams} options - Optional configuration for the API request
+ * @param {ListReleasesParams} options - Optional pagination overrides, merged over the defaults
+ *   (`per_page: 100, page: 1`)
  * @returns {Promise<GitHubRelease[]>} A promise that resolves to an array of release details.
  * @throws {RequestError} Throws an error if the request to fetch releases fails.
  */
-export async function getAllReleases(
-  options: ListReleasesParams = { per_page: 100, page: 1 },
-): Promise<GitHubRelease[]> {
+export async function getAllReleases(options?: ListReleasesParams): Promise<GitHubRelease[]> {
   console.time('Elapsed time fetching releases'); // Start timing
   startGroup('Fetching repository releases');
 
@@ -55,6 +54,8 @@ export async function getAllReleases(
     let totalRequests = 0;
 
     const iterator = octokit.paginate.iterator(octokit.rest.repos.listReleases, {
+      per_page: 100,
+      page: 1,
       ...options,
       owner,
       repo,

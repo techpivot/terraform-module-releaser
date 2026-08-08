@@ -501,7 +501,7 @@ describe('utils/file', () => {
 
       expect(() => {
         const result = findTerraformModuleDirectories(tmpDir);
-        expect(Array.isArray(result)).toBe(true);
+        expect(result).toBeInstanceOf(Array);
       }).not.toThrow();
     });
   });
@@ -841,7 +841,7 @@ describe('utils/file', () => {
       copyModuleContents(srcDirectory, destDirectory, excludePatterns);
 
       // Validate that the destination directory is still empty
-      expect(readdirSync(destDirectory).length).toBe(0);
+      expect(readdirSync(destDirectory)).toHaveLength(0);
     });
 
     it('should throw an error if the source directory does not exist', () => {
@@ -938,7 +938,7 @@ describe('utils/file', () => {
       removeDirectoryContents(directory, exceptions);
 
       // Validate that the directory is still empty
-      expect(readdirSync(directory).length).toBe(0);
+      expect(readdirSync(directory)).toHaveLength(0);
     });
 
     it('should not remove if only exceptions are present', () => {
@@ -951,7 +951,7 @@ describe('utils/file', () => {
       removeDirectoryContents(directory, exceptions);
 
       expect(existsSync(join(directory, 'file.txt'))).toBe(true);
-      expect(readdirSync(directory).length).toBe(1); // Only the exception should exist
+      expect(readdirSync(directory)).toHaveLength(1); // Only the exception should exist
     });
 
     it('should handle nested exceptions correctly', () => {

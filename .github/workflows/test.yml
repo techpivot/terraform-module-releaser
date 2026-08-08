@@ -1,43 +1,49 @@
 name: Test
 
 on:
-  # Trigger analysis when pushing in master or pull requests, and when creating
-  # a pull request.
+  pull_request:
+    branches:
+      - main
   push:
     branches:
       - main
-  pull_request:
-    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
 
 jobs:
-  Tests:
-    runs-on: ubuntu-latest
+  test:
     name: TypeScript Tests
-    permissions:
-      contents: read
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Checkout
+        id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # Disabling shallow clone is recommended for improving relevancy of reporting
+          # Disabling shallow clone is recommended for improving relevancy of SonarQube reporting
           fetch-depth: 0
           persist-credentials: false
 
       - name: Setup Node.js
+        id: setup-node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: .node-version
           cache: npm
 
       - name: Install Dependencies
+        id: npm-ci
         run: npm ci --no-fund
 
-      - name: Run Tests Typescript
+      - name: Run Tests
+        id: test
         run: npm run test
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # Note: SonarQube requires the results from tests to get the coverage report
       - name: SonarQube Scan
+        id: sonarqube
         uses: SonarSource/sonarqube-scan-action@22918119ff8e1ca75a623e15c8296b6ea4fbe28f # v8.2.1
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
