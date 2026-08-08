@@ -20,7 +20,7 @@ updates:
       # Actions runtime bump (node-versioning skill).
       - dependency-name: "@types/node"
         update-types:
-          - version-update:semver-major
+          - "version-update:semver-major"
     groups:
       npm-development:
         dependency-type: development

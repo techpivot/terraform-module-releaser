@@ -59,8 +59,8 @@ describe('node version alignment', () => {
     expect(typesMajor).toBe(runtimeMajor);
   });
 
-  it('should pin .node-version to the production runtime major (parity policy)', () => {
-    expect(Number.isNaN(devMajor)).toBe(false);
+  it('should pin .node-version to the production runtime major as a bare major (parity policy)', () => {
+    expect(nodeVersionFile).toMatch(/^\d+$/);
     expect(devMajor).toBe(runtimeMajor);
   });
 });
