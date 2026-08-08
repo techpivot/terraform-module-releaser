@@ -175,8 +175,9 @@ describe('config', () => {
 
     it('should throw error for non-numeric wiki-sidebar-changelog-max', () => {
       setupTestInputs({ 'wiki-sidebar-changelog-max': 'invalid' });
+      // Rejected at input-parse time by createConfigFromInputs, before config-level validation runs
       expect(() => getConfig()).toThrow(
-        new TypeError('Wiki Sidebar Change Log Max must be an integer greater than or equal to one'),
+        new Error("Failed to process input 'wiki-sidebar-changelog-max': Invalid number value: 'invalid'"),
       );
     });
 

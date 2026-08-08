@@ -631,9 +631,11 @@ export class TerraformModule {
 
     // Add release-specific info if relevant
     if (this.needsRelease()) {
-      lines.push(`   Release Type: ${this.getReleaseType()}`);
-      lines.push(`   Release Reasons: ${this.getReleaseReasons().join(', ')}`);
-      lines.push(`   Release Tag: ${this.getReleaseTag()}`);
+      lines.push(
+        `   Release Type: ${this.getReleaseType()}`,
+        `   Release Reasons: ${this.getReleaseReasons().join(', ')}`,
+        `   Release Tag: ${this.getReleaseTag()}`,
+      );
     }
 
     return lines.join('\n');
@@ -661,9 +663,9 @@ export class TerraformModule {
     let name = terraformDirectory
       .trim()
       .toLowerCase()
-      .replace(/[/\\]/g, config.tagDirectorySeparator) // Normalize backslashes and forward slashes to configured separator
-      .replace(/[^a-zA-Z0-9/._-]+/g, '-') // Replace invalid characters with hyphens (preserve alphanumeric, /, ., _, -)
-      .replace(/[/._-]{2,}/g, (match) => match[0]); // Normalize consecutive special characters to single instances
+      .replaceAll(/[/\\]/g, config.tagDirectorySeparator) // Normalize backslashes and forward slashes to configured separator
+      .replaceAll(/[^a-zA-Z0-9/._-]+/g, '-') // Replace invalid characters with hyphens (preserve alphanumeric, /, ., _, -)
+      .replaceAll(/[/._-]{2,}/g, (match) => match[0]); // Normalize consecutive special characters to single instances
 
     // Remove leading/trailing special characters safely without regex backtracking
     name = removeLeadingCharacters(name, VALID_TAG_DIRECTORY_SEPARATORS);

@@ -223,17 +223,17 @@ export async function getWikiStatus(terraformModules: TerraformModule[]): Promis
  *   of characters for replacement and constructs a character class for the `pattern` regex.
  *
  * Replacement logic:
- * - `moduleName.replace(pattern, match => WIKI_TITLE_REPLACEMENTS[match])` matches each specified character
+ * - `moduleName.replaceAll(pattern, match => WIKI_TITLE_REPLACEMENTS[match])` matches each specified character
  *   in `moduleName` and replaces it with the mapped character from `WIKI_TITLE_REPLACEMENTS`.
  */
 function getWikiSlug(moduleName: string): string {
   const escapeForRegex = (char: string): string => {
-    return char.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // Escape special characters for regex
+    return char.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`); // Escape special characters for regex
   };
 
   const pattern = new RegExp(`[${Object.keys(WIKI_TITLE_REPLACEMENTS).map(escapeForRegex).join('')}]`, 'g');
 
-  return moduleName.replace(pattern, (match) => WIKI_TITLE_REPLACEMENTS[match]);
+  return moduleName.replaceAll(pattern, (match) => WIKI_TITLE_REPLACEMENTS[match]);
 }
 
 /**
@@ -326,7 +326,7 @@ async function generateWikiTerraformModule(terraformModule: TerraformModule): Pr
     ref: ref,
     ref_comment: refComment,
     module_source: moduleSource,
-    module_name_terraform: terraformModule.name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase(),
+    module_name_terraform: terraformModule.name.replaceAll(/[^a-zA-Z0-9]/g, '_').toLowerCase(),
   });
 
   const content = [
@@ -412,11 +412,11 @@ async function generateWikiSidebar(terraformModules: TerraformModule[]): Promise
       const heading = headingMatch[1].trim();
 
       // Convert heading into a valid ID string (keep only [a-zA-Z0-9-_]) But we need spaces to go to a '-'
-      const idString = heading.replace(/ +/g, '-').replace(/[^a-zA-Z0-9-_]/g, '');
+      const idString = heading.replaceAll(/ +/g, '-').replaceAll(/[^a-zA-Z0-9-_]/g, '');
 
       // Append the entry to changelogEntries
       changelogEntries.push(
-        `               <li><a href="${baselink}#${idString}">${heading.replace(/`/g, '')}</a></li>`,
+        `               <li><a href="${baselink}#${idString}">${heading.replaceAll('`', '')}</a></li>`,
       );
     }
 

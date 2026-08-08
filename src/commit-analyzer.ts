@@ -4,8 +4,28 @@ import type { ConventionalCommitResult, ReleaseType } from '@/types';
 import { RELEASE_TYPE, SEMVER_MODE } from '@/utils/constants';
 
 /**
- * Pre-configured conventional commit parser using options taken verbatim from the
- * `conventional-changelog-conventionalcommits` preset's `createParserOpts()`:
+ * Matches GitHub-style revert commits (`Revert "<header>"` … `This reverts commit <hash>.`),
+ * capturing the original header and commit hash.
+ *
+ * This is the one parser option deliberately not taken verbatim from the
+ * `conventional-changelog-conventionalcommits` preset. The preset's pattern
+ * (`/^(?:Revert|revert:)\s"?([\s\S]+?)"?\s*This reverts commit (\w*)\./i`) backtracks
+ * super-linearly: the lazy `[\s\S]+?`, the optional `"?`, and the `\s*` all match the same
+ * characters, so a crafted message with a long whitespace run costs O(n²) — roughly 14 seconds
+ * at 100k characters. Requiring the captured header to end on a non-quote, non-whitespace
+ * character (`[\s\S]*?[^"\s]`) removes the ambiguity and keeps matching linear (<1ms at 100k)
+ * while accepting the same real-world revert messages. Only degenerate headers diverge: an
+ * empty quoted header (`Revert ""`) no longer matches, where the preset pattern captured a
+ * stray quote character as the header.
+ *
+ * Exported for the linear-time regression test; not part of the public API.
+ */
+export const REVERT_PATTERN = /^(?:Revert|revert:)\s"?([\s\S]*?[^"\s])"?\s*This reverts commit (\w*)\./i;
+
+/**
+ * Pre-configured conventional commit parser using options taken from the
+ * `conventional-changelog-conventionalcommits` preset's `createParserOpts()`
+ * (verbatim except `revertPattern` — see {@link REVERT_PATTERN}):
  *
  * @see https://github.com/conventional-changelog/conventional-changelog/blob/master/packages/conventional-changelog-conventionalcommits/src/parser.js
  *
@@ -34,7 +54,8 @@ import { RELEASE_TYPE, SEMVER_MODE } from '@/utils/constants';
  *
  * - `revertPattern` / `revertCorrespondence` — Matches GitHub-style revert
  *   commits (`Revert "<header>" / This reverts commit <hash>.`), extracting the
- *   original header and commit hash.
+ *   original header and commit hash. The parsed revert fields are currently
+ *   unused by this action; the option is kept for preset fidelity.
  *
  * - `issuePrefixes` — Characters that prefix issue references (e.g. `#123`).
  */
@@ -43,7 +64,7 @@ const commitParser = new CommitParser({
   breakingHeaderPattern: /^(\w*)(?:\((.*)\))?!: (.*)$/,
   headerCorrespondence: ['type', 'scope', 'subject'],
   noteKeywords: ['BREAKING CHANGE', 'BREAKING-CHANGE'],
-  revertPattern: /^(?:Revert|revert:)\s"?([\s\S]+?)"?\s*This reverts commit (\w*)\./i,
+  revertPattern: REVERT_PATTERN,
   revertCorrespondence: ['header', 'hash'],
   issuePrefixes: ['#'],
 });

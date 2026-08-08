@@ -27,7 +27,7 @@ describe('tags', () => {
     it('should successfully fetch tags from the real repository', async () => {
       const tags = await getAllTags();
 
-      expect(Array.isArray(tags)).toBe(true);
+      expect(tags).toBeInstanceOf(Array);
 
       // Extract tag names from the tag objects
       const tagNames = tags.map((tag) => tag.name);
@@ -89,8 +89,8 @@ describe('tags', () => {
       stubOctokitReturnData('repos.listTags', mockTagData);
       const tags = await getAllTags({ per_page: 1 });
 
-      expect(Array.isArray(tags)).toBe(true);
-      expect(tags.length).toBe(3);
+      expect(tags).toBeInstanceOf(Array);
+      expect(tags).toHaveLength(3);
 
       // Exact match of known tags to ensure no unexpected tags are included
       expect(tags).toEqual(expectedTags);
@@ -111,8 +111,8 @@ describe('tags', () => {
       stubOctokitReturnData('repos.listTags', mockTagData);
       const tags = await getAllTags({ per_page: 1 });
 
-      expect(Array.isArray(tags)).toBe(true);
-      expect(tags.length).toBe(1);
+      expect(tags).toBeInstanceOf(Array);
+      expect(tags).toHaveLength(1);
 
       // Exact match of known tags to ensure no unexpected tags are included
       expect(tags).toEqual(expectedTags);
@@ -136,8 +136,8 @@ describe('tags', () => {
 
       const tags = await getAllTags({ per_page: 20 });
 
-      expect(Array.isArray(tags)).toBe(true);
-      expect(tags.length).toBe(3);
+      expect(tags).toBeInstanceOf(Array);
+      expect(tags).toHaveLength(3);
 
       // Exact match of known tags to ensure no unexpected tags are included
       const expectedTags = ['v2.0.0', 'v2.0.1', 'v2.0.2'];
@@ -172,7 +172,7 @@ describe('tags', () => {
       try {
         await getAllTags();
       } catch (error) {
-        expect(error instanceof Error).toBe(true);
+        expect(error).toBeInstanceOf(Error);
         expect((error as Error).message).toBe(`Failed to fetch tags: ${errorMessage} (status: 403)`);
         expect((error as Error).cause).toBeInstanceOf(RequestError);
         expect(((error as Error).cause as RequestError).message).toBe(errorMessage);
@@ -192,7 +192,7 @@ describe('tags', () => {
       try {
         await getAllTags();
       } catch (error) {
-        expect(error instanceof Error).toBe(true);
+        expect(error).toBeInstanceOf(Error);
         expect((error as Error).message).toBe(`Failed to fetch tags: ${errorMessage}`);
         expect((error as Error).cause).toBeInstanceOf(Error);
         expect(((error as Error).cause as Error).message).toBe(errorMessage);
@@ -213,7 +213,7 @@ describe('tags', () => {
       try {
         await getAllTags();
       } catch (error) {
-        expect(error instanceof Error).toBe(true);
+        expect(error).toBeInstanceOf(Error);
         expect((error as Error).message).toBe(errorMessage.trim());
         expect((error as Error).cause).toBe(errorMessage);
       }

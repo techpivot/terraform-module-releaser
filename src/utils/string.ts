@@ -81,10 +81,7 @@ export function removeLeadingCharacters(input: string, charactersToRemove: strin
  * renderTemplate("Hello, {{name}}!", { name: null })
  */
 export function renderTemplate(template: string, variables: Record<string, string | undefined | null>): string {
-  return template.replace(/\{\{(\w+)\}\}/g, (placeholder, key) => {
-    const value = variables[key];
-    return value !== undefined && value !== null ? value : placeholder;
-  });
+  return template.replaceAll(/\{\{(\w+)\}\}/g, (placeholder, key) => variables[key] ?? placeholder);
 }
 
 /**

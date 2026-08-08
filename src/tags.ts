@@ -12,13 +12,12 @@ type ListTagsParams = Omit<RestEndpointMethodTypes['repos']['listTags']['paramet
  * This function utilizes pagination to retrieve all tags with their commit SHAs,
  * returning them as an array of GitHubTag objects.
  *
- * @param {ListTagsParams} options - Optional configuration for the API request
- * @param {number} options.perPage - Number of items per page (default: 100)
+ * @param {ListTagsParams} options - Optional pagination overrides, merged over the defaults
+ *   (`per_page: 100, page: 1`)
  * @returns {Promise<GitHubTag[]>} A promise that resolves to an array of tag objects with name and commitSHA.
  * @throws {RequestError} Throws an error if the request to fetch tags fails.
  */
 export async function getAllTags(options?: ListTagsParams): Promise<GitHubTag[]> {
-  const { per_page = 100, page = 1, ...rest }: ListTagsParams = options ?? ({} as ListTagsParams);
   console.time('Elapsed time fetching tags');
   startGroup('Fetching repository tags');
 
@@ -30,14 +29,11 @@ export async function getAllTags(options?: ListTagsParams): Promise<GitHubTag[]>
 
     const tags: GitHubTag[] = [];
     let totalRequests = 0;
-    const paginationOptions: ListTagsParams = {
-      per_page,
-      page,
-      ...rest,
-    };
 
     for await (const response of octokit.paginate.iterator(octokit.rest.repos.listTags, {
-      ...paginationOptions,
+      per_page: 100,
+      page: 1,
+      ...options,
       owner,
       repo,
     })) {

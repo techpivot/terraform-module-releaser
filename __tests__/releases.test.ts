@@ -82,7 +82,7 @@ describe('releases', () => {
     });
 
     it('should fetch releases and match expected structure', () => {
-      expect(Array.isArray(releases)).toBe(true);
+      expect(releases).toBeInstanceOf(Array);
       expect(releases.length).toBeGreaterThan(0);
 
       // Test initial release (v1.0.0)
@@ -132,8 +132,8 @@ describe('releases', () => {
       stubOctokitReturnData('repos.listReleases', mockListReleasesResponse);
       const releases = await getAllReleases({ per_page: 1 });
 
-      expect(Array.isArray(releases)).toBe(true);
-      expect(releases.length).toBe(mockListReleasesResponse.data.length);
+      expect(releases).toBeInstanceOf(Array);
+      expect(releases).toHaveLength(mockListReleasesResponse.data.length);
 
       // Exact match of known tags to ensure no unexpected tags are included
       expect(releases).toEqual(mockGetAllReleasesResponse);
@@ -157,8 +157,8 @@ describe('releases', () => {
       stubOctokitReturnData('repos.listReleases', mockReleaseDataSingle);
       const releases = await getAllReleases({ per_page: 1 });
 
-      expect(Array.isArray(releases)).toBe(true);
-      expect(releases.length).toBe(1);
+      expect(releases).toBeInstanceOf(Array);
+      expect(releases).toHaveLength(1);
 
       // Exact match of known tags to ensure no unexpected tags are included
       expect(releases).toEqual(mappedReleaseDataSingle);
@@ -175,8 +175,8 @@ describe('releases', () => {
       stubOctokitReturnData('repos.listReleases', mockListReleasesResponse);
       const releases = await getAllReleases({ per_page: 20 });
 
-      expect(Array.isArray(releases)).toBe(true);
-      expect(releases.length).toBe(mockListReleasesResponse.data.length);
+      expect(releases).toBeInstanceOf(Array);
+      expect(releases).toHaveLength(mockListReleasesResponse.data.length);
 
       // Exact match of known tags to ensure no unexpected tags are included
       expect(releases).toEqual(mockGetAllReleasesResponse);
@@ -202,7 +202,7 @@ describe('releases', () => {
       });
       const releases = await getAllReleases({ per_page: 1 });
 
-      expect(Array.isArray(releases)).toBe(true);
+      expect(releases).toBeInstanceOf(Array);
       expect(releases).toEqual([
         {
           id: 182147836,
@@ -238,7 +238,7 @@ describe('releases', () => {
       try {
         await getAllReleases();
       } catch (error) {
-        expect(error instanceof Error).toBe(true);
+        expect(error).toBeInstanceOf(Error);
         expect((error as Error).message).toBe(`Failed to fetch releases: ${errorMessage} (status: 403)`);
         expect((error as Error).cause).toBeInstanceOf(RequestError);
         expect(((error as Error).cause as RequestError).message).toBe(errorMessage);
@@ -261,7 +261,7 @@ describe('releases', () => {
       try {
         await getAllReleases();
       } catch (error) {
-        expect(error instanceof Error).toBe(true);
+        expect(error).toBeInstanceOf(Error);
         expect((error as Error).message).toBe(`Failed to fetch releases: ${errorMessage}`);
         expect((error as Error).cause).toBeInstanceOf(Error);
         expect(((error as Error).cause as Error).message).toBe(errorMessage);
@@ -285,7 +285,7 @@ describe('releases', () => {
       try {
         await getAllReleases();
       } catch (error) {
-        expect(error instanceof Error).toBe(true);
+        expect(error).toBeInstanceOf(Error);
         expect((error as Error).message).toBe(errorMessage.trim());
         expect((error as Error).cause).toBe(errorMessage);
       }
@@ -566,7 +566,7 @@ describe('releases', () => {
       try {
         await createTaggedReleases([mockTerraformModule]);
       } catch (error) {
-        expect(error instanceof Error).toBe(true);
+        expect(error).toBeInstanceOf(Error);
         expect((error as Error).message).toBe(`Failed to create releases/tags in repository: ${errorMessage}`);
         expect(((error as Error).cause as Error).message).toBe(errorMessage);
       }

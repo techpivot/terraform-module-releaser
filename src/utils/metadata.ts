@@ -99,9 +99,14 @@ export function createConfigFromInputs(): Config {
           );
         }
       } else if (type === 'number') {
-        // Handle number inputs with parseInt
+        // Handle number inputs with parseInt, rejecting non-numeric values so NaN never
+        // propagates into the config
         const input = getInput(inputName, { required });
-        value = Number.parseInt(input, 10);
+        const parsed = Number.parseInt(input, 10);
+        if (Number.isNaN(parsed)) {
+          throw new TypeError(`Invalid number value: '${input}'`);
+        }
+        value = parsed;
       } else {
         // Handle string inputs
         value = getInput(inputName, { required });

@@ -45,7 +45,7 @@ const devMajor = Number(/^(\d+)/.exec(nodeVersionFile)?.[1]);
 describe('node version alignment', () => {
   it('should declare a nodeXX production runtime in action.yml', () => {
     expect(actionYml.runs.using).toMatch(/^node\d+$/);
-    expect(Number.isNaN(runtimeMajor)).toBe(false);
+    expect(runtimeMajor).not.toBeNaN();
   });
 
   it('should pin the engines.node floor to the production runtime major', () => {
