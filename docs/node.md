@@ -54,13 +54,13 @@ When development runs a newer Node than the production runtime, two silent failu
 - **Syntax errors**: A tsconfig `target` past what the runtime's V8 parses fails instantly at load time on every
   consumer
 
-Parity closes both twice over: `npm run typecheck` rejects post-runtime APIs statically (the `@types/node` pin), and the
-test suite executes on the runtime's own line anyway.
+Parity closes both twice over: `npm run lint:types` rejects post-runtime APIs statically (the `@types/node` pin), and
+the test suite executes on the runtime's own line anyway.
 
 ## The guards
 
 1. **`@types/node` pinned to the runtime major (`^24`)** — the compiler only knows the API surface the runner actually
-   has, so post-runtime APIs fail `npm run typecheck` the moment they are written
+   has, so post-runtime APIs fail `npm run lint:types` the moment they are written
 1. **`engines.node` floor equals the runtime major (`>=24`)** — declares the true support floor to contributors and
    tooling, and keeps the `@types/node` pin honest (a higher floor would legitimize newer typings)
 1. **tsconfig `target` bounded by the runtime** — `ES2024`, per the official `@tsconfig/node24` base; raise it only when

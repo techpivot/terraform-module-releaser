@@ -35,9 +35,8 @@ The repository includes a pre-configured devcontainer with:
 4. Run validation:
 
    ```bash
-   npm run check:fix       # Biome lint/format + Prettier (md/yml)
-   npm run textlint:fix    # Prose linting for markdown
-   npm run typecheck       # TypeScript strict compilation check
+   npm run fix             # Format everything, then autofix code and prose
+   npm run lint            # All linters (code, types, prose, workflows)
    npm run test            # Full test suite with coverage
    ```
 
@@ -75,7 +74,7 @@ All commits must follow the [Conventional Commits](https://www.conventionalcommi
 
 - Lints Markdown prose for terminology and style
 - Config: `.github/linters/.textlintrc`
-- Run: `npm run textlint:fix`
+- Run: `npm run lint:text` (or `npm run lint:text:fix` to autofix)
 
 ### TypeScript
 
@@ -83,7 +82,7 @@ All commits must follow the [Conventional Commits](https://www.conventionalcommi
 - Target: ECMAScript 2024, Module: ECMAScript 2022, ModuleResolution: bundler — the target is bounded by the GitHub
   Actions runtime, not local Node (see [node.md](node.md))
 - Path aliases configured in `tsconfig.json` and `vitest.config.ts`
-- Type-check only: `npm run typecheck` (uses `--noEmit`)
+- Type-check only: `npm run lint:types` (uses `--noEmit`)
 
 ## CI/CD Pipeline
 
@@ -95,7 +94,7 @@ When a PR is opened or updated against `main`, these workflows run:
 | ---------- | ------------ | ---------------------------------------------------------------------------------- |
 | **CI**     | `ci.yml`     | Builds the action (`npm run package`), runs it against the repository (`uses: ./`) |
 | **Test**   | `test.yml`   | Runs Vitest suite (`npm run test`), then SonarQube coverage analysis               |
-| **Lint**   | `lint.yml`   | Biome check (`npm run check`) + GitHub Super-Linter                                |
+| **Lint**   | `lint.yml`   | `npm run format:check` + `npm run lint`, then a CI-only gitleaks secret scan       |
 | **CodeQL** | `codeql.yml` | Security analysis for TypeScript                                                   |
 
 ### Release Workflows
@@ -135,14 +134,40 @@ directory is only committed during the automated release process.
 
 ## Key Scripts
 
-| Script         | Command                                             | Purpose                       |
-| -------------- | --------------------------------------------------- | ----------------------------- |
-| `check`        | `biome check . && prettier -c ...`                  | Lint check (no changes)       |
-| `check:fix`    | `biome check --write --unsafe . && prettier -w ...` | Autofix linting issues        |
-| `textlint`     | `textlint -c ... **/*.md`                           | Check Markdown prose          |
-| `textlint:fix` | `textlint --fix ...`                                | Fix Markdown prose            |
-| `typecheck`    | `tsc --noEmit`                                      | TypeScript type checking      |
-| `test`         | `vitest run --coverage`                             | Full test suite with coverage |
-| `test:watch`   | `vitest`                                            | Watch mode for development    |
-| `package`      | `ncc build src/index.ts -o dist`                    | Build distribution bundle     |
-| `coverage`     | `make-coverage-badge --output-path ...`             | Generate coverage badge SVG   |
+Names follow the [ESLint package.json conventions](https://eslint.org/docs/latest/contribute/package-json-conventions):
+`lint*` analyzes, `format*` rewrites, `:fix` applies corrections, `:check` never mutates.
+
+| Script          | Command                                      | Purpose                           |
+| --------------- | -------------------------------------------- | --------------------------------- |
+| `format`        | `biome format --write . && prettier -w ...`  | Rewrite files to match style      |
+| `format:check`  | `biome format . && prettier -c ...`          | Verify formatting, change nothing |
+| `fix`           | `format` + `lint:code:fix` + `lint:text:fix` | Every available autofix           |
+| `lint`          | all `lint:*` below                           | Every linter                      |
+| `lint:code`     | `biome lint .`                               | TS/JS/JSON static analysis        |
+| `lint:code:fix` | `biome lint --write .`                       | Autofix code lint findings        |
+| `lint:types`    | `tsc --noEmit`                               | TypeScript type checking          |
+| `lint:text`     | `textlint -c ... <md>`                       | Markdown prose/terminology        |
+| `lint:text:fix` | `textlint --fix ...`                         | Fix Markdown prose                |
+| `lint:actions`  | `external-linter.mjs actionlint`             | Workflow correctness              |
+| `test`          | `vitest run --coverage`                      | Full test suite with coverage     |
+| `test:watch`    | `vitest`                                     | Watch mode for development        |
+| `package`       | `ncc build src/index.ts -o dist`             | Build distribution bundle         |
+| `coverage`      | `make-coverage-badge --output-path ...`      | Generate coverage badge SVG       |
+
+`lint:actions` shells out to actionlint, a Go binary with no first-party npm package. A missing binary is skipped
+locally with an install hint (`brew install actionlint`) so `npm run lint` works straight after `npm ci`; in CI the same
+wrapper turns it into a hard failure, and `lint.yml` installs it.
+
+### Secret scanning
+
+[gitleaks](https://github.com/gitleaks/gitleaks) runs as a CI-only step in `lint.yml`, not as part of `npm run lint` —
+contributors never need the binary. Two deliberate choices:
+
+- **The CLI, not `gitleaks-action`.** The action gates on a `GITLEAKS_LICENSE` for organization-owned repositories and
+  checks it _before_ scanning. Secrets are never exposed to workflows triggered from forked pull requests, so that gate
+  fails every external contribution with an error the contributor cannot fix. The CLI needs no license.
+- **`gitleaks dir .`, scanning the whole working tree.** The action scans only a pull request's own commit range, so a
+  secret already on `main` would stop being reported. Scanning the tree keeps CI red until it is removed.
+
+Exclusions live in `.gitleaks.toml`, which currently allowlists `dist/` — the generated ncc bundle inlines dependency
+JSDoc, including an `@actions/core` example that reads as an API key.

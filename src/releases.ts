@@ -7,7 +7,7 @@ import { config } from '@/config';
 import { context } from '@/context';
 import { hasLegacyPostReleaseComment } from '@/pull-request';
 import { TerraformModule } from '@/terraform-module';
-import type { GitHubRelease, ReleaseOutcome } from '@/types';
+import type { GitHubRelease, GitHubTag, ReleaseOutcome } from '@/types';
 import { GITHUB_ACTIONS_BOT_NAME } from '@/utils/constants';
 import { copyModuleContents } from '@/utils/file';
 import { configureGitAuthentication, getGitHubActionsBotEmail } from '@/utils/github';
@@ -181,6 +181,305 @@ async function getTagProvenance(tagName: string, commitSHA: string | null): Prom
 }
 
 /**
+ * Legacy gate: was this pull request already completed under the pre-marker scheme?
+ *
+ * True when its post-release comment uses LEGACY_PR_RELEASE_COMMENT_MARKER and none of its releases carry
+ * our marker, in which case the old "don't double-release" behavior is preserved by skipping. This reads
+ * only our own markers — never the editable release-note text — so it is robust and unambiguous. A pull
+ * request released under the current scheme carries the new comment marker, so it is not treated as
+ * legacy and continues to self-heal.
+ *
+ * @param {TerraformModule[]} modules - The modules needing a release.
+ * @param {number} prNumber - The pull request number.
+ * @returns {Promise<boolean>} Whether this pull request already released under the pre-marker scheme.
+ */
+async function isLegacyCompletedPullRequest(modules: TerraformModule[], prNumber: number): Promise<boolean> {
+  const anyReleaseHasMarker = modules.some((module) =>
+    module.releases.some((release) => matchesPrMarker(release.body, prNumber)),
+  );
+
+  return !anyReleaseHasMarker && (await hasLegacyPostReleaseComment());
+}
+
+/**
+ * Step 1: has this module already been released for this pull request?
+ *
+ * This makes re-runs idempotent — a retried or re-run merge will not bump or re-create a release for a
+ * module that was already released by this pull request (which would otherwise over-bump the version).
+ * It is still reported so the post-release comment lists it.
+ *
+ * @param {TerraformModule} module - The module being processed.
+ * @param {number} prNumber - The pull request number.
+ * @returns {ReleaseOutcome | null} The skip outcome, or null when this pull request has not released it.
+ */
+function findCompletedRelease(module: TerraformModule, prNumber: number): ReleaseOutcome | null {
+  const existingPrRelease = module.releases.find((release) => matchesPrMarker(release.body, prNumber));
+  if (!existingPrRelease) {
+    return null;
+  }
+
+  info(`Module '${module.name}' already released for this pull request (${existingPrRelease.title}). Skipping.`);
+  module.clearCommits();
+
+  return {
+    module,
+    action: 'skipped',
+    releaseTag: existingPrRelease.tagName,
+    release: existingPrRelease,
+  };
+}
+
+/**
+ * Step 1b: the latest tag is ours and already has a release, but that release's body no longer carries
+ * our marker (edited by hand, or replaced by GitHub's "Generate release notes"). Without this, step 1
+ * would miss and step 3 would bump and publish a duplicate release.
+ *
+ * A release carrying another pull request's marker is unambiguously not ours, so no lookup is needed —
+ * which means the steady state (every release body carrying a marker) costs nothing.
+ *
+ * This requires a real `marker`, never the pre-marker heuristic. Skipping is irreversible: a wrong
+ * answer here silently drops a genuine release forever, whereas a wrong answer in step 2 leaves a state
+ * a re-run can still correct.
+ *
+ * @param {TerraformModule} module - The module being processed.
+ * @returns {Promise<ReleaseOutcome | null>} The skip outcome, or null when the latest tag is not
+ *  provably this pull request's.
+ */
+async function findUnmarkedCompletedRelease(module: TerraformModule): Promise<ReleaseOutcome | null> {
+  const latestTag = module.getLatestTag();
+  if (latestTag === null) {
+    return null;
+  }
+
+  const releaseForLatestTag = module.releases.find((release) => release.tagName === latestTag);
+  if (releaseForLatestTag === undefined || hasAnyPrMarker(releaseForLatestTag.body)) {
+    return null;
+  }
+
+  if ((await getTagProvenance(latestTag, module.getLatestTagCommitSHA())) !== 'marker') {
+    return null;
+  }
+
+  info(
+    `Module '${module.name}' was already released by this pull request as '${releaseForLatestTag.tagName}' (verified via the release commit; the release body no longer carries the marker). Skipping.`,
+  );
+  module.clearCommits();
+
+  return {
+    module,
+    action: 'skipped',
+    releaseTag: releaseForLatestTag.tagName,
+    release: releaseForLatestTag,
+  };
+}
+
+/**
+ * Warns that a module's orphan tags could not be attributed to this pull request, so they were left
+ * untouched and a new version is being released instead.
+ *
+ * Says nothing when there are no orphan tags — the healthy steady state.
+ *
+ * @param {string} moduleName - The module being processed.
+ * @param {ReadonlyArray<GitHubTag>} orphanTags - The inspected tags that were not attributable.
+ * @returns {void}
+ */
+function warnUnattributableOrphanTags(moduleName: string, orphanTags: ReadonlyArray<GitHubTag>): void {
+  if (orphanTags.length === 0) {
+    return;
+  }
+
+  const isSingle = orphanTags.length === 1;
+  const tagList = orphanTags.map((tag) => `'${tag.name}'`).join(', ');
+  warning(
+    `Module '${moduleName}' has ${isSingle ? 'a tag' : 'tags'} without a release (${tagList}) that ${isSingle ? 'was' : 'were'} not produced by this pull request. Leaving ${isSingle ? 'it' : 'them'} untouched and releasing a new version instead.`,
+  );
+}
+
+/**
+ * Step 2: recover an orphan tag (a tag with no release) that this pull request produced — from a
+ * partial failure where the tag was pushed but the release was never created, or where the release was
+ * deleted by hand. The release is created for the existing tag, at its existing version, without
+ * bumping or pushing a new commit/tag.
+ *
+ * We search every orphan tag newest-first, not just the latest one, because a later pull request may
+ * already have bumped past ours: if PR #5's tag was orphaned and PR #6 then released a higher version,
+ * #5's orphan is no longer the latest and would otherwise never be healed (#5 would instead bump again
+ * and publish its older tree as the newest version). Only tags *without* a release are candidates, so
+ * in the steady state there is nothing to scan and no request is made. The scan is capped so a
+ * repository with many orphan tags cannot turn one merge into an unbounded number of lookups.
+ *
+ * Orphan tags we could NOT attribute to this pull request are deliberately left alone: they belong to a
+ * different pull request (or predate this action), and their owner's re-run is what should heal them.
+ * Claiming one would attach this pull request's notes to another commit's tree and leave this pull
+ * request's own changes unreleased.
+ *
+ * @param {TerraformModule} module - The module being processed.
+ * @param {string} releaseMarker - The hidden marker tying the created release to this pull request.
+ * @returns {Promise<ReleaseOutcome | null>} The recovery outcome, or null when no orphan tag is ours.
+ */
+async function recoverOrphanTagRelease(module: TerraformModule, releaseMarker: string): Promise<ReleaseOutcome | null> {
+  const {
+    octokit,
+    repo: { owner, repo },
+  } = context;
+  const moduleName = module.name;
+
+  const orphanTags = module.tags.filter((tag) => !module.releases.some((release) => release.tagName === tag.name));
+  const orphanTagsToInspect = orphanTags.slice(0, MAX_ORPHAN_TAG_LOOKUPS);
+  if (orphanTags.length > orphanTagsToInspect.length) {
+    info(
+      `Module '${moduleName}' has ${orphanTags.length} tags without releases; only the newest ${MAX_ORPHAN_TAG_LOOKUPS} are checked for recovery.`,
+    );
+  }
+
+  let recoverableTag: string | null = null;
+  for (const tag of orphanTagsToInspect) {
+    if ((await getTagProvenance(tag.name, tag.commitSHA)) !== 'unknown') {
+      recoverableTag = tag.name;
+      break;
+    }
+  }
+
+  if (recoverableTag === null) {
+    warnUnattributableOrphanTags(moduleName, orphanTagsToInspect);
+
+    return null;
+  }
+
+  const recoveredVersion = TerraformModule.getVersionFromTag(recoverableTag) as string;
+  info(`Module '${moduleName}' has tag '${recoverableTag}' without a release. Creating the missing release.`);
+
+  const changelog = createTerraformModuleChangelogEntry(recoveredVersion, module.commitMessages);
+  const body = `${changelog}\n\n${releaseMarker}`;
+  const response = await octokit.rest.repos.createRelease({
+    owner,
+    repo,
+    tag_name: recoverableTag,
+    name: recoverableTag,
+    body,
+    draft: false,
+    prerelease: config.preRelease,
+  });
+
+  const release = {
+    id: response.data.id,
+    title: response.data.name ?? recoverableTag,
+    tagName: response.data.tag_name,
+    body: response.data.body ?? body,
+  };
+  module.setReleases([release, ...module.releases]);
+  module.clearCommits();
+
+  return { module, action: 'recovered', releaseTag: recoverableTag, release };
+}
+
+/**
+ * Step 3: normal release — bump the version, then commit, tag, push, and create the release.
+ *
+ * @param {TerraformModule} module - The module being processed.
+ * @param {string} releaseMarker - The hidden marker tying the release and its commit to this pull request.
+ * @returns {Promise<ReleaseOutcome>} The created outcome.
+ */
+async function publishNewRelease(module: TerraformModule, releaseMarker: string): Promise<ReleaseOutcome> {
+  const {
+    octokit,
+    repo: { owner, repo },
+    prBody,
+    prTitle,
+    workspaceDir,
+  } = context;
+  const moduleName = module.name;
+
+  const releaseTag = module.getReleaseTag() as string;
+  const releaseTagVersion = module.getReleaseTagVersion() as string;
+  info(`Release type: ${module.getReleaseType()}`);
+  info(`Next tag version: ${releaseTagVersion}`);
+
+  // Create a temporary working directory
+  // Replace '/' with '-' to create a valid directory name
+  const fileSystemSafeModuleName = module.name.replaceAll('/', '-');
+  const tmpDir = mkdtempSync(join(tmpdir(), `${fileSystemSafeModuleName}-`));
+  info(`Created temp directory: ${tmpDir}`);
+
+  // Copy the module's contents to the temporary directory, excluding specified patterns
+  copyModuleContents(module.directory, tmpDir, config.moduleAssetExcludePatterns);
+
+  // Copy the module's .git directory
+  cpSync(join(workspaceDir, '.git'), join(tmpDir, '.git'), { recursive: true });
+
+  // Git operations: commit the changes and tag the release.
+  //
+  // The hidden marker is appended as the final line so this commit — and therefore the tag pointing
+  // at it — can later be proven to belong to this pull request. That proof is what makes step 2's
+  // orphan-tag recovery safe; without it we could not distinguish our own interrupted release from
+  // another pull request's, or from a tag pushed by hand.
+  //
+  // The title and body are untrusted and MUST be neutralized first. `git commit -m` uses
+  // `cleanup=whitespace`, so a marker planted on its own line in a pull request description would
+  // survive verbatim into the very text this provenance check trusts.
+  const commitMessage =
+    `${releaseTag}\n\n${neutralizePrMarkers(prTitle)}\n\n${neutralizePrMarkers(prBody)}\n\n${releaseMarker}`.trim();
+  const gitPath = await which('git');
+  const githubActionsBotEmail = await getGitHubActionsBotEmail();
+
+  // Execute git commands in temp directory without inheriting stdio to avoid output pollution
+  const gitOpts: ExecSyncOptions = { cwd: tmpDir };
+
+  // Configure Git authentication
+  configureGitAuthentication(gitPath, gitOpts);
+
+  for (const cmd of [
+    ['config', '--local', 'user.name', GITHUB_ACTIONS_BOT_NAME],
+    ['config', '--local', 'user.email', githubActionsBotEmail],
+    ['add', '.'],
+    ['commit', '-m', commitMessage.trim()],
+    ['tag', releaseTag],
+    ['push', 'origin', releaseTag],
+  ]) {
+    execFileSync(gitPath, cmd, gitOpts);
+  }
+
+  // Store the commit SHA that the tag points to (since it's not returned from the API via create release)
+  const commitSHA = execFileSync(gitPath, ['rev-parse', 'HEAD'], gitOpts).toString().trim();
+
+  // Create a GitHub release using the tag
+  info(`Creating GitHub release for ${moduleName}@${releaseTagVersion}`);
+  const changelog = createTerraformModuleChangelog(module);
+  const body = `${changelog}\n\n${releaseMarker}`;
+
+  const response = await octokit.rest.repos.createRelease({
+    owner,
+    repo,
+    tag_name: releaseTag, // For now we keep these the same with tagName
+    name: releaseTag,
+    body,
+    draft: false,
+    prerelease: config.preRelease,
+  });
+
+  const release = {
+    id: response.data.id,
+    title: response.data.name ?? releaseTag,
+    tagName: response.data.tag_name,
+    body: response.data.body ?? body,
+  };
+
+  // Update the module with the new release and tag (with commit SHA from API response)
+  module.setReleases([release, ...module.releases]);
+  const newTag = {
+    name: releaseTag,
+    commitSHA,
+  };
+  module.setTags([newTag, ...module.tags]);
+
+  // We also need to ensure that this module can't be released anymore. Thus, we need to clear existing commits
+  // as this is the primary driver for determining release status.
+  module.clearCommits();
+
+  return { module, action: 'created', releaseTag, release };
+}
+
+/**
  * Creates a GitHub release and corresponding git tag for each Terraform module that needs a release.
  *
  * This operation is self-healing and idempotent. For each module that needs a release, it converges to
@@ -219,14 +518,7 @@ export async function createTaggedReleases(terraformModules: TerraformModule[]):
   // We can be sure based on our type definitions that each module now is a module that
   // needs to be released. It has GitHub commits.
 
-  const {
-    octokit,
-    repo: { owner, repo },
-    prBody,
-    prNumber,
-    prTitle,
-    workspaceDir,
-  } = context;
+  const { prNumber } = context;
 
   // Each release we create embeds a hidden, schema-versioned marker tying it to this pull request (see
   // src/utils/markers.ts). The same marker is written into the release commit message, which is what
@@ -234,15 +526,7 @@ export async function createTaggedReleases(terraformModules: TerraformModule[]):
   // re-runs converge to the correct state instead of over-bumping or duplicating releases.
   const releaseMarker = buildPrMarker(prNumber);
 
-  // Legacy gate: if this pull request was already completed under the pre-marker scheme (its post-release
-  // comment uses LEGACY_PR_RELEASE_COMMENT_MARKER) and none of its releases carry our marker, preserve the old
-  // "don't double-release" behavior by skipping. This reads only our own markers — never the editable
-  // release-note text — so it is robust and unambiguous. A pull request released under the current scheme
-  // carries the new comment marker, so it is not treated as legacy and continues to self-heal.
-  const anyReleaseHasMarker = terraformModulesToRelease.some((module) =>
-    module.releases.some((release) => matchesPrMarker(release.body, prNumber)),
-  );
-  if (!anyReleaseHasMarker && (await hasLegacyPostReleaseComment())) {
+  if (await isLegacyCompletedPullRequest(terraformModulesToRelease, prNumber)) {
     info(
       'Legacy release marker found; this pull request completed under the pre-marker scheme. Skipping release creation to avoid double-releasing.',
     );
@@ -256,213 +540,18 @@ export async function createTaggedReleases(terraformModules: TerraformModule[]):
 
   try {
     for (const module of terraformModulesToRelease) {
-      const moduleName = module.name;
-      info(`Processing module: ${moduleName}`);
+      info(`Processing module: ${module.name}`);
 
-      // Step 1: Has this module already been released for this pull request? This makes re-runs
-      // idempotent — a retried or re-run merge will not bump or re-create a release for a module that
-      // was already released by this pull request (which would otherwise over-bump the version). It is
-      // still reported (returned below) so the post-release comment lists it.
-      const existingPrRelease = module.releases.find((release) => matchesPrMarker(release.body, prNumber));
-      if (existingPrRelease) {
-        info(`Module '${moduleName}' already released for this pull request (${existingPrRelease.title}). Skipping.`);
-        module.clearCommits();
-        outcomes.push({
-          module,
-          action: 'skipped',
-          releaseTag: existingPrRelease.tagName,
-          release: existingPrRelease,
-        });
-        continue;
-      }
+      // Converge to the correct state by taking the first step that recognizes this module, falling
+      // through to a normal release only when none of the self-healing paths claim it. Order matters:
+      // each step is strictly more speculative than the one before it.
+      const outcome =
+        findCompletedRelease(module, prNumber) ??
+        (await findUnmarkedCompletedRelease(module)) ??
+        (await recoverOrphanTagRelease(module, releaseMarker)) ??
+        (await publishNewRelease(module, releaseMarker));
 
-      const latestTag = module.getLatestTag();
-      const releaseForLatestTag =
-        latestTag === null ? undefined : module.releases.find((release) => release.tagName === latestTag);
-
-      // Step 1b: the latest tag is ours and already has a release, but that release's body no longer
-      // carries our marker (edited by hand, or replaced by GitHub's "Generate release notes"). Without
-      // this, step 1 would miss and step 3 would bump and publish a duplicate release.
-      //
-      // A release carrying another pull request's marker is unambiguously not ours, so no lookup is
-      // needed — which means the steady state (every release body carrying a marker) costs nothing.
-      //
-      // This requires a real `marker`, never the pre-marker heuristic. Skipping is irreversible: a
-      // wrong answer here silently drops a genuine release forever, whereas a wrong answer in step 2
-      // leaves a state a re-run can still correct.
-      if (latestTag !== null && releaseForLatestTag !== undefined && !hasAnyPrMarker(releaseForLatestTag.body)) {
-        const latestProvenance = await getTagProvenance(latestTag, module.getLatestTagCommitSHA());
-        if (latestProvenance === 'marker') {
-          info(
-            `Module '${moduleName}' was already released by this pull request as '${releaseForLatestTag.tagName}' (verified via the release commit; the release body no longer carries the marker). Skipping.`,
-          );
-          module.clearCommits();
-          outcomes.push({
-            module,
-            action: 'skipped',
-            releaseTag: releaseForLatestTag.tagName,
-            release: releaseForLatestTag,
-          });
-          continue;
-        }
-      }
-
-      // Step 2: recover an orphan tag (a tag with no release) that this pull request produced — from a
-      // partial failure where the tag was pushed but the release was never created, or where the
-      // release was deleted by hand. The release is created for the existing tag, at its existing
-      // version, without bumping or pushing a new commit/tag.
-      //
-      // We search every orphan tag newest-first, not just the latest one, because a later pull request
-      // may already have bumped past ours: if PR #5's tag was orphaned and PR #6 then released a higher
-      // version, #5's orphan is no longer the latest and would otherwise never be healed (#5 would
-      // instead bump again and publish its older tree as the newest version). Only tags *without* a
-      // release are candidates, so in the steady state there is nothing to scan and no request is made.
-      // The scan is capped so a repository with many orphan tags cannot turn one merge into an
-      // unbounded number of lookups.
-      const orphanTags = module.tags.filter((tag) => !module.releases.some((release) => release.tagName === tag.name));
-      const orphanTagsToInspect = orphanTags.slice(0, MAX_ORPHAN_TAG_LOOKUPS);
-      if (orphanTags.length > orphanTagsToInspect.length) {
-        info(
-          `Module '${moduleName}' has ${orphanTags.length} tags without releases; only the newest ${MAX_ORPHAN_TAG_LOOKUPS} are checked for recovery.`,
-        );
-      }
-
-      let recoverableTag: string | null = null;
-      for (const tag of orphanTagsToInspect) {
-        if ((await getTagProvenance(tag.name, tag.commitSHA)) !== 'unknown') {
-          recoverableTag = tag.name;
-          break;
-        }
-      }
-
-      if (recoverableTag !== null) {
-        const recoveredVersion = TerraformModule.getVersionFromTag(recoverableTag) as string;
-        info(`Module '${moduleName}' has tag '${recoverableTag}' without a release. Creating the missing release.`);
-
-        const changelog = createTerraformModuleChangelogEntry(recoveredVersion, module.commitMessages);
-        const body = `${changelog}\n\n${releaseMarker}`;
-        const response = await octokit.rest.repos.createRelease({
-          owner,
-          repo,
-          tag_name: recoverableTag,
-          name: recoverableTag,
-          body,
-          draft: false,
-          prerelease: config.preRelease,
-        });
-
-        const release = {
-          id: response.data.id,
-          title: response.data.name ?? recoverableTag,
-          tagName: response.data.tag_name,
-          body: response.data.body ?? body,
-        };
-        module.setReleases([release, ...module.releases]);
-        module.clearCommits();
-        outcomes.push({ module, action: 'recovered', releaseTag: recoverableTag, release });
-        continue;
-      }
-
-      // Orphan tags we could NOT attribute to this pull request are deliberately left alone: they
-      // belong to a different pull request (or predate this action), and their owner's re-run is what
-      // should heal them. Claiming one would attach this pull request's notes to another commit's tree
-      // and leave this pull request's own changes unreleased.
-      if (orphanTagsToInspect.length > 0) {
-        const isSingle = orphanTagsToInspect.length === 1;
-        const tagList = orphanTagsToInspect.map((tag) => `'${tag.name}'`).join(', ');
-        warning(
-          `Module '${moduleName}' has ${isSingle ? 'a tag' : 'tags'} without a release (${tagList}) that ${isSingle ? 'was' : 'were'} not produced by this pull request. Leaving ${isSingle ? 'it' : 'them'} untouched and releasing a new version instead.`,
-        );
-      }
-
-      // Step 3: Normal release — bump the version, then commit, tag, push, and create the release.
-      const releaseTag = module.getReleaseTag() as string;
-      const releaseTagVersion = module.getReleaseTagVersion() as string;
-      info(`Release type: ${module.getReleaseType()}`);
-      info(`Next tag version: ${releaseTagVersion}`);
-
-      // Create a temporary working directory
-      // Replace '/' with '-' to create a valid directory name
-      const fileSystemSafeModuleName = module.name.replace(/\//g, '-');
-      const tmpDir = mkdtempSync(join(tmpdir(), `${fileSystemSafeModuleName}-`));
-      info(`Created temp directory: ${tmpDir}`);
-
-      // Copy the module's contents to the temporary directory, excluding specified patterns
-      copyModuleContents(module.directory, tmpDir, config.moduleAssetExcludePatterns);
-
-      // Copy the module's .git directory
-      cpSync(join(workspaceDir, '.git'), join(tmpDir, '.git'), { recursive: true });
-
-      // Git operations: commit the changes and tag the release.
-      //
-      // The hidden marker is appended as the final line so this commit — and therefore the tag pointing
-      // at it — can later be proven to belong to this pull request. That proof is what makes step 2's
-      // orphan-tag recovery safe; without it we could not distinguish our own interrupted release from
-      // another pull request's, or from a tag pushed by hand.
-      //
-      // The title and body are untrusted and MUST be neutralized first. `git commit -m` uses
-      // `cleanup=whitespace`, so a marker planted on its own line in a pull request description would
-      // survive verbatim into the very text this provenance check trusts.
-      const commitMessage =
-        `${releaseTag}\n\n${neutralizePrMarkers(prTitle)}\n\n${neutralizePrMarkers(prBody)}\n\n${releaseMarker}`.trim();
-      const gitPath = await which('git');
-      const githubActionsBotEmail = await getGitHubActionsBotEmail();
-
-      // Execute git commands in temp directory without inheriting stdio to avoid output pollution
-      const gitOpts: ExecSyncOptions = { cwd: tmpDir };
-
-      // Configure Git authentication
-      configureGitAuthentication(gitPath, gitOpts);
-
-      for (const cmd of [
-        ['config', '--local', 'user.name', GITHUB_ACTIONS_BOT_NAME],
-        ['config', '--local', 'user.email', githubActionsBotEmail],
-        ['add', '.'],
-        ['commit', '-m', commitMessage.trim()],
-        ['tag', releaseTag],
-        ['push', 'origin', releaseTag],
-      ]) {
-        execFileSync(gitPath, cmd, gitOpts);
-      }
-
-      // Store the commit SHA that the tag points to (since it's not returned from the API via create release)
-      const commitSHA = execFileSync(gitPath, ['rev-parse', 'HEAD'], gitOpts).toString().trim();
-
-      // Create a GitHub release using the tag
-      info(`Creating GitHub release for ${moduleName}@${releaseTagVersion}`);
-      const changelog = createTerraformModuleChangelog(module);
-      const body = `${changelog}\n\n${releaseMarker}`;
-
-      const response = await octokit.rest.repos.createRelease({
-        owner,
-        repo,
-        tag_name: releaseTag, // For now we keep these the same with tagName
-        name: releaseTag,
-        body,
-        draft: false,
-        prerelease: config.preRelease,
-      });
-
-      const release = {
-        id: response.data.id,
-        title: response.data.name ?? releaseTag,
-        tagName: response.data.tag_name,
-        body: response.data.body ?? body,
-      };
-
-      // Update the module with the new release and tag (with commit SHA from API response)
-      module.setReleases([release, ...module.releases]);
-      const newTag = {
-        name: releaseTag,
-        commitSHA,
-      };
-      module.setTags([newTag, ...module.tags]);
-
-      // We also need to ensure that this module can't be released anymore. Thus, we need to clear existing commits
-      // as this is the primary driver for determining release status.
-      module.clearCommits();
-
-      outcomes.push({ module, action: 'created', releaseTag, release });
+      outcomes.push(outcome);
     }
 
     return outcomes;

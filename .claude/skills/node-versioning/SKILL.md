@@ -41,8 +41,8 @@ No manual maintenance:
    and the devcontainer `image` tag + `name` label (verify the `javascript-node:<major>-<distro>` tag exists on
    mcr.microsoft.com first)
 1. Review `tsconfig.json` `target`/`lib` against the new runtime's V8 — check the official `@tsconfig/nodeXX` base
-1. Rebuild and validate: `npm run package && npm run test && npm run check && npm run textlint` — the guard test fails
-   until every reference agrees
+1. Rebuild and validate: `npm run package && npm run test && npm run format:check && npm run lint` — the guard test
+   fails until every reference agrees
 1. Update `docs/node.md` (version map, runtime background, GHES minimums), `README.md` (GHES requirements),
    `CONTRIBUTING.md`, and `docs/development.md`
 1. Ship as a major release; call out the runtime change and minimum GHES version in the notes

@@ -101,8 +101,9 @@ Before contributing, please:
 1. **Run linting and tests** to ensure quality:
 
    ```bash
-   npm run check:fix  # Fix linting issues
-   npm run test       # Run tests
+   npm run fix   # Format and autofix code and prose
+   npm run lint  # Run every linter
+   npm run test  # Run tests
    ```
 
 1. **Commit your changes** following our commit message guidelines
@@ -110,9 +111,14 @@ Before contributing, please:
 ### Key npm Scripts
 
 - `npm run test` - Run the test suite with coverage
-- `npm run check` - Run code linting and style checks
-- `npm run check:fix` - Automatically fix linting issues where possible
 - `npm run test:watch` - Run tests in watch mode during development
+- `npm run lint` - Run every linter (code, types, prose, workflows)
+- `npm run format` - Rewrite files to match formatting; `npm run format:check` verifies without writing
+- `npm run fix` - Format, then apply every available autofix
+
+Script names follow the
+[ESLint package.json conventions](https://eslint.org/docs/latest/contribute/package-json-conventions): `lint*` analyzes,
+`format*` rewrites, `:fix` applies corrections, and `:check` never modifies files.
 
 > [!WARNING] Do not check in any build/distribution assets (e.g., outputs from `npm run package`). These are handled
 > automatically during the release process. For development and testing, running `npm run test` is sufficient.
@@ -175,11 +181,22 @@ This project uses [Biome](https://biomejs.dev/) for linting and code formatting.
 
 ```bash
 # Check for linting issues
-npm run check
+npm run lint
 
 # Automatically fix linting issues
-npm run check:fix
+npm run fix
 ```
+
+`lint:actions` uses [actionlint](https://github.com/rhysd/actionlint), a binary that is not published to npm. If it is
+not installed it skips with an install hint, so `npm run lint` still works right after `npm ci`; CI installs it and
+enforces it.
+
+```bash
+brew install actionlint
+```
+
+Secret scanning ([gitleaks](https://github.com/gitleaks/gitleaks)) runs in CI only and is not part of `npm run lint`, so
+you do not need it locally. It scans the whole working tree, and exclusions live in `.gitleaks.toml`.
 
 ### Style Guidelines
 

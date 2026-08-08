@@ -8,7 +8,7 @@ import { RELEASE_BODY_PR_MARKER_PREFIX, RELEASE_BODY_PR_MARKER_SCHEMA } from '@/
  * @returns {string} The escaped string.
  */
 function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return value.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
 }
 
 const ESCAPED_MARKER_PREFIX = escapeRegExp(RELEASE_BODY_PR_MARKER_PREFIX);
@@ -21,7 +21,7 @@ const ESCAPED_MARKER_PREFIX = escapeRegExp(RELEASE_BODY_PR_MARKER_PREFIX);
  * always emit the marker as its own trailing line.
  */
 const MARKER_LINE_REGEX = new RegExp(
-  `(?:^|\\r?\\n)[ \\t]*${ESCAPED_MARKER_PREFIX}\\d+:(\\S+#\\d+) -->[ \\t]*(?=\\r?\\n|$)`,
+  String.raw`(?:^|\r?\n)[ \t]*${ESCAPED_MARKER_PREFIX}\d+:(\S+#\d+) -->[ \t]*(?=\r?\n|$)`,
   'g',
 );
 
@@ -151,7 +151,7 @@ export function hasStandaloneMarkerLine(text: string | undefined | null, marker:
     return false;
   }
 
-  return new RegExp(`(^|\\r?\\n)[ \\t]*${escapeRegExp(marker)}[ \\t]*(\\r?\\n|$)`).test(text);
+  return new RegExp(String.raw`(^|\r?\n)[ \t]*${escapeRegExp(marker)}[ \t]*(\r?\n|$)`).test(text);
 }
 
 /**

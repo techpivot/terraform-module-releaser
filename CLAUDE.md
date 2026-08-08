@@ -6,13 +6,20 @@ modules in monorepos. Creates per-module Git tags, GitHub releases, PR comments,
 ## Commands
 
 ```bash
-npm run check:fix       # Biome (TS/JS/JSON) + Prettier (md/yml) — run before committing
-npm run textlint:fix    # Markdown prose lint — run when editing markdown
-npm run typecheck       # tsc --noEmit
+npm run fix             # Format + autofix code and prose — run before committing
+npm run format          # Biome format (TS/JS/JSON) + Prettier (md/yml); `format:check` to verify only
+npm run lint            # All linters: lint:code, lint:types, lint:text, lint:actions
+npm run lint:types      # tsc --noEmit
 npm run test            # Vitest + V8 coverage; integration tests need GITHUB_TOKEN and skip gracefully without it
 npm run test:watch      # Watch mode
 npm run package         # Bundle dist/ via ncc
 ```
+
+Scripts follow the
+[ESLint package.json conventions](https://eslint.org/docs/latest/contribute/package-json-conventions): `lint*` analyzes,
+`format*` rewrites, `:fix` autofixes, `:check` never mutates. `lint:actions` (actionlint) needs a binary that is not on
+npm — it skips locally with an install hint and is enforced in CI. Secret scanning (gitleaks) is CI-only and is
+deliberately not part of `npm run lint`.
 
 ## Stack
 
