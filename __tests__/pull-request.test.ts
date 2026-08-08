@@ -676,6 +676,31 @@ describe('pull-request', () => {
       );
     });
 
+    it('should not delete the comment it just created when ids differ in representation', async () => {
+      // GitHub comment ids are typed `number | bigint`, and `1n !== 1` is true in JavaScript. If the
+      // freshly created comment is already visible in the listing (a real race) and the two responses
+      // disagree on representation, a strict `!==` would mark it stale and delete it immediately.
+      const existingComments = [
+        { id: 1, body: `${PR_SUMMARY_MARKER}\nOld comment`, created_at: '2024-01-01' },
+        { id: 4, body: `${PR_SUMMARY_MARKER}\nJust posted`, created_at: '2024-01-04' },
+      ];
+
+      stubOctokitReturnData('issues.createComment', {
+        data: { id: 4n, html_url: 'https://github.com/org/repo/pull/1#issuecomment-4' },
+      });
+      stubOctokitReturnData('issues.listComments', { data: existingComments });
+
+      await addReleasePlanComment([], [], [], { status: WIKI_STATUS.SUCCESS });
+
+      expect(context.octokit.rest.issues.deleteComment).toHaveBeenCalledTimes(1);
+      expect(context.octokit.rest.issues.deleteComment).toHaveBeenCalledWith(
+        expect.objectContaining({ comment_id: 1 }),
+      );
+      expect(context.octokit.rest.issues.deleteComment).not.toHaveBeenCalledWith(
+        expect.objectContaining({ comment_id: 4 }),
+      );
+    });
+
     it('should handle releases to delete when delete-legacy-tags is enabled', async () => {
       const mockReleasesToDeleteSingle: GitHubRelease[] = [
         {

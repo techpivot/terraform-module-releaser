@@ -9,7 +9,7 @@ import type { TerraformModule } from '@/terraform-module';
 import { findModuleTerraformDocsConfig } from '@/utils/file';
 import { bufferedInfo } from '@/utils/log-buffer';
 import { endGroup, info, startGroup } from '@actions/core';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import which from 'which';
 
 const execFilePromisified = promisify(execFile);

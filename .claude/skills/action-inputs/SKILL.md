@@ -35,5 +35,5 @@ Same checklist in reverse — plus search for the old kebab-case and camelCase n
 ## Validate
 
 ```bash
-npm run typecheck && npm run test && npm run check:fix
+npm run lint:types && npm run test && npm run fix
 ```

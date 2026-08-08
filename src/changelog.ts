@@ -36,7 +36,7 @@ export function createTerraformModuleChangelogEntry(heading: string, commits: re
 
     // Trim the commit message and for markdown, newlines that are part of a list format
     // better if they use a <br> tag instead of a newline character.
-    .map((commitMessage) => neutralizePrMarkers(commitMessage.trim().replace(/\n/g, '<br>')));
+    .map((commitMessage) => neutralizePrMarkers(commitMessage.trim().replaceAll('\n', '<br>')));
 
   for (const normalizedCommit of normalizedCommitMessages) {
     changelogContent.push(`- ${normalizedCommit}`);

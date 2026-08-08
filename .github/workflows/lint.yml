@@ -10,12 +10,16 @@ on:
 
 permissions:
   contents: read
-  packages: read
-  statuses: write # To report GitHub Actions status checks
+
+env:
+  # actionlint and gitleaks are Go binaries with no first-party npm package, so neither Dependabot ecosystem
+  # (npm, github-actions) tracks them. Bump these by hand; `npm run lint` uses whatever is on PATH locally.
+  ACTIONLINT_VERSION: 1.7.12
+  GITLEAKS_VERSION: 8.30.1
 
 jobs:
-  lint-typescript:
-    name: Lint TypeScript
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
 
     steps:
@@ -23,7 +27,6 @@ jobs:
         id: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
           persist-credentials: false
 
       - name: Setup Node.js
@@ -37,42 +40,35 @@ jobs:
         id: npm-ci
         run: npm ci --no-fund
 
-      - name: Lint TypeScript with Biome
-        id: biome
-        run: npm run check
+      # Installed as binaries rather than via their GitHub Actions. actionlint publishes no action.yml at all.
+      # gitleaks-action is the paid product — the CLI is not — and it gates on GITLEAKS_LICENSE *before*
+      # scanning; since secrets are never exposed to workflows triggered from forked pull requests, that gate
+      # fails every external contribution with an error the contributor cannot fix. The CLI needs no license,
+      # so forks scan exactly like branches.
+      - name: Install external linters
+        id: install-external-linters
+        run: |
+          curl -sSfL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin actionlint
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin gitleaks
+          actionlint --version
+          gitleaks version
 
-  lint-codebase:
-    name: Lint Codebase
-    runs-on: ubuntu-latest
+      - name: Check formatting
+        id: format
+        run: npm run format:check
 
-    steps:
-      - name: Checkout
-        id: checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
+      # Runs lint:code, lint:types, lint:text and lint:actions. `external-linter.mjs` turns a missing binary
+      # into a hard failure when CI is set, so a broken install step above can never look like a passing lint.
+      - name: Lint
+        id: lint
+        run: npm run lint
 
-      - name: Lint Codebase with Super-Linter
-        id: super-linter
-        uses: super-linter/super-linter@4ce20838b8ab83717e78138c5b3a1407148e0918 # v8.7.0
-        env:
-          DEFAULT_BRANCH: main
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          FILTER_REGEX_EXCLUDE: (dist/**/*)|(__tests__/fixtures/**/*)|package-lock\.json
-          FIX_TYPESCRIPT_PRETTIER: false # Using biome
-          FIX_JAVASCRIPT_PRETTIER: false # Using biome
-          VALIDATE_ALL_CODEBASE: true
-          VALIDATE_BIOME_FORMAT: false # Super-Linter Biome runtime can lag project Biome config schema. When Super Linter > 8.6.0, likely remove this line to re-enable.
-          VALIDATE_BIOME_LINT: false # Super-Linter Biome runtime can lag project Biome config schema. When Super Linter > 8.6.0, likely remove this line to re-enable.
-          VALIDATE_GITHUB_ACTIONS_ZIZMOR: false # This is new. Will investigate this further
-          VALIDATE_JAVASCRIPT_PRETTIER: false # Using biome
-          VALIDATE_JAVASCRIPT_STANDARD: false # Using biome
-          VALIDATE_JSON_PRETTIER: false # Using biome
-          VALIDATE_JSCPD: false # Using biome
-          VALIDATE_MARKDOWN: false # Not needed, using textlint and prettier
-          VALIDATE_TERRAFORM_FMT: false # Terraform modules here aren't needed (They're for testing only)
-          VALIDATE_TERRAFORM_TFLINT: false # Terraform modules here aren't needed (They're for testing only)
-          VALIDATE_TYPESCRIPT_ES: false # Using biome
-          VALIDATE_TYPESCRIPT_STANDARD: false # Using biome
-          VALIDATE_TYPESCRIPT_PRETTIER: false # Using biome
+      # Secret scanning is CI-only — it is not part of `npm run lint`, so contributors never need the binary.
+      # `dir` scans the whole working tree on every run, unlike the action's default of scanning only a pull
+      # request's own commit range, so a secret already sitting on main keeps failing CI until it is removed.
+      # Exclusions live in .gitleaks.toml.
+      - name: Scan for secrets
+        id: gitleaks
+        run: gitleaks dir . --no-banner --redact

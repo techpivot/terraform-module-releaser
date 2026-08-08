@@ -38,7 +38,13 @@ const MINIMIZE_COMMENT_MUTATION = `
  * A pull request comment, reduced to the fields this module needs.
  */
 interface PullRequestComment {
-  id: number;
+  /**
+   * GitHub is migrating to identifiers that can exceed `Number.MAX_SAFE_INTEGER`, so the API types
+   * widened these to `number | bigint`. Carried through verbatim rather than narrowed to `number`:
+   * every `comment_id` parameter accepts the same union, and coercing would silently lose precision
+   * on a large identifier.
+   */
+  id: number | bigint;
   nodeId: string;
   body: string;
   createdAt: string;
@@ -522,10 +528,14 @@ export async function addReleasePlanComment(
     });
     info(`Posted comment ${newComment.id} @ ${newComment.html_url}`);
 
-    // Filter out the comments that contain the PR summary marker and are not the current comment
+    // Filter out the comments that contain the PR summary marker and are not the current comment.
+    // Identity is compared as a string because comment ids are typed `number | bigint`: `1n !== 1` is
+    // true in JavaScript, so a mixed representation would mark the comment we just posted as stale and
+    // delete it. Comparing the decimal rendering is exact for integer ids and immune to that mismatch.
     const allComments = await listAllPullRequestComments();
+    const newCommentId = String(newComment.id);
     const commentsToDelete = allComments.filter(
-      (comment) => hasStandaloneMarkerLine(comment.body, PR_SUMMARY_MARKER) && comment.id !== newComment.id,
+      (comment) => hasStandaloneMarkerLine(comment.body, PR_SUMMARY_MARKER) && String(comment.id) !== newCommentId,
     );
 
     // Delete all our previous comments
@@ -551,6 +561,87 @@ export async function addReleasePlanComment(
   } finally {
     console.timeEnd('Elapsed time commenting on pull request');
     endGroup();
+  }
+}
+
+/**
+ * Renders the post-release comment body: one line per released module, each linking its release notes
+ * and (unless the wiki is disabled) its wiki page.
+ *
+ * @param {ReleaseOutcome[]} releaseOutcomes - What was created, recovered, or skipped for each module.
+ * @param {string} repoUrl - The repository URL used to build release-notes links.
+ * @returns {string} The rendered comment body.
+ */
+function renderPostReleaseCommentBody(releaseOutcomes: ReleaseOutcome[], repoUrl: string): string {
+  // Construct the comment body as an array of strings
+  const commentBody: string[] = [
+    PR_RELEASE_COMMENT_MARKER,
+    '\n## :rocket: Terraform Module Releases\n',
+    'The following Terraform modules have been released:\n',
+  ];
+
+  for (const { module, release } of releaseOutcomes) {
+    const extra = [`[Release Notes](${repoUrl}/releases/tag/${release.tagName})`];
+    if (config.disableWiki === false) {
+      extra.push(`[Wiki/Usage](${getWikiLink(module.name, false)})`);
+    }
+
+    commentBody.push(`- **\`${release.title}\`** • ${extra.join(' • ')}`);
+  }
+
+  // Branding
+  if (config.disableBranding === false) {
+    commentBody.push(`\n${BRANDING_COMMENT}`);
+  }
+
+  return commentBody.join('\n').trim();
+}
+
+/**
+ * Best-effort lookup of this pull request's existing post-release comments.
+ *
+ * A listing failure is not fatal: the caller falls back to creating a new comment rather than failing
+ * the merge over a comment that is only informational.
+ *
+ * @returns {Promise<PullRequestComment[]>} The matching comments, or an empty list if listing failed.
+ */
+async function findExistingPostReleaseComments(): Promise<PullRequestComment[]> {
+  try {
+    return await findReleaseComments();
+  } catch (error) {
+    warning(
+      `Failed to list existing post-release comments; will create a new one: ${error instanceof Error ? error.message : String(error)}`,
+    );
+
+    return [];
+  }
+}
+
+/**
+ * Consolidates the post-release comment thread by removing older duplicates so only the most recent
+ * remains.
+ *
+ * Each deletion is independent and best-effort: failing to remove a stale duplicate is cosmetic, so it
+ * is warned about rather than allowed to fail the merge.
+ *
+ * @param {PullRequestComment[]} duplicates - The older comments to remove.
+ * @returns {Promise<void>}
+ */
+async function deleteDuplicatePostReleaseComments(duplicates: PullRequestComment[]): Promise<void> {
+  const {
+    octokit,
+    repo: { owner, repo },
+  } = context;
+
+  for (const comment of duplicates) {
+    info(`Deleting duplicate post-release comment ${comment.id}`);
+    try {
+      await octokit.rest.issues.deleteComment({ owner, repo, comment_id: comment.id });
+    } catch (error) {
+      warning(
+        `Failed to delete duplicate post-release comment ${comment.id}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 }
 
@@ -583,68 +674,31 @@ export async function addPostReleaseComment(releaseOutcomes: ReleaseOutcome[]): 
       issueNumber: issue_number,
     } = context;
 
-    // Construct the comment body as an array of strings
-    const commentBody: string[] = [
-      PR_RELEASE_COMMENT_MARKER,
-      '\n## :rocket: Terraform Module Releases\n',
-      'The following Terraform modules have been released:\n',
-    ];
-
-    for (const { module, release } of releaseOutcomes) {
-      const extra = [`[Release Notes](${repoUrl}/releases/tag/${release.tagName})`];
-      if (config.disableWiki === false) {
-        extra.push(`[Wiki/Usage](${getWikiLink(module.name, false)})`);
-      }
-
-      commentBody.push(`- **\`${release.title}\`** • ${extra.join(' • ')}`);
-    }
-
-    // Branding
-    if (config.disableBranding === false) {
-      commentBody.push(`\n${BRANDING_COMMENT}`);
-    }
-
-    const body = commentBody.join('\n').trim();
+    const body = renderPostReleaseCommentBody(releaseOutcomes, repoUrl);
 
     // Idempotent: update the existing post-release comment in place rather than posting a duplicate on a
     // re-run. Editing keeps the comment's timeline position and sends no new email notification. The body
     // must reflect the full set of this pull request's released modules — note that the caller is
     // responsible for that completeness, since a re-run only processes modules that still need a
-    // release (see `withPriorReleasesForThisPullRequest` in src/main.ts). Best-effort lookup: if listing comments fails, fall back to
-    // creating a new comment instead of failing the merge.
-    let existingComments: { id: number; body: string }[] = [];
-    try {
-      existingComments = await findReleaseComments();
-    } catch (error) {
-      warning(
-        `Failed to list existing post-release comments; will create a new one: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-
+    // release (see `withPriorReleasesForThisPullRequest` in src/main.ts).
+    const existingComments = await findExistingPostReleaseComments();
     const commentToKeep = existingComments.at(-1);
-    if (commentToKeep) {
-      if (commentToKeep.body.trim() === body) {
-        info(`Post-release comment ${commentToKeep.id} is already up to date. Nothing to do.`);
-      } else {
-        await octokit.rest.issues.updateComment({ owner, repo, comment_id: commentToKeep.id, body });
-        info(`Updated post-release comment ${commentToKeep.id} in place.`);
-      }
 
-      // Consolidate: remove any older duplicate post-release comments so only the most recent remains.
-      for (const comment of existingComments.slice(0, -1)) {
-        info(`Deleting duplicate post-release comment ${comment.id}`);
-        try {
-          await octokit.rest.issues.deleteComment({ owner, repo, comment_id: comment.id });
-        } catch (error) {
-          warning(
-            `Failed to delete duplicate post-release comment ${comment.id}: ${error instanceof Error ? error.message : String(error)}`,
-          );
-        }
-      }
-    } else {
+    if (!commentToKeep) {
       const { data: newComment } = await octokit.rest.issues.createComment({ owner, repo, issue_number, body });
       info(`Posted comment ${newComment.id} @ ${newComment.html_url}`);
+
+      return;
     }
+
+    if (commentToKeep.body.trim() === body) {
+      info(`Post-release comment ${commentToKeep.id} is already up to date. Nothing to do.`);
+    } else {
+      await octokit.rest.issues.updateComment({ owner, repo, comment_id: commentToKeep.id, body });
+      info(`Updated post-release comment ${commentToKeep.id} in place.`);
+    }
+
+    await deleteDuplicatePostReleaseComments(existingComments.slice(0, -1));
   } catch (error) {
     if (error instanceof RequestError) {
       throw new Error(
