@@ -248,7 +248,9 @@ describe('terraform-docs', async () => {
     });
   });
 
-  describe('real system installation', () => {
+  // These tests download the real terraform-docs binary from the CDN. Network latency makes the default
+  // 5s timeout flaky, and transient CDN errors warrant retries before failing the run.
+  describe('real system installation', { timeout: 10_000, retry: 2 }, () => {
     const cleanupFiles = [
       'terraform-docs',
       'terraform-docs.tar.gz',
