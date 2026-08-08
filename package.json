@@ -1,6 +1,6 @@
 {
   "name": "terraform-module-releaser",
-  "description": "GitHub Actions TypeScript template",
+  "description": "GitHub Action that automates versioning, releases, and wiki documentation for Terraform modules in monorepos",
   "version": "2.2.0",
   "author": "virgofx",
   "type": "module",

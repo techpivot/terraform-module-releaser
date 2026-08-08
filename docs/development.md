@@ -87,12 +87,12 @@ All commits must follow the [Conventional Commits](https://www.conventionalcommi
 
 When a PR is opened or updated against `main`, these workflows run:
 
-| Workflow   | File                  | Purpose                                                                            |
-| ---------- | --------------------- | ---------------------------------------------------------------------------------- |
-| **CI**     | `ci.yml`              | Builds the action (`npm run package`), runs it against the repository (`uses: ./`) |
-| **Test**   | `test.yml`            | Runs Vitest suite (`npm run test`), then SonarQube coverage analysis               |
-| **Lint**   | `lint.yml`            | Biome check (`npm run check`) + GitHub Super-Linter                                |
-| **CodeQL** | `codeql-analysis.yml` | Security analysis for TypeScript                                                   |
+| Workflow   | File         | Purpose                                                                            |
+| ---------- | ------------ | ---------------------------------------------------------------------------------- |
+| **CI**     | `ci.yml`     | Builds the action (`npm run package`), runs it against the repository (`uses: ./`) |
+| **Test**   | `test.yml`   | Runs Vitest suite (`npm run test`), then SonarQube coverage analysis               |
+| **Lint**   | `lint.yml`   | Biome check (`npm run check`) + GitHub Super-Linter                                |
+| **CodeQL** | `codeql.yml` | Security analysis for TypeScript                                                   |
 
 ### Release Workflows
 
