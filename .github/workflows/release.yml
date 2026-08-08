@@ -8,6 +8,7 @@ on:
 
 jobs:
   tag-and-release:
+    name: Tag and Release
     runs-on: ubuntu-latest
     permissions:
       contents: write # To publish tags and to publish GitHub release
@@ -18,13 +19,14 @@ jobs:
       github.event.pull_request.merged == true
 
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0 # Get all history
           fetch-tags: true
           persist-credentials: true
 
-      - name: Extract version from PR body
+      - name: Extract Version from PR Body
         id: extract-version
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
@@ -37,7 +39,7 @@ jobs:
             }
             throw new Error('Version not found in PR body');
 
-      - name: Extract release notes from PR body
+      - name: Extract Release Notes from PR Body
         id: extract-release-notes
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
@@ -55,7 +57,7 @@ jobs:
             console.log(releaseNotes);
             return releaseNotes;
 
-      - name: Create and push tag
+      - name: Create and Push Tag
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
