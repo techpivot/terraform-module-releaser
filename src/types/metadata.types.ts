@@ -34,7 +34,7 @@ export interface ActionInputMetadata {
    * The expected data type of the input for proper parsing and validation.
    * - 'string': Direct string value
    * - 'boolean': Parsed using getBooleanInput for proper true/false handling
-   * - 'number': Parsed using parseInt for integer conversion; non-numeric values are rejected
+   * - 'number': Strictly validated and parsed as a base-10 integer; anything else is rejected
    * - 'array': Comma-separated string parsed into array with deduplication
    */
   type: 'string' | 'boolean' | 'number' | 'array';

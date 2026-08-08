@@ -173,11 +173,15 @@ describe('config', () => {
       }
     });
 
-    it('should throw error for non-numeric wiki-sidebar-changelog-max', () => {
-      setupTestInputs({ 'wiki-sidebar-changelog-max': 'invalid' });
-      // Rejected at input-parse time by createConfigFromInputs, before config-level validation runs
+    // Rejected at input-parse time by createConfigFromInputs, before config-level validation runs
+    it.each([
+      { reason: 'non-numeric', value: 'invalid' },
+      { reason: 'trailing-garbage', value: '123abc' },
+      { reason: 'non-integer', value: '1.5' },
+    ])('should throw error for $reason wiki-sidebar-changelog-max', ({ value }) => {
+      setupTestInputs({ 'wiki-sidebar-changelog-max': value });
       expect(() => getConfig()).toThrow(
-        new Error("Failed to process input 'wiki-sidebar-changelog-max': Invalid number value: 'invalid'"),
+        new Error(`Failed to process input 'wiki-sidebar-changelog-max': Invalid integer value: '${value}'`),
       );
     });
 

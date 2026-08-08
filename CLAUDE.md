@@ -43,7 +43,7 @@ SonarQube scans every PR (`test.yml`); write to these conventions up front rathe
   paths) over hand-escaped separators
 - Never default a parameter to a non-empty object literal — take `options?` and spread it over inline defaults:
   `{ per_page: 100, page: 1, ...options }`
-- Validate at the boundary: input parsing rejects bad values (e.g. `NaN` from number inputs) with the input name in the
+- Validate at the boundary: input parsing rejects bad values (e.g. non-integer number inputs) with the input name in the
   error, instead of letting them flow into config
 
 ## Architecture

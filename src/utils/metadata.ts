@@ -96,13 +96,14 @@ function getInputValue(inputName: string, { required, type }: ActionInputMetadat
   }
 
   if (type === 'number') {
-    // Handle number inputs with parseInt, rejecting non-numeric values
+    // Strictly validate base-10 integers before parsing — parseInt alone would accept junk
+    // like '123abc', '1.5' (truncated), or '1O' (typo) and silently misconfigure the action.
+    // getInput() already trims surrounding whitespace.
     const input = getInput(inputName, { required });
-    const parsed = Number.parseInt(input, 10);
-    if (Number.isNaN(parsed)) {
-      throw new TypeError(`Invalid number value: '${input}'`);
+    if (!/^[+-]?\d+$/.test(input)) {
+      throw new TypeError(`Invalid integer value: '${input}'`);
     }
-    return parsed;
+    return Number.parseInt(input, 10);
   }
 
   // Handle string inputs
