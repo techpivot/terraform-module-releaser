@@ -58,7 +58,8 @@ Before contributing, please:
 
 ### Prerequisites
 
-- **Node.js**: Version 26 or higher (see [.node-version](./.node-version) for the exact version)
+- **Node.js**: Version 24 (see [.node-version](./.node-version)) — development, CI, and the GitHub Actions runtime all
+  run the same major by policy
 - **npm**: Comes with Node.js
 - **Git**: For version control
 

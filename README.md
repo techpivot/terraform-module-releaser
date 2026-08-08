@@ -140,7 +140,8 @@ This action is fully compatible with GitHub Enterprise Server deployments:
 
 ### GHES Requirements
 
-- GitHub Enterprise Server version that supports GitHub Actions
+- GitHub Enterprise Server 3.16 or later, with Actions runners v2.327.1+ — required for the `node24` runtime this action
+  declares (GHES 3.19+ enforces a compatible minimum runner version automatically)
 - Wiki feature enabled on your GHES instance (contact your administrator if wikis are disabled)
 - Appropriate permissions for the GitHub Actions runner to access repository features
 

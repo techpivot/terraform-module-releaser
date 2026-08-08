@@ -14,6 +14,13 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    ignore:
+      # The @types/node major is runtime-coupled: it must match action.yml `runs.using` so post-runtime APIs fail
+      # typecheck (see docs/node.md). Minors/patches within the line still flow; bump the major only with the
+      # Actions runtime bump (node-versioning skill).
+      - dependency-name: "@types/node"
+        update-types:
+          - version-update:semver-major
     groups:
       npm-development:
         dependency-type: development
