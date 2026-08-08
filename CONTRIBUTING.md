@@ -113,7 +113,7 @@ Before contributing, please:
 - `npm run check:fix` - Automatically fix linting issues where possible
 - `npm run test:watch` - Run tests in watch mode during development
 
-> [!WARNING] Do not check in any build/distribution assets (e.g., outputs from `npm run bundle`). These are handled
+> [!WARNING] Do not check in any build/distribution assets (e.g., outputs from `npm run package`). These are handled
 > automatically during the release process. For development and testing, running `npm run test` is sufficient.
 
 ## Commit Message Guidelines
@@ -279,7 +279,7 @@ the
 - **Semantic versioning** based on conventional commits
 - **Automatic changelog generation** from commit messages
 - **GitHub releases** with proper tagging
-- **Automated asset building** via `npm run bundle` during the release process
+- **Automated asset building** via `npm run package` during the release process
 
 ### Release Workflow
 
@@ -287,7 +287,7 @@ When maintainers are ready to create a release:
 
 1. The Release-Start workflow is triggered
 1. A new pull request is automatically generated that:
-   - Builds distribution assets via `npm run bundle`
+   - Builds distribution assets via `npm run package`
    - Tags the appropriate version based on conventional commits
    - Generates a changelog automatically
    - Creates the GitHub release
