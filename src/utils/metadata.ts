@@ -66,6 +66,50 @@ export const ACTION_INPUTS: Record<string, ActionInputMetadata> = {
 } as const;
 
 /**
+ * Reads a single action input and converts it according to its metadata type.
+ *
+ * @throws {TypeError} When a number input holds a non-numeric value, so NaN never propagates
+ *   into the config
+ */
+function getInputValue(inputName: string, { required, type }: ActionInputMetadata): unknown {
+  if (type === 'boolean') {
+    // Use getBooleanInput for boolean types for proper parsing
+    return getBooleanInput(inputName, { required });
+  }
+
+  if (type === 'array') {
+    // Handle array inputs as comma-separated values, trimmed and deduplicated
+    const input = getInput(inputName, { required });
+
+    if (!input || input.trim() === '') {
+      return [];
+    }
+
+    return Array.from(
+      new Set(
+        input
+          .split(',')
+          .map((item: string) => item.trim())
+          .filter(Boolean),
+      ),
+    );
+  }
+
+  if (type === 'number') {
+    // Handle number inputs with parseInt, rejecting non-numeric values
+    const input = getInput(inputName, { required });
+    const parsed = Number.parseInt(input, 10);
+    if (Number.isNaN(parsed)) {
+      throw new TypeError(`Invalid number value: '${input}'`);
+    }
+    return parsed;
+  }
+
+  // Handle string inputs
+  return getInput(inputName, { required });
+}
+
+/**
  * Creates a config object by reading inputs using GitHub Actions API and converting them
  * according to the metadata definitions. This provides a dynamic way to build the config
  * without manually mapping each input.
@@ -74,46 +118,9 @@ export function createConfigFromInputs(): Config {
   const config = {} as Config;
 
   for (const [inputName, metadata] of Object.entries(ACTION_INPUTS)) {
-    const { configKey, required, type } = metadata;
-
     try {
-      let value: unknown;
-
-      if (type === 'boolean') {
-        // Use getBooleanInput for boolean types for proper parsing
-        value = getBooleanInput(inputName, { required });
-      } else if (type === 'array') {
-        // Handle array inputs with special parsing
-        const input = getInput(inputName, { required });
-
-        if (!input || input.trim() === '') {
-          value = [];
-        } else {
-          value = Array.from(
-            new Set(
-              input
-                .split(',')
-                .map((item: string) => item.trim())
-                .filter(Boolean),
-            ),
-          );
-        }
-      } else if (type === 'number') {
-        // Handle number inputs with parseInt, rejecting non-numeric values so NaN never
-        // propagates into the config
-        const input = getInput(inputName, { required });
-        const parsed = Number.parseInt(input, 10);
-        if (Number.isNaN(parsed)) {
-          throw new TypeError(`Invalid number value: '${input}'`);
-        }
-        value = parsed;
-      } else {
-        // Handle string inputs
-        value = getInput(inputName, { required });
-      }
-
       // Safely assign to config using the configKey
-      Object.assign(config, { [configKey]: value });
+      Object.assign(config, { [metadata.configKey]: getInputValue(inputName, metadata) });
     } catch (error) {
       throw new Error(
         `Failed to process input '${inputName}': ${error instanceof Error ? error.message : String(error)}`,
