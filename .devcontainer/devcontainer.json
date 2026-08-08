@@ -1,8 +1,10 @@
 {
-  "name": "node:26",
-  "image": "mcr.microsoft.com/devcontainers/base:trixie",
+  "name": "node:24",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:24-trixie",
+  "remoteUser": "node",
   "mounts": [
-    "source=${localWorkspaceFolderBasename}-node_modules,target=${containerWorkspaceFolder}/node_modules,type=volume"
+    "source=${localWorkspaceFolderBasename}-node_modules,target=${containerWorkspaceFolder}/node_modules,type=volume",
+    "source=${localWorkspaceFolderBasename}-npm-cache,target=/home/node/.npm,type=volume"
   ],
   "postCreateCommand": "./.devcontainer/postCreateCommand.bash",
   "customizations": {
@@ -51,9 +53,6 @@
     "GITHUB_TOKEN": "${localEnv:GITHUB_TOKEN}"
   },
   "features": {
-    "ghcr.io/devcontainers/features/github-cli:1": {},
-    "ghcr.io/devcontainers/features/node:1": {
-      "version": "26"
-    }
+    "ghcr.io/devcontainers/features/github-cli:1": {}
   }
 }

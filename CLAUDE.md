@@ -17,8 +17,8 @@ npm run package         # Bundle dist/ via ncc
 ## Stack
 
 - TypeScript strict mode, ES modules; Biome for TS/JS/JSON (not ESLint), Prettier for md/yml only
-- Node 26 for local dev (`.node-version`), but the compiled action runs on Node 24 (`action.yml`) — never use
-  post-Node-24 APIs in `src/`
+- Node 24 everywhere by parity policy — `.node-version`, devcontainer, CI, and the `action.yml` runtime share the major;
+  `@types/node` is pinned to it so post-runtime APIs fail typecheck (policy: `docs/node.md`)
 - `@actions/core` + `@octokit` for GitHub integration; Vitest for tests
 - Path aliases: `@/` → `src/`, `@/tests/` → `__tests__/`, `@/mocks/` → `__mocks__/`
 
@@ -43,6 +43,7 @@ Read the relevant doc before significant changes:
 - `docs/state-management.md` — release idempotency, PR markers, provenance, freshness guard
 - `docs/tagging.md` — tag naming, normalization, orphan cleanup
 - `docs/development.md` — CI/CD pipeline, tooling, release process
+- `docs/node.md` — Node version policy: runtime parity, upgrade playbook, alignment guard
 
 ## Workflow
 

@@ -9,16 +9,19 @@ Releaser project.
 
 The repository includes a pre-configured devcontainer with:
 
-- **Base image**: `mcr.microsoft.com/devcontainers/base:trixie` with Node.js 26 feature
-- **Named volume**: `node_modules` volume persists across container rebuilds
-- **Post-create script**: Sets Git safe directory, fixes node_modules ownership, runs `npm install`
+- **Image**: `mcr.microsoft.com/devcontainers/javascript-node:24-trixie` — Node baked into the image (no node feature;
+  see [node.md](node.md) for why re-adding it is a silent failure mode)
+- **Named volumes**: `node_modules` and the npm cache (`~/.npm`) persist across container rebuilds, so
+  `npm ci --prefer-offline` rebuilds fast without re-downloading packages
+- **Post-create script**: Sets Git safe directory, fixes volume ownership, runs `npm ci`
 - **Visual Studio Code extensions**: Biome, Prettier, GitHub Actions, Markdown tools, GitHub PR extension
 - **Formatting config**: Biome as default formatter for TS/JS/JSON; Prettier for markdown/YAML
 - **Environment**: `GITHUB_TOKEN` forwarded from host automatically
 
 ### Manual Setup
 
-1. Install Node.js 26+ (see `.node-version`)
+1. Install the Node.js version pinned in `.node-version`; anything satisfying `engines.node` also works (see
+   [node.md](node.md) for the version policy)
 2. Run `npm ci --no-fund`
 3. Export `GITHUB_TOKEN` for integration tests
 
@@ -77,7 +80,8 @@ All commits must follow the [Conventional Commits](https://www.conventionalcommi
 ### TypeScript
 
 - Strict mode with all strict checks enabled
-- Target: ECMAScript 2022, Module: ECMAScript 2022, ModuleResolution: bundler
+- Target: ECMAScript 2024, Module: ECMAScript 2022, ModuleResolution: bundler — the target is bounded by the GitHub
+  Actions runtime, not local Node (see [node.md](node.md))
 - Path aliases configured in `tsconfig.json` and `vitest.config.ts`
 - Type-check only: `npm run typecheck` (uses `--noEmit`)
 

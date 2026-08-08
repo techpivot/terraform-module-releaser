@@ -1,53 +1,56 @@
 ---
 name: node-versioning
 description:
-  Aligns Node.js versions across .node-version, devcontainer, engines.node, @types/node, and the action.yml runtime. Use
-  before bumping Node or changing the Actions runtime.
+  Keeps every Node.js version reference — .node-version, devcontainer image, engines.node, @types/node, and the
+  action.yml runtime — pinned to the same major. Use before touching any of them.
 ---
 
 # Node.js Versioning
 
-The GitHub Actions runner never runs `npm install` for consumers of this action — it ignores `package.json` entirely and
-executes the pre-bundled `dist/index.js` on the runtime declared in `action.yml` (`runs.using`). Local dev can track the
-latest Node, but shipped code must stay compatible with the production runtime. APIs newer than that runtime bundle
-cleanly and then crash on consumers' runners. Full rationale:
-[references/runtime-boundary.md](references/runtime-boundary.md).
+Canonical knowledge lives in [docs/node.md](../../../docs/node.md) — read it first. Alignment is enforced by
+`__tests__/devcontainer.test.ts`; if that test fails, versions drifted.
+
+Parity policy: every Node reference pins to the GitHub Actions runtime major (currently 24). Nothing moves independently
+— the whole set advances together, as a breaking major release, when GitHub ships a new runtime.
 
 ## Version Map
 
-| Reference                                        | Value    | Rule                                                                |
-| ------------------------------------------------ | -------- | ------------------------------------------------------------------- |
-| `.node-version`                                  | `26`     | Local dev + CI (`node-version-file:`). Safe to bump to latest.      |
-| `.devcontainer/devcontainer.json` node `version` | `"26"`   | Must match `.node-version` exactly.                                 |
-| `action.yml` → `runs.using`                      | `node24` | Production runtime. Changing it is a breaking major release.        |
-| `package.json` → `engines.node`                  | `>=24`   | Floor stays at the production runtime major. Never raise past it.   |
-| `@types/node`                                    | `^26`    | Currently newer than the runtime — see the accepted-deviation note. |
+| Reference                               | Value                    | Notes                                                 |
+| --------------------------------------- | ------------------------ | ----------------------------------------------------- |
+| `action.yml` → `runs.using`             | `node24`                 | The anchor — GitHub executes `dist/` on this          |
+| `package.json` → `engines.node`         | `>=24`                   | Floor equals the runtime major                        |
+| `@types/node`                           | `^24`                    | Same major — the compile-time guard                   |
+| `tsconfig.json` → `target`              | `ES2024`                 | Bounded by the runtime's V8 (`@tsconfig/node24` base) |
+| `.node-version`                         | `24`                     | Same major; bare major floats to the latest 24.x      |
+| `.devcontainer/devcontainer.json` image | `javascript-node:24-...` | Tag major matches `.node-version`; update `name` too  |
 
-`@types/node` ideally matches the runtime major (24) so the compiler flags post-Node-24 APIs. The repository currently
-accepts `^26`, which removes that guard — the burden shifts to review: no post-Node-24 APIs in `src/`.
+## Staying Fresh Within the Line
 
-## Bumping Local Dev (e.g., 26 → 28)
+No manual maintenance:
 
-1. Update `.node-version`
-2. Update `.devcontainer/devcontainer.json` — the node feature `version` and any version label in `name`
-3. Leave `action.yml` `runs.using` and `engines.node` untouched
-4. Validate: `npm run package && npm run test && npm run check && npm run textlint`
+- `.node-version` holds a bare major, so `actions/setup-node`, nvm, and fnm resolve the newest 24.x automatically
+- `@types/node` minors/patches arrive through dependabot's weekly dev group; only its semver-major is excluded
+  (`.github/dependabot.yml`) until the runtime moves
+- The devcontainer image tag picks up new Node patches whenever Microsoft rebuilds the image
 
-## Bumping the Production Runtime (breaking change)
+## Bumping Node (only when GitHub ships a new runtime — breaking major release)
 
-Requires a new major release with an announcement.
-
-1. Confirm the target runtime is supported:
+1. Confirm the new `nodeXX` runtime exists and is supported:
    <https://docs.github.com/en/actions/creating-actions/metadata-syntax-for-github-actions#runs-for-javascript-actions>
-2. Review `tsconfig.json` `target`/`lib` so emitted syntax is valid for the new runtime
-3. Update `action.yml` `runs.using`, then raise the `engines.node` floor to match
-4. Rebuild (`npm run package`), run the full validation suite, and update `README.md`, `CONTRIBUTING.md`,
-   `docs/development.md`, and this skill's version map
-5. Release as a major version and call out the runtime change in the notes
+1. Move everything in one change: `action.yml` `runs.using`, `engines.node` floor, `@types/node` major, `.node-version`,
+   and the devcontainer `image` tag + `name` label (verify the `javascript-node:<major>-<distro>` tag exists on
+   mcr.microsoft.com first)
+1. Review `tsconfig.json` `target`/`lib` against the new runtime's V8 — check the official `@tsconfig/nodeXX` base
+1. Rebuild and validate: `npm run package && npm run test && npm run check && npm run textlint` — the guard test fails
+   until every reference agrees
+1. Update `docs/node.md` (version map, runtime background, GHES minimums), `README.md` (GHES requirements),
+   `CONTRIBUTING.md`, and `docs/development.md`
+1. Ship as a major release; call out the runtime change and minimum GHES version in the notes
 
 ## Guardrails
 
-- Never raise `engines.node` above the production runtime major — it breaks contributors on standard runtimes and
-  invites type bleed from newer `@types/node`
-- Never use Node APIs newer than the `action.yml` runtime in `src/` — the bundle won't fail, consumers will
-- Version drift between `.node-version` and the devcontainer is a bug; fix both together
+- Never bump `.node-version` or the devcontainer image ahead of the runtime — parity is the policy, and the guard test
+  fails on drift
+- Never add the `ghcr.io/devcontainers/features/node` feature — the image ships Node via nvm first on `PATH`, so a
+  feature-installed Node silently shadows it
+- Keep the dependabot `@types/node` semver-major exclusion; removing it reopens silent post-runtime API risk

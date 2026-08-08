@@ -14,13 +14,13 @@ silently does nothing.
 ## Checklist
 
 1. `action.yml` — add/update the input: description, `required`, `default`
-2. `src/utils/metadata.ts` — `ACTION_INPUTS` entry mapping the kebab-case input name to its camelCase config key; use
+1. `src/utils/metadata.ts` — `ACTION_INPUTS` entry mapping the kebab-case input name to its camelCase config key; use
    the factory helpers (`requiredString`, `requiredBoolean`, `requiredArray`, `requiredNumber`, `optionalArray`)
-3. `src/types/config.types.ts` — add the camelCase key to the `Config` interface (re-exported via `src/types/index.ts`)
-4. `src/config.ts` — add validation if the input has constrained values (e.g., allowed separators, enum-like modes)
-5. Wire the value into the consuming code path
-6. `README.md` — update the Input Parameters table; extend the example configuration if the input is worth showcasing
-7. Tests:
+1. `src/types/config.types.ts` — add the camelCase key to the `Config` interface (re-exported via `src/types/index.ts`)
+1. `src/config.ts` — add validation if the input has constrained values (e.g., allowed separators, enum-like modes)
+1. Wire the value into the consuming code path
+1. `README.md` — update the Input Parameters table; extend the example configuration if the input is worth showcasing
+1. Tests:
    - `__tests__/utils/metadata.test.ts` — update the expected input registry
    - `__tests__/helpers/inputs.ts` — update the categorized input arrays (`booleanInputs`, `arrayInputs`, …) if the
      input's type category changed
