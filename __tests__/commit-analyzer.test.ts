@@ -1,4 +1,5 @@
 import {
+  MAX_COMMIT_MESSAGE_PARSE_LENGTH,
   REVERT_PATTERN,
   computeReleaseType,
   detectConventionalCommitReleaseType,
@@ -320,6 +321,36 @@ describe('commit-analyzer', () => {
         // on long whitespace runs (≈14s on this input) and would blow the test timeout, while
         // the linear pattern completes in under a millisecond.
         expect(REVERT_PATTERN.test(`Revert "x${' '.repeat(100_000)}y`)).toBe(false);
+      });
+    });
+
+    describe('pathological and oversized messages', () => {
+      it('should parse a long line without issue references quickly (issue-references regex disabled)', () => {
+        // With the library-default issuePrefixes, the reference-parts regex took ~10 seconds on
+        // this input; a regression re-enabling it shows up here as a test timeout.
+        const result = parseConventionalCommit(`fix: y\n\n${' '.repeat(2_000)}y`);
+        expect(result).toEqual({ type: 'fix', scope: null, breaking: false, description: 'y' });
+      });
+
+      it('should parse a message far beyond the parse cap quickly', () => {
+        const result = parseConventionalCommit(`feat: x\n\n${' '.repeat(100_000)}y`);
+        expect(result).toEqual({ type: 'feat', scope: null, breaking: false, description: 'x' });
+      });
+
+      it('should preserve a breaking-change footer that sits beyond the parse cap', () => {
+        const filler = 'x'.repeat(MAX_COMMIT_MESSAGE_PARSE_LENGTH);
+        const result = parseConventionalCommit(`feat(api): add endpoint\n\n${filler}\n\nBREAKING CHANGE: drop v1`);
+        expect(result).toEqual({ type: 'feat', scope: 'api', breaking: true, description: 'add endpoint' });
+      });
+
+      it('should preserve the header breaking indicator for oversized messages', () => {
+        const result = parseConventionalCommit(`fix!: patch\n\n${'x'.repeat(MAX_COMMIT_MESSAGE_PARSE_LENGTH)}`);
+        expect(result).toEqual({ type: 'fix', scope: null, breaking: true, description: 'patch' });
+      });
+
+      it('should still parse messages containing issue references normally', () => {
+        const result = parseConventionalCommit('fix: y\n\nFixes #123');
+        expect(result).toEqual({ type: 'fix', scope: null, breaking: false, description: 'y' });
       });
     });
 

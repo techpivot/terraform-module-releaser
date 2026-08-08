@@ -57,7 +57,16 @@ export const REVERT_PATTERN = /^(?:Revert|revert:)\s"?([\s\S]*?[^"\s])"?\s*This 
  *   original header and commit hash. The parsed revert fields are currently
  *   unused by this action; the option is kept for preset fidelity.
  *
- * - `issuePrefixes` — Characters that prefix issue references (e.g. `#123`).
+ * - `issuePrefixes` — Deliberately overridden to `undefined` (the second divergence
+ *   from the preset, which uses `['#']` — also the library default). The references
+ *   output it feeds is unused by this action, and the regex the library builds from
+ *   it (`(?:.*?)??\s*([\w-.\/]*?)??(#)…`) is catastrophically super-linear: measured
+ *   at 10 seconds on a single 2,000-character line without a `#`. Since commit
+ *   messages come from pull requests, that is an attacker-triggerable CI stall.
+ *   The explicit `undefined` overrides the library default via the constructor's
+ *   `{ ...defaultOptions, ...options }` spread; if a future library version changes
+ *   that merge style the default would silently return, which the pathological-input
+ *   regression tests would catch as a test timeout.
  */
 const commitParser = new CommitParser({
   headerPattern: /^(\w*)(?:\((.*)\))?!?: (.*)$/,
@@ -66,12 +75,63 @@ const commitParser = new CommitParser({
   noteKeywords: ['BREAKING CHANGE', 'BREAKING-CHANGE'],
   revertPattern: REVERT_PATTERN,
   revertCorrespondence: ['header', 'hash'],
-  issuePrefixes: ['#'],
+  issuePrefixes: undefined,
 });
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Single-message detection
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/**
+ * Messages longer than this are reduced to a parse-safe digest before being handed to the parser.
+ *
+ * Even with `issuePrefixes` disabled, `conventional-commits-parser` substitutes the never-matching
+ * stub `/(?!.*)/` for the disabled regex — and that stub is itself quadratic, because the `.*`
+ * inside the lookahead walks to the end of the line at every scan position (measured: ~2.3s on a
+ * 100k-character line, growing quadratically). Bounding what reaches the parser caps that cost at
+ * ~60ms per message while `toParseSafeMessage()` preserves every output this module consumes.
+ * Real conventional commit messages — including large squash-merge bodies — sit far below this cap
+ * and always take the unmodified fast path.
+ *
+ * Exported for the oversized-message tests; not part of the public API.
+ */
+export const MAX_COMMIT_MESSAGE_PARSE_LENGTH = 16_384;
+
+/** Cap applied to the individual lines kept by `toParseSafeMessage()`. */
+const MAX_DIGEST_LINE_LENGTH = 1_024;
+
+/**
+ * Matches any line the parser's notes regex (`/^(?:\*\s+)?(BREAKING CHANGE|BREAKING-CHANGE):\s*(.*)/i`)
+ * would record as a breaking-change note. Kept in sync with that shape so the digest never drops a
+ * line the full parse would have counted.
+ */
+const BREAKING_NOTE_LINE = /^(?:\*\s+)?BREAKING[ -]CHANGE:/i;
+
+/**
+ * Reduces an oversized commit message to the lines that can influence this module's outputs.
+ *
+ * Everything `parseConventionalCommit()` returns derives from exactly two things: the header (first
+ * line → type, scope, subject, `!` indicator) and whether any breaking-change note exists (`!` or a
+ * `BREAKING CHANGE:` footer line). So for messages over `MAX_COMMIT_MESSAGE_PARSE_LENGTH`, parsing
+ * the header plus the first breaking-change footer line yields identical results to parsing the
+ * whole message — at bounded cost. The only lossy cases are absurd ones: a single header line over
+ * `MAX_DIGEST_LINE_LENGTH` characters gets its subject truncated, and note *text* (which this
+ * module never reads) is truncated.
+ *
+ * @param message - The trimmed commit message
+ * @returns The message itself when within the cap, otherwise the reduced digest
+ */
+function toParseSafeMessage(message: string): string {
+  if (message.length <= MAX_COMMIT_MESSAGE_PARSE_LENGTH) {
+    return message;
+  }
+
+  const lines = message.split(/\r?\n/);
+  const header = lines[0].slice(0, MAX_DIGEST_LINE_LENGTH);
+  const breakingLine = lines.slice(1).find((line) => BREAKING_NOTE_LINE.test(line));
+
+  return breakingLine === undefined ? header : `${header}\n\n${breakingLine.slice(0, MAX_DIGEST_LINE_LENGTH)}`;
+}
 
 /**
  * Parses a commit message according to the Conventional Commits specification
@@ -106,7 +166,7 @@ export function parseConventionalCommit(message: string): ConventionalCommitResu
     return null;
   }
 
-  const parsed = commitParser.parse(trimmed);
+  const parsed = commitParser.parse(toParseSafeMessage(trimmed));
 
   if (!parsed.type) {
     return null;
