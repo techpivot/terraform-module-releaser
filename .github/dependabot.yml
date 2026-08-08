@@ -21,6 +21,15 @@ updates:
       - dependency-name: "@types/node"
         update-types:
           - "version-update:semver-major"
+      # Frozen on 6.x: TypeScript 7 ships no stable programmatic API (its main entry is lib/version.cjs, exporting
+      # only {version, versionMajorMinor}; the compiler API moved behind ./unstable/*). @vercel/ncc bundles
+      # ts-loader, which calls ts.sys.fileExists, so `npm run package` dies with "Cannot read properties of
+      # undefined (reading 'fileExists')" — https://github.com/vercel/ncc/issues/1336 (open, help wanted).
+      # tsc --noEmit and Vitest typecheck use the CLI and are unaffected, so nothing but the bundle catches this.
+      # Unfreeze once that issue closes and `npm run package` succeeds against a 7.x prerelease.
+      - dependency-name: "typescript"
+        update-types:
+          - "version-update:semver-major"
     groups:
       npm-development:
         dependency-type: development

@@ -24,6 +24,9 @@ deliberately not part of `npm run lint`.
 ## Stack
 
 - TypeScript strict mode, ES modules; Biome for TS/JS/JSON (not ESLint), Prettier for md/yml only
+- TypeScript is frozen on 6.x — 7.x exposes no stable programmatic API and breaks `npm run package` via ncc's
+  `ts-loader` ([vercel/ncc#1336](https://github.com/vercel/ncc/issues/1336)); `tsc`/Vitest use the CLI and miss it, so
+  run `npm run package` on any TypeScript major change (detail: `docs/development.md`)
 - Node 24 everywhere by parity policy — `.node-version`, devcontainer, CI, and the `action.yml` runtime share the major;
   `@types/node` is pinned to it so post-runtime APIs fail typecheck (policy: `docs/node.md`)
 - `@actions/core` + `@octokit` for GitHub integration; Vitest for tests

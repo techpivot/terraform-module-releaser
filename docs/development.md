@@ -84,6 +84,17 @@ All commits must follow the [Conventional Commits](https://www.conventionalcommi
 - Path aliases configured in `tsconfig.json` and `vitest.config.ts`
 - Type-check only: `npm run lint:types` (uses `--noEmit`)
 
+> [!IMPORTANT] **TypeScript is frozen on 6.x.** TypeScript 7 ships no stable programmatic API — its main entry resolves
+> to `lib/version.cjs`, which exports only `{version, versionMajorMinor}`, and the compiler API moved behind
+> `./unstable/*`. [`@vercel/ncc`](https://github.com/vercel/ncc) bundles `ts-loader`, which calls `ts.sys.fileExists`,
+> so `npm run package` fails with `Cannot read properties of undefined (reading 'fileExists')`. Tracked upstream as
+> [vercel/ncc#1336](https://github.com/vercel/ncc/issues/1336) (open, `help wanted`).
+>
+> The trap is that nothing else catches it: `tsc --noEmit` and Vitest's typecheck both invoke the **CLI**, which works
+> fine under 7.x — only the bundler consumes the API. **Always run `npm run package` when changing the TypeScript
+> major.** Dependabot is configured to ignore `typescript` majors (`.github/dependabot.yml`); unfreeze only once the
+> upstream issue closes and `npm run package` succeeds.
+
 ## CI/CD Pipeline
 
 ### Pull Request Workflows
