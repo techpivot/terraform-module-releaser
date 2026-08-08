@@ -37,15 +37,15 @@ No manual maintenance:
 
 1. Confirm the new `nodeXX` runtime exists and is supported:
    <https://docs.github.com/en/actions/creating-actions/metadata-syntax-for-github-actions#runs-for-javascript-actions>
-2. Move everything in one change: `action.yml` `runs.using`, `engines.node` floor, `@types/node` major, `.node-version`,
+1. Move everything in one change: `action.yml` `runs.using`, `engines.node` floor, `@types/node` major, `.node-version`,
    and the devcontainer `image` tag + `name` label (verify the `javascript-node:<major>-<distro>` tag exists on
    mcr.microsoft.com first)
-3. Review `tsconfig.json` `target`/`lib` against the new runtime's V8 — check the official `@tsconfig/nodeXX` base
-4. Rebuild and validate: `npm run package && npm run test && npm run check && npm run textlint` — the guard test fails
+1. Review `tsconfig.json` `target`/`lib` against the new runtime's V8 — check the official `@tsconfig/nodeXX` base
+1. Rebuild and validate: `npm run package && npm run test && npm run check && npm run textlint` — the guard test fails
    until every reference agrees
-5. Update `docs/node.md` (version map, runtime background, GHES minimums), `README.md` (GHES requirements),
+1. Update `docs/node.md` (version map, runtime background, GHES minimums), `README.md` (GHES requirements),
    `CONTRIBUTING.md`, and `docs/development.md`
-6. Ship as a major release; call out the runtime change and minimum GHES version in the notes
+1. Ship as a major release; call out the runtime change and minimum GHES version in the notes
 
 ## Guardrails
 

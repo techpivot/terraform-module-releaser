@@ -22,9 +22,9 @@ checklist lives in the [node-versioning skill](../.claude/skills/node-versioning
 When a downstream repository uses `techpivot/terraform-module-releaser@v2`, the GitHub Actions runner:
 
 1. Never runs `npm install` — `package.json`, `package-lock.json`, and dependency resolution are ignored entirely
-2. Reads `action.yml` and boots the runtime declared there (`runs.using: node24`), a Node build shipped with the runner
+1. Reads `action.yml` and boots the runtime declared there (`runs.using: node24`), a Node build shipped with the runner
    itself
-3. Executes the pre-compiled bundle at `dist/index.js` directly on that runtime
+1. Executes the pre-compiled bundle at `dist/index.js` directly on that runtime
 
 Everything a consumer runs was decided at bundle time (`npm run package` via `@vercel/ncc`). The runner's `node24` is
 the single hard requirement the published artifact must satisfy, and `package.json` → `engines.node: ">=24"` mirrors it.
@@ -61,13 +61,13 @@ test suite executes on the runtime's own line anyway.
 
 1. **`@types/node` pinned to the runtime major (`^24`)** — the compiler only knows the API surface the runner actually
    has, so post-runtime APIs fail `npm run typecheck` the moment they are written
-2. **`engines.node` floor equals the runtime major (`>=24`)** — declares the true support floor to contributors and
+1. **`engines.node` floor equals the runtime major (`>=24`)** — declares the true support floor to contributors and
    tooling, and keeps the `@types/node` pin honest (a higher floor would legitimize newer typings)
-3. **tsconfig `target` bounded by the runtime** — `ES2024`, per the official `@tsconfig/node24` base; raise it only when
+1. **tsconfig `target` bounded by the runtime** — `ES2024`, per the official `@tsconfig/node24` base; raise it only when
    the runtime moves
-4. **`__tests__/devcontainer.test.ts`** — asserts the whole set shares the runtime major (`runs.using` ↔ `engines` ↔
+1. **`__tests__/devcontainer.test.ts`** — asserts the whole set shares the runtime major (`runs.using` ↔ `engines` ↔
    `@types/node` ↔ `.node-version` ↔ devcontainer image tag) and that the devcontainers `node` feature is absent
-5. **Dependabot ignore for `@types/node` majors** (`.github/dependabot.yml`) — the exclusion that keeps parity
+1. **Dependabot ignore for `@types/node` majors** (`.github/dependabot.yml`) — the exclusion that keeps parity
    low-maintenance: minor/patch type updates flow automatically; the major only moves with the runtime bump
 
 ## Why `engines.node` must not exceed the runtime major
