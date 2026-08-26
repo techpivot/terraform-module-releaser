@@ -424,7 +424,7 @@ async function publishNewRelease(module: TerraformModule, releaseMarker: string)
   const githubActionsBotEmail = await getGitHubActionsBotEmail();
 
   // Execute git commands in temp directory without inheriting stdio to avoid output pollution
-  const gitOpts: ExecSyncOptions = { cwd: tmpDir };
+  const gitOpts: ExecSyncOptions = { cwd: tmpDir, maxBuffer: config.gitMaxBuffer };
 
   // Configure Git authentication
   configureGitAuthentication(gitPath, gitOpts);

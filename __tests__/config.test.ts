@@ -9,7 +9,7 @@ import {
   setupTestInputs,
   stringInputs,
 } from '@/tests/helpers/inputs';
-import { VALID_TAG_DIRECTORY_SEPARATORS } from '@/utils/constants';
+import { DEFAULT_GIT_MAX_BUFFER, VALID_TAG_DIRECTORY_SEPARATORS } from '@/utils/constants';
 import { endGroup, getBooleanInput, getInput, info, startGroup } from '@actions/core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -192,6 +192,22 @@ describe('config', () => {
       );
     });
 
+    it.each([
+      { reason: 'non-numeric', value: 'invalid' },
+      { reason: 'trailing-garbage', value: '123abc' },
+      { reason: 'non-integer', value: '1.5' },
+    ])('should throw error for $reason git-max-buffer', ({ value }) => {
+      setupTestInputs({ 'git-max-buffer': value });
+      expect(() => getConfig()).toThrow(
+        new Error(`Failed to process input 'git-max-buffer': Invalid integer value: '${value}'`),
+      );
+    });
+
+    it('should throw error for 0 git-max-buffer', () => {
+      setupTestInputs({ 'git-max-buffer': '0' });
+      expect(() => getConfig()).toThrow(new TypeError('Git max buffer must be a positive integer'));
+    });
+
     it('should throw error for invalid tag directory separator length', () => {
       setupTestInputs({ 'tag-directory-separator': 'ab' });
       expect(() => getConfig()).toThrow(new TypeError('Tag directory separator must be exactly one character'));
@@ -350,6 +366,7 @@ describe('config', () => {
       expect(config.moduleRefMode).toBe('tag');
       expect(config.preRelease).toBe(false);
       expect(config.hideNoChangesPrComment).toBe(false);
+      expect(config.gitMaxBuffer).toBe(DEFAULT_GIT_MAX_BUFFER);
 
       expect(startGroup).toHaveBeenCalledWith('Initializing Config');
       expect(startGroup).toHaveBeenCalledTimes(1);
@@ -371,6 +388,7 @@ describe('config', () => {
         ['Module Ref Mode: tag'],
         ['Pre-release: false'],
         ['Hide No Changes PR Comment: false'],
+        [`Git Max Buffer: ${DEFAULT_GIT_MAX_BUFFER}`],
       ]);
     });
   });

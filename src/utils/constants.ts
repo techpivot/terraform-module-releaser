@@ -61,6 +61,12 @@ export const RELEASE_TYPE = {
 } as const;
 
 /**
+ * Default `maxBuffer` (in bytes) for Git commands run during module tag/release creation.
+ * Node.js defaults to 1 MiB; large monorepos can exceed that and raise ENOBUFS.
+ */
+export const DEFAULT_GIT_MAX_BUFFER = 1024 * 1024;
+
+/**
  * Valid semantic version levels for default-semver-level configuration
  */
 export const VALID_SEMVER_LEVELS = [RELEASE_TYPE.PATCH, RELEASE_TYPE.MINOR, RELEASE_TYPE.MAJOR] as const;

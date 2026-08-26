@@ -410,6 +410,26 @@ describe('releases', () => {
       );
     });
 
+    it('should pass config.gitMaxBuffer to git execFileSync options', async () => {
+      const customMaxBuffer = 50 * 1024 * 1024;
+      config.set({ gitMaxBuffer: customMaxBuffer });
+
+      stubOctokitReturnData('repos.createRelease', {
+        data: {
+          id: 123456,
+          name: 'path/to/test-module/v1.1.0',
+          body: 'Mock changelog content',
+          tag_name: 'path/to/test-module/v1.1.0',
+        },
+      });
+
+      await createTaggedReleases([mockTerraformModule]);
+
+      for (const call of execFileSyncMock.mock.calls) {
+        expect(call[2]).toEqual(expect.objectContaining({ maxBuffer: customMaxBuffer }));
+      }
+    });
+
     it('should handle null/undefined name and body from GitHub API response', async () => {
       execFileSyncMock.mockImplementation((_file, args) => {
         if (Array.isArray(args) && args.includes('rev-parse')) {
