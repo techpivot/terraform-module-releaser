@@ -63,7 +63,6 @@ export const ACTION_INPUTS: Record<string, ActionInputMetadata> = {
   'module-ref-mode': requiredString('moduleRefMode'),
   'pre-release': requiredBoolean('preRelease'),
   'hide-no-changes-pr-comment': requiredBoolean('hideNoChangesPrComment'),
-  'git-max-buffer': requiredNumber('gitMaxBuffer'),
 } as const;
 
 /**

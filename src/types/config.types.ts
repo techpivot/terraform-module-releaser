@@ -222,11 +222,4 @@ export interface Config {
    * affects the open-pull-request Release Plan comment; the post-merge release comment is unaffected.
    */
   hideNoChangesPrComment: boolean;
-
-  /**
-   * Maximum buffer size in bytes for capturing output from Git commands run while creating module
-   * tags and releases. Passed to Node.js `child_process` as `maxBuffer`. Large monorepos may need a
-   * higher value to avoid ENOBUFS when staging release commits.
-   */
-  gitMaxBuffer: number;
 }

@@ -219,14 +219,6 @@ inputs:
       open-pull-request Release Plan comment; the post-merge release comment is unaffected.
     required: true
     default: "false"
-  git-max-buffer:
-    description: >
-      Maximum buffer size in bytes for capturing output from Git commands run while creating module
-      tags and releases. Node.js defaults to 1048576 (1 MiB); large monorepos can exceed that when
-      staging release commits and trigger ENOBUFS. Increase this value when releases fail with
-      "spawnSync /usr/bin/git ENOBUFS".
-    required: true
-    default: "1048576"
 
 outputs:
   changed-module-names:

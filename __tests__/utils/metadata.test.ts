@@ -29,7 +29,6 @@ describe('utils/metadata', () => {
         'module-ref-mode',
         'pre-release',
         'hide-no-changes-pr-comment',
-        'git-max-buffer',
       ];
 
       expect(Object.keys(ACTION_INPUTS)).toEqual(expect.arrayContaining(expectedInputs));
@@ -92,7 +91,7 @@ describe('utils/metadata', () => {
     });
 
     it('should have correct metadata structure for required number inputs', () => {
-      const numberInputs = ['wiki-sidebar-changelog-max', 'git-max-buffer'];
+      const numberInputs = ['wiki-sidebar-changelog-max'];
 
       for (const inputName of numberInputs) {
         const metadata = ACTION_INPUTS[inputName];
@@ -145,7 +144,6 @@ describe('utils/metadata', () => {
         'module-ref-mode': 'moduleRefMode',
         'pre-release': 'preRelease',
         'hide-no-changes-pr-comment': 'hideNoChangesPrComment',
-        'git-max-buffer': 'gitMaxBuffer',
       };
 
       expect(Object.keys(expectedMappings)).toHaveLength(Object.keys(ACTION_INPUTS).length);

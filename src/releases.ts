@@ -423,8 +423,11 @@ async function publishNewRelease(module: TerraformModule, releaseMarker: string)
   const gitPath = await which('git');
   const githubActionsBotEmail = await getGitHubActionsBotEmail();
 
-  // Execute git commands in temp directory without inheriting stdio to avoid output pollution
-  const gitOpts: ExecSyncOptions = { cwd: tmpDir, maxBuffer: config.gitMaxBuffer };
+  // stdout is never read; discarding it (rather than piping it into a bounded buffer) is what keeps
+  // large monorepos off ENOBUFS — the release commit prints one "delete mode" line per file in the
+  // repository. stderr stays piped so execFileSync still attaches it to the thrown error, which the
+  // 403 permissions check in createTaggedReleases() matches on.
+  const gitOpts: ExecSyncOptions = { cwd: tmpDir, stdio: ['ignore', 'ignore', 'pipe'] };
 
   // Configure Git authentication
   configureGitAuthentication(gitPath, gitOpts);
@@ -433,7 +436,7 @@ async function publishNewRelease(module: TerraformModule, releaseMarker: string)
     ['config', '--local', 'user.name', GITHUB_ACTIONS_BOT_NAME],
     ['config', '--local', 'user.email', githubActionsBotEmail],
     ['add', '.'],
-    ['commit', '-m', commitMessage.trim()],
+    ['commit', '-q', '-m', commitMessage.trim()],
     ['tag', releaseTag],
     ['push', 'origin', releaseTag],
   ]) {
@@ -441,7 +444,9 @@ async function publishNewRelease(module: TerraformModule, releaseMarker: string)
   }
 
   // Store the commit SHA that the tag points to (since it's not returned from the API via create release)
-  const commitSHA = execFileSync(gitPath, ['rev-parse', 'HEAD'], gitOpts).toString().trim();
+  const commitSHA = execFileSync(gitPath, ['rev-parse', 'HEAD'], { ...gitOpts, stdio: ['ignore', 'pipe', 'pipe'] })
+    .toString()
+    .trim();
 
   // Create a GitHub release using the tag
   info(`Creating GitHub release for ${moduleName}@${releaseTagVersion}`);

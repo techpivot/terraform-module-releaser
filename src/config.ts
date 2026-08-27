@@ -63,10 +63,6 @@ function initializeConfig(): Config {
       throw new TypeError('Wiki Sidebar Change Log Max must be an integer greater than or equal to one');
     }
 
-    if (configInstance.gitMaxBuffer < 1) {
-      throw new TypeError('Git max buffer must be a positive integer');
-    }
-
     // Validate tag directory separator
     if (configInstance.tagDirectorySeparator.length !== 1) {
       throw new TypeError('Tag directory separator must be exactly one character');
@@ -133,7 +129,6 @@ function initializeConfig(): Config {
     info(`Module Ref Mode: ${configInstance.moduleRefMode}`);
     info(`Pre-release: ${configInstance.preRelease}`);
     info(`Hide No Changes PR Comment: ${configInstance.hideNoChangesPrComment}`);
-    info(`Git Max Buffer: ${configInstance.gitMaxBuffer}`);
 
     return configInstance;
   } finally {

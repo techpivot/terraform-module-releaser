@@ -410,10 +410,7 @@ describe('releases', () => {
       );
     });
 
-    it('should pass config.gitMaxBuffer to git execFileSync options', async () => {
-      const customMaxBuffer = 50 * 1024 * 1024;
-      config.set({ gitMaxBuffer: customMaxBuffer });
-
+    it('should discard git stdout during release git commands to avoid ENOBUFS', async () => {
       stubOctokitReturnData('repos.createRelease', {
         data: {
           id: 123456,
@@ -425,8 +422,16 @@ describe('releases', () => {
 
       await createTaggedReleases([mockTerraformModule]);
 
+      expect(execFileSyncMock.mock.calls).not.toHaveLength(0);
+
       for (const call of execFileSyncMock.mock.calls) {
-        expect(call[2]).toEqual(expect.objectContaining({ maxBuffer: customMaxBuffer }));
+        const args = call[1];
+        const opts = call[2];
+        if (Array.isArray(args) && args.includes('rev-parse')) {
+          expect(opts).toEqual(expect.objectContaining({ stdio: ['ignore', 'pipe', 'pipe'] }));
+        } else {
+          expect(opts).toEqual(expect.objectContaining({ stdio: ['ignore', 'ignore', 'pipe'] }));
+        }
       }
     });
 
@@ -1014,7 +1019,10 @@ describe('releases', () => {
       );
       // The release COMMIT also carries the marker, which is what makes the tag provable later.
       const commitCall = execFileSyncMock.mock.calls.find((call) => Array.isArray(call[1]) && call[1][0] === 'commit');
-      expect(commitCall?.[1]?.[2]).toContain(releaseMarker);
+      const commitArgs = commitCall?.[1] as string[] | undefined;
+      const commitMessageIndex = commitArgs?.indexOf('-m') ?? -1;
+      expect(commitMessageIndex).toBeGreaterThanOrEqual(0);
+      expect(commitArgs?.[commitMessageIndex + 1]).toContain(releaseMarker);
       expect(execFileSyncMock).toHaveBeenCalledWith(
         expect.anything(),
         ['push', 'origin', 'path/to/test-module/v1.1.0'],
@@ -1242,7 +1250,10 @@ describe('releases', () => {
         const commitCall = execFileSyncMock.mock.calls.find(
           (call) => Array.isArray(call[1]) && call[1][0] === 'commit',
         );
-        const commitMessage = String(commitCall?.[1]?.[2]);
+        const commitArgs = commitCall?.[1] as string[] | undefined;
+        const commitMessageIndex = commitArgs?.indexOf('-m') ?? -1;
+        expect(commitMessageIndex).toBeGreaterThanOrEqual(0);
+        const commitMessage = String(commitArgs?.[commitMessageIndex + 1]);
 
         // The forged marker is escaped and no longer attributable to PR #2...
         expect(matchesPrMarker(commitMessage, 2)).toBe(false);
