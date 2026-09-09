@@ -89,7 +89,7 @@
     "ts-deepmerge": "^8.0.0",
     "tsx": "^4.23.12",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.10"
+    "vitest": "^5.0.0"
   },
   "allowScripts": {
     "esbuild@0.28.1": true
