@@ -841,7 +841,6 @@ describe('TerraformModule', () => {
         testModule.setTags(createMockTags(['tf-modules/test-module/v1.0.0']));
 
         vi.spyOn(testModule, 'getLatestTagVersion').mockReturnValue('invalid-format');
-        // @ts-expect-error - Accessing private for testing
         vi.spyOn(testModule, 'hasDirectChanges').mockReturnValue(true);
 
         // Add a commit to trigger release tag version calculation
@@ -2008,7 +2007,6 @@ describe('TerraformModule', () => {
         const moduleB = new TerraformModule(join(moduleDir, 'subdir'));
 
         // Use the public setTags method but mock the internal compareSemanticVersions to check the extracted versions
-        // @ts-expect-error - Accessing private for testing
         const compareSpy = vi.spyOn(moduleA, 'compareSemanticVersions');
 
         // When setting tags with multiple items, extractVersionFromTag is used and compareSemanticVersions is called for sorting
@@ -2077,7 +2075,6 @@ describe('TerraformModule', () => {
       // Mock internal methods to force version validation
       vi.spyOn(testModule, 'getLatestTagVersion').mockReturnValue('bad-version');
 
-      // @ts-expect-error - Accessing private for testing
       vi.spyOn(testModule, 'hasDirectChanges').mockReturnValue(true);
 
       // Add a commit to ensure getReleaseTagVersion processes the version
