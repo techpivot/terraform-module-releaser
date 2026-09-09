@@ -161,8 +161,9 @@ export function createFakeGit(state: FakeRepoState) {
   return (_file: string, args?: readonly string[]): Buffer => {
     const argv = Array.isArray(args) ? args : [];
 
-    if (argv[0] === 'commit' && argv[1] === '-m') {
-      pendingMessage = String(argv[2]);
+    const messageIndex = argv.indexOf('-m');
+    if (argv[0] === 'commit' && messageIndex !== -1) {
+      pendingMessage = String(argv[messageIndex + 1]);
       pendingSha = `sha-${nextId()}`;
       state.commits.set(pendingSha, pendingMessage);
       return Buffer.from('');
