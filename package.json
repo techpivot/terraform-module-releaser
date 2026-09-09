@@ -61,14 +61,14 @@
   },
   "dependencies": {
     "@actions/core": "^3.0.1",
-    "@octokit/core": "^7.0.7",
+    "@octokit/core": "^7.0.8",
     "@octokit/plugin-paginate-rest": "^15.0.0",
     "@octokit/plugin-rest-endpoint-methods": "^18.0.0",
     "@octokit/request-error": "^7.1.1",
     "conventional-commits-parser": "^7.1.2",
     "js-yaml": "^5.3.0",
     "minimatch": "^10.2.6",
-    "p-limit": "^7.3.1",
+    "p-limit": "^7.3.2",
     "which": "^7.0.0"
   },
   "devDependencies": {
