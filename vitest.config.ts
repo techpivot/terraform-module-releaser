@@ -18,9 +18,9 @@ export default defineConfig({
     include: ['__tests__/**/*.test.ts'],
     forceRerunTriggers: ['**/vitest.config.*/**', '**/__mocks__/**/*', '__tests__/_setup.ts'],
     alias: {
-      '@/tests/': `${resolve(__dirname, '__tests__')}/`,
-      '@/mocks/': `${resolve(__dirname, '__mocks__')}/`,
-      '@/': `${resolve(__dirname, 'src')}/`,
+      '@/tests/': `${resolve(import.meta.dirname, '__tests__')}/`,
+      '@/mocks/': `${resolve(import.meta.dirname, '__mocks__')}/`,
+      '@/': `${resolve(import.meta.dirname, 'src')}/`,
     },
   },
 });
