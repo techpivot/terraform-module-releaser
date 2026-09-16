@@ -66,7 +66,7 @@
     "@octokit/plugin-rest-endpoint-methods": "^18.0.0",
     "@octokit/request-error": "^7.1.2",
     "conventional-commits-parser": "^7.1.2",
-    "js-yaml": "^5.4.1",
+    "js-yaml": "^5.4.2",
     "minimatch": "^10.2.6",
     "p-limit": "^7.3.2",
     "which": "^7.0.0"
