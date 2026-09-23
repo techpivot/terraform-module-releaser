@@ -68,7 +68,7 @@
     "conventional-commits-parser": "^7.1.2",
     "js-yaml": "^5.4.2",
     "minimatch": "^10.2.6",
-    "p-limit": "^7.3.2",
+    "p-limit": "^7.3.3",
     "which": "^7.0.0"
   },
   "devDependencies": {
