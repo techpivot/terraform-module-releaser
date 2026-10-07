@@ -62,7 +62,7 @@
   "dependencies": {
     "@actions/core": "^3.0.1",
     "@octokit/core": "^7.0.8",
-    "@octokit/plugin-paginate-rest": "^15.0.0",
+    "@octokit/plugin-paginate-rest": "^16.0.0",
     "@octokit/plugin-rest-endpoint-methods": "^18.0.0",
     "@octokit/request-error": "^7.1.2",
     "conventional-commits-parser": "^7.1.2",
