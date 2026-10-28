@@ -361,14 +361,13 @@ To revert to legacy keyword-based matching:
   ```
 
   > **Important**: Unlike `module-change-exclude-patterns`, these patterns only affect what goes into the release asset,
-  > not whether a release is triggered.
+  > not whether a release is triggered. All pattern matching is implemented using
+  > [minimatch](https://github.com/isaacs/minimatch), which supports glob patterns similar to those used in `.gitignore`
+  > files. For more details on the pattern matching implementation, see our
+  > [source code](https://github.com/techpivot/terraform-module-releaser/blob/main/src/utils/file.ts) or visit the
+  > [minimatch documentation](https://github.com/isaacs/minimatch).
 
-All pattern matching is implemented using [minimatch](https://github.com/isaacs/minimatch), which supports glob patterns
-similar to those used in `.gitignore` files. For more details on the pattern matching implementation, see our
-[source code](https://github.com/techpivot/terraform-module-releaser/blob/main/src/utils/file.ts) or visit the
-[minimatch documentation](https://github.com/isaacs/minimatch).
-
-### Configuring the Wiki Usage Template
+  ### Configuring the Wiki Usage Template
 
 The `wiki-usage-template` input allows you to customize the "Usage" section of the generated wiki page for each module.
 You can use the following dynamic variables in your template:
