@@ -12,6 +12,7 @@ describe('utils/metadata', () => {
         'minor-keywords',
         'patch-keywords',
         'default-semver-level',
+        'analyze-pr-title',
         'default-first-tag',
         'terraform-docs-version',
         'delete-legacy-tags',
@@ -58,6 +59,7 @@ describe('utils/metadata', () => {
 
     it('should have correct metadata structure for required boolean inputs', () => {
       const booleanInputs = [
+        'analyze-pr-title',
         'delete-legacy-tags',
         'disable-wiki',
         'disable-branding',
@@ -127,6 +129,7 @@ describe('utils/metadata', () => {
         'minor-keywords': 'minorKeywords',
         'patch-keywords': 'patchKeywords',
         'default-semver-level': 'defaultSemverLevel',
+        'analyze-pr-title': 'analyzePrTitle',
         'default-first-tag': 'defaultFirstTag',
         'terraform-docs-version': 'terraformDocsVersion',
         'delete-legacy-tags': 'deleteLegacyTags',

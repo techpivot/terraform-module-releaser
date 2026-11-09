@@ -28,16 +28,16 @@ inputs:
     required: true
     default: conventional-commits
   major-keywords:
-    description: Keywords in commit messages that indicate a major release. Only used when semver-mode is "keywords".
+    description: Keywords in commit messages (and the pull request title when analyze-pr-title is true) that indicate a major release. Only used when semver-mode is "keywords".
     required: true
     default: major change,breaking change
   minor-keywords:
-    description: Keywords in commit messages that indicate a minor release. Only used when semver-mode is "keywords".
+    description: Keywords in commit messages (and the pull request title when analyze-pr-title is true) that indicate a minor release. Only used when semver-mode is "keywords".
     required: true
     default: feat,feature
   patch-keywords:
     description: >
-      Keywords in commit messages that indicate a patch release. Only used when semver-mode is "keywords".
+      Keywords in commit messages (and the pull request title when analyze-pr-title is true) that indicate a patch release. Only used when semver-mode is "keywords".
       By default, everything will be a patch release if major or minor keywords are not found.
     required: true
     default: fix,chore,docs
@@ -58,6 +58,22 @@ inputs:
       level takes precedence.
     required: true
     default: patch
+  analyze-pr-title:
+    description: >
+      Whether to also analyze the pull request title, using the active semver-mode rules, when
+      determining each module's release type. When true, the title is treated like an additional
+      commit message for every module the pull request changes, so a squash-style title such as
+      "feat!: drop provider v3" (conventional-commits mode) or one containing a major keyword
+      (keywords mode) raises the release type of every changed module. The highest release type
+      across the title and commits wins, so the title never reduces a level matched by a commit.
+      The default-semver-level fallback applies only when neither the title nor any commit matches
+      a rule, so a matching title takes precedence over it. The title never triggers a release for
+      a module without changes.
+
+      Because the title applies to every changed module, enable this when pull request titles are
+      the source of truth for versioning (e.g., squash-merge workflows with PR title linting).
+    required: true
+    default: "false"
   default-first-tag:
     description: Specifies the default tag version. (Should be in format v#.#.#)
     required: true

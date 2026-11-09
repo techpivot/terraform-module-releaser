@@ -115,6 +115,7 @@ function initializeConfig(): Config {
       info(`Patch Keywords: ${configInstance.patchKeywords.join(', ')}`);
     }
     info(`Default Semver Level: ${configInstance.defaultSemverLevel}`);
+    info(`Analyze PR Title: ${configInstance.analyzePrTitle}`);
     info(`Default First Tag: ${configInstance.defaultFirstTag}`);
     info(`Terraform Docs Version: ${configInstance.terraformDocsVersion}`);
     info(`Delete Legacy Tags: ${configInstance.deleteLegacyTags}`);

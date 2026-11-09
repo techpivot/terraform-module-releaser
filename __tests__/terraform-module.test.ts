@@ -715,6 +715,87 @@ describe('TerraformModule', () => {
       });
     });
 
+    describe('getReleaseType() with pull request title', () => {
+      beforeEach(() => {
+        config.set({ analyzePrTitle: true });
+        module.setTags(createMockTags(['tf-modules/test-module/v1.0.0']));
+        module.addCommit({
+          sha: 'abc123',
+          message: 'update configuration',
+          files: ['main.tf'],
+        });
+      });
+
+      afterEach(() => {
+        context.resetDefaults();
+      });
+
+      it('should ignore the title when analyzePrTitle is disabled', () => {
+        config.set({ analyzePrTitle: false });
+        context.set({ prTitle: 'BREAKING CHANGE: bump provider' });
+
+        expect(module.getReleaseType()).toBe(RELEASE_TYPE.PATCH);
+      });
+
+      it('should return major when only the title contains a major keyword', () => {
+        context.set({ prTitle: 'BREAKING CHANGE: bump provider' });
+
+        expect(module.getReleaseType()).toBe(RELEASE_TYPE.MAJOR);
+      });
+
+      it('should return minor when only the title contains a minor keyword', () => {
+        context.set({ prTitle: 'feat: add option' });
+
+        expect(module.getReleaseType()).toBe(RELEASE_TYPE.MINOR);
+      });
+
+      it('should not lower a higher release type from commits', () => {
+        context.set({ prTitle: 'feat: add option' });
+        module.addCommit({
+          sha: 'def456',
+          message: 'BREAKING CHANGE: remove variable',
+          files: ['main.tf'],
+        });
+
+        expect(module.getReleaseType()).toBe(RELEASE_TYPE.MAJOR);
+      });
+
+      it('should fall back to the default semver level when neither title nor commits match', () => {
+        config.set({ defaultSemverLevel: 'minor' });
+
+        expect(module.getReleaseType()).toBe(RELEASE_TYPE.MINOR);
+      });
+
+      it('should let a matching title take precedence over the default semver level', () => {
+        config.set({ defaultSemverLevel: 'minor' });
+        context.set({ prTitle: 'fix: correct typo' });
+
+        expect(module.getReleaseType()).toBe(RELEASE_TYPE.PATCH);
+      });
+
+      it('should not trigger a release from the title alone', () => {
+        const untouched = new TerraformModule(moduleDir);
+        untouched.setTags(createMockTags(['tf-modules/test-module/v1.0.0']));
+        context.set({ prTitle: 'BREAKING CHANGE: bump provider' });
+
+        expect(untouched.getReleaseType()).toBeNull();
+      });
+
+      it('should not treat the conventional-commits breaking indicator as major in keywords mode', () => {
+        config.set({ minorKeywords: ['feat'] });
+        context.set({ prTitle: 'feat!: bump provider' });
+
+        expect(module.getReleaseType()).toBe(RELEASE_TYPE.MINOR);
+      });
+
+      it('should return major for a breaking conventional-commits title', () => {
+        config.set({ semverMode: 'conventional-commits' });
+        context.set({ prTitle: 'feat!: bump provider' });
+
+        expect(module.getReleaseType()).toBe(RELEASE_TYPE.MAJOR);
+      });
+    });
+
     describe('getReleaseType() with conventional-commits mode', () => {
       beforeEach(() => {
         config.set({

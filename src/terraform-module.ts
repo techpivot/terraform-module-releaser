@@ -392,9 +392,12 @@ export class TerraformModule {
    * Computes the appropriate semantic version release type based on commit analysis and module state.
    *
    * Delegates to {@link computeReleaseType} from the commit-analyzer module, which handles
-   * both keyword-based and conventional-commits-based detection strategies. The highest
-   * priority release type across all commits wins (MAJOR > MINOR > PATCH). If no commits
-   * match any rule, `config.defaultSemverLevel` is used as the fallback.
+   * both keyword-based and conventional-commits-based detection strategies. When
+   * `config.analyzePrTitle` is enabled, the pull request title is analyzed alongside the module's
+   * commit messages, so a squash-style title applies to every changed module without rewording
+   * individual commits. The highest priority release type across all analyzed messages wins
+   * (MAJOR > MINOR > PATCH). If nothing matches any rule, `config.defaultSemverLevel` is used as
+   * the fallback.
    *
    * @returns {ReleaseType | null} The computed release type (major, minor, or patch), or null if no release is needed.
    */
@@ -406,7 +409,8 @@ export class TerraformModule {
 
     // If we have commits, analyze them for release type
     if (this.hasDirectChanges()) {
-      const result = computeReleaseType(this.commitMessages);
+      const messages = config.analyzePrTitle ? [context.prTitle, ...this.commitMessages] : this.commitMessages;
+      const result = computeReleaseType(messages);
 
       // If no rules matched in any commit, use the default semver level
       return result ?? config.defaultSemverLevel;
