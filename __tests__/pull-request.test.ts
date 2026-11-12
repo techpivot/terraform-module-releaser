@@ -429,6 +429,84 @@ describe('pull-request', () => {
       expect(endGroup).toHaveBeenCalled();
     });
 
+    describe('pull request title footnote', () => {
+      const titleNoteMark = '<sup>1</sup>';
+      const titleNote = `${titleNoteMark} Release type set by the pull request title rather than by a commit`;
+
+      // One module whose only commit is a minor ("feat"), one whose only commit is already a major
+      const titleModules: TerraformModule[] = [
+        createMockTerraformModule({
+          directory: '/minor-module',
+          tags: ['minor-module/v1.0.0'],
+          commits: [{ sha: 'abc123', message: 'feat: add option', files: ['main.tf'] }],
+        }),
+        createMockTerraformModule({
+          directory: '/major-module',
+          tags: ['major-module/v1.0.0'],
+          commits: [{ sha: 'def456', message: 'feat!: remove variable', files: ['main.tf'] }],
+        }),
+      ];
+
+      /** Posts the release plan for `titleModules` and returns the comment body that was sent. */
+      const getPostedBody = async (): Promise<string> => {
+        stubOctokitReturnData('issues.createComment', {
+          data: { id: 1, html_url: 'https://github.com/org/repo/pull/1#issuecomment-1' },
+        });
+        stubOctokitReturnData('issues.listComments', { data: [] });
+
+        await addReleasePlanComment(titleModules, [], [], { status: WIKI_STATUS.SUCCESS });
+
+        return vi.mocked(context.octokit.rest.issues.createComment).mock.calls[0]?.[0]?.body ?? '';
+      };
+
+      beforeEach(() => {
+        config.resetDefaults();
+        context.resetDefaults();
+        context.useMockOctokit();
+        config.set({ analyzePrTitle: true, semverMode: 'conventional-commits' });
+      });
+
+      afterAll(() => {
+        config.resetDefaults();
+        context.resetDefaults();
+      });
+
+      it('should mark only the versions whose release type comes from the title', async () => {
+        context.set({ prTitle: 'feat!: drop provider v3' });
+
+        const body = await getPostedBody();
+
+        // The title raises the minor module to a major; the major module is already a major from its commit
+        expect(body).toContain(`| major | v1.0.0 | **v2.0.0**${titleNoteMark} |`);
+        expect(body).toContain('| major | v1.0.0 | **v2.0.0** |');
+        expect(body.split(titleNoteMark)).toHaveLength(3); // one table reference + the footnote itself
+        expect(body).toContain(titleNote);
+      });
+
+      it.each([
+        { name: 'the title matches the same release type as the commit', prTitle: 'feat: add another option' },
+        { name: 'the title matches a lower release type than the commit', prTitle: 'fix: correct typo' },
+        { name: 'the title matches no rule', prTitle: 'Update the modules' },
+      ])('should add no footnote when $name', async ({ prTitle }) => {
+        context.set({ prTitle });
+
+        const body = await getPostedBody();
+
+        expect(body).toContain('| minor | v1.0.0 | **v1.1.0** |');
+        expect(body).not.toContain(titleNoteMark);
+      });
+
+      it('should add no footnote when analyze-pr-title is disabled', async () => {
+        config.set({ analyzePrTitle: false });
+        context.set({ prTitle: 'feat!: drop provider v3' });
+
+        const body = await getPostedBody();
+
+        expect(body).toContain('| minor | v1.0.0 | **v1.1.0** |');
+        expect(body).not.toContain(titleNoteMark);
+      });
+    });
+
     it('should handle empty module updates', async () => {
       stubOctokitReturnData('issues.createComment', {
         data: { id: 1, html_url: 'https://github.com/org/repo/pull/1#issuecomment-1' },

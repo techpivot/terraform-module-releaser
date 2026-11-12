@@ -1,5 +1,5 @@
 import { relative } from 'node:path';
-import { computeReleaseType } from '@/commit-analyzer';
+import { computeReleaseType, higherPriorityReleaseType } from '@/commit-analyzer';
 import { config } from '@/config';
 import { context } from '@/context';
 import type { CommitDetails, GitHubRelease, GitHubTag, ReleaseReason, ReleaseType } from '@/types';
@@ -418,6 +418,36 @@ export class TerraformModule {
 
     // Otherwise, return null
     return null;
+  }
+
+  /**
+   * Whether the pull request title, rather than any of this module's commits, decides the release type.
+   *
+   * True only when `config.analyzePrTitle` is enabled, the module is released for direct changes, and the
+   * title matches a higher release type than the commits do (or the commits match nothing at all). When a
+   * commit matches the same or a higher type, the commits already justify the release type on their own, so
+   * the title is not what decides it. An initial release never analyzes the title.
+   *
+   * Used to mark title-driven release types in the release plan, so a reader can tell a level that comes
+   * from the title apart from one that comes from the module's own commits.
+   *
+   * @returns {boolean} True if the title decides the release type, false otherwise.
+   */
+  public isReleaseTypeFromPrTitle(): boolean {
+    if (!config.analyzePrTitle || this.isInitialRelease() || !this.hasDirectChanges()) {
+      return false;
+    }
+
+    const titleReleaseType = computeReleaseType([context.prTitle]);
+    if (titleReleaseType === null) {
+      return false;
+    }
+
+    const commitReleaseType = computeReleaseType(this.commitMessages);
+
+    return (
+      commitReleaseType === null || higherPriorityReleaseType(commitReleaseType, titleReleaseType) !== commitReleaseType
+    );
   }
 
   /**

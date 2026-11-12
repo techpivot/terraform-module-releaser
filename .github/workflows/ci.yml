@@ -6,7 +6,7 @@ on:
     # actually creating releases for terraform modules in this primary github action
     # repository. Thus, we ensure that the "closed" option is not present. Separately,
     # we test the action as designed in a separate terraform-module repository.
-    types: [opened, reopened, synchronize]
+    types: [opened, reopened, synchronize, edited] # TEMPORARY: "edited" re-runs the plan on title changes
     branches:
       - main
 
@@ -45,6 +45,7 @@ jobs:
         uses: ./
         with:
           semver-mode: conventional-commits
+          analyze-pr-title: true # TEMPORARY: exercises the pull request title footnote
           default-first-tag: v1.0.0
           disable-wiki: false
           wiki-sidebar-changelog-max: 10

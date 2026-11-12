@@ -266,7 +266,8 @@ Both methods are always detected regardless of commit type.
   level matched by a commit. The `default-semver-level` fallback applies only when neither the title nor any commit
   matches, so a matching title takes precedence over it. The title never triggers a release for a module without
   changes. The release plan comment shows the title as of the last workflow run, so a title edited afterwards is not
-  reflected until the next run; the release itself always uses the title at merge time.
+  reflected until the next run; the release itself always uses the title at merge time. In the release plan, a version
+  whose release type comes from the title rather than from a commit is marked with a footnote.
 - **Breaking changes**: Both `!` after type/scope (e.g., `feat!:`, `fix(scope)!:`) and `BREAKING CHANGE:` /
   `BREAKING-CHANGE:` footers in the commit body are detected.
 - **Keyword inputs ignored**: When `semver-mode` is `conventional-commits`, the `major-keywords`, `minor-keywords`, and
