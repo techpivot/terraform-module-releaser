@@ -88,3 +88,5 @@ resource "aws_security_group_rule" "this" {
   self                     = try(each.value.self, null)
   source_security_group_id = lookup(each.value, "source_security_group_id", null)
 }
+
+# TEMPORARY: sample change to exercise the release plan. Removed before this pull request is ready.
