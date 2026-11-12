@@ -49,7 +49,8 @@ After parsing, the flow branches on event type:
 
 1. Check wiki status (clone wiki repository, test connectivity)
 2. Post release plan comment — Rich Markdown table showing:
-   - Modules with changes and their next version
+   - Modules with changes and their next version, with a footnote on versions whose release type comes from the pull
+     request title rather than from a commit (`analyze-pr-title`)
    - Modules without changes
    - Tags/releases to be cleaned up (orphaned from deleted modules)
    - Wiki status indicator
@@ -113,6 +114,8 @@ Key behaviors:
 
 - `getReleaseType()` scans commit messages (plus the pull request title when `analyzePrTitle` is enabled) against
   major/minor/patch keywords from config
+- `isReleaseTypeFromPrTitle()` reports whether the title, rather than a commit, decides that release type: the title
+  matches a higher type than the module's commits, or the commits match nothing
 - `getReleaseTag()` constructs the next tag using the configured separator and version prefix
 - Tag association normalizes all separators (`-`, `_`, `/`, `.`) to a common character before comparison
 - Tags and releases are stored sorted by SemVer (not lexicographically)
