@@ -111,7 +111,8 @@ The central data structure, combining state and behavior:
 
 Key behaviors:
 
-- `getReleaseType()` scans commit messages against major/minor/patch keywords from config
+- `getReleaseType()` scans commit messages (plus the pull request title when `analyzePrTitle` is enabled) against
+  major/minor/patch keywords from config
 - `getReleaseTag()` constructs the next tag using the configured separator and version prefix
 - Tag association normalizes all separators (`-`, `_`, `/`, `.`) to a common character before comparison
 - Tags and releases are stored sorted by SemVer (not lexicographically)

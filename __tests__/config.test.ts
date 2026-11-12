@@ -334,6 +334,7 @@ describe('config', () => {
       expect(config.minorKeywords).toEqual(['feat', 'feature']);
       expect(config.patchKeywords).toEqual(['fix', 'chore', 'docs']);
       expect(config.defaultSemverLevel).toBe('patch');
+      expect(config.analyzePrTitle).toBe(false);
       expect(config.defaultFirstTag).toBe('v1.0.0');
       expect(config.terraformDocsVersion).toBe('v0.21.0');
       expect(config.deleteLegacyTags).toBe(true);
@@ -357,6 +358,7 @@ describe('config', () => {
       expect(vi.mocked(info).mock.calls).toEqual([
         ['Semver Mode: conventional-commits'],
         ['Default Semver Level: patch'],
+        ['Analyze PR Title: false'],
         ['Default First Tag: v1.0.0'],
         ['Terraform Docs Version: v0.21.0'],
         ['Delete Legacy Tags: true'],

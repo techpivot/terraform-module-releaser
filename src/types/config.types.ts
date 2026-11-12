@@ -56,6 +56,17 @@ export interface Config {
   defaultSemverLevel: ReleaseType;
 
   /**
+   * Whether to analyze the pull request title alongside commit messages when determining each
+   * module's release type. The title applies to every module the pull request changes and never
+   * triggers a release on its own. The highest release type across the title and commits wins, so
+   * the title never reduces a level matched by a commit; `defaultSemverLevel` applies only when
+   * neither the title nor any commit matches.
+   *
+   * Default: false
+   */
+  analyzePrTitle: boolean;
+
+  /**
    * Default first tag for initializing repositories without existing tags.
    * This serves as the fallback tag when no tags are found in the repository. Note this may
    * be in the format of `v#.#.#` or `#.#.#` (e.g., `v1.0.0` or `1.0.0`).
