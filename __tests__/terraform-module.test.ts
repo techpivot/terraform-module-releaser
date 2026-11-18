@@ -796,6 +796,95 @@ describe('TerraformModule', () => {
       });
     });
 
+    describe('isReleaseTypeFromPrTitle()', () => {
+      beforeEach(() => {
+        config.set({ analyzePrTitle: true, semverMode: 'conventional-commits' });
+        module.setTags(createMockTags(['tf-modules/test-module/v1.0.0']));
+        module.addCommit({
+          sha: 'abc123',
+          message: 'feat: add option',
+          files: ['main.tf'],
+        });
+      });
+
+      afterEach(() => {
+        context.resetDefaults();
+      });
+
+      it.each([
+        {
+          name: 'true when the title matches a higher release type than the commits',
+          prTitle: 'feat!: drop provider v3',
+          expected: true,
+          releaseType: RELEASE_TYPE.MAJOR,
+        },
+        {
+          name: 'false when the title matches the same release type as the commits',
+          prTitle: 'feat: add another option',
+          expected: false,
+          releaseType: RELEASE_TYPE.MINOR,
+        },
+        {
+          name: 'false when the title matches a lower release type than the commits',
+          prTitle: 'fix: correct typo',
+          expected: false,
+          releaseType: RELEASE_TYPE.MINOR,
+        },
+        {
+          name: 'false when the title matches no rule',
+          prTitle: 'Update the module',
+          expected: false,
+          releaseType: RELEASE_TYPE.MINOR,
+        },
+      ])('should return $name', ({ prTitle, expected, releaseType }) => {
+        context.set({ prTitle });
+
+        expect(module.isReleaseTypeFromPrTitle()).toBe(expected);
+        expect(module.getReleaseType()).toBe(releaseType);
+      });
+
+      it('should return true when the title matches and no commit does', () => {
+        const unmatched = new TerraformModule(moduleDir);
+        unmatched.setTags(createMockTags(['tf-modules/test-module/v1.0.0']));
+        unmatched.addCommit({ sha: 'def456', message: 'update configuration', files: ['main.tf'] });
+        context.set({ prTitle: 'fix: correct typo' });
+
+        expect(unmatched.isReleaseTypeFromPrTitle()).toBe(true);
+        expect(unmatched.getReleaseType()).toBe(RELEASE_TYPE.PATCH);
+      });
+
+      it('should return false when analyzePrTitle is disabled', () => {
+        config.set({ analyzePrTitle: false });
+        context.set({ prTitle: 'feat!: drop provider v3' });
+
+        expect(module.isReleaseTypeFromPrTitle()).toBe(false);
+      });
+
+      it('should return false for an initial release, which never analyzes the title', () => {
+        const initial = new TerraformModule(moduleDir);
+        initial.addCommit({ sha: 'def456', message: 'feat: add option', files: ['main.tf'] });
+        context.set({ prTitle: 'feat!: drop provider v3' });
+
+        expect(initial.isReleaseTypeFromPrTitle()).toBe(false);
+      });
+
+      it('should return false for a module the pull request did not change', () => {
+        const untouched = new TerraformModule(moduleDir);
+        untouched.setTags(createMockTags(['tf-modules/test-module/v1.0.0']));
+        context.set({ prTitle: 'feat!: drop provider v3' });
+
+        expect(untouched.isReleaseTypeFromPrTitle()).toBe(false);
+      });
+
+      it('should apply keyword matching to the title in keywords mode', () => {
+        config.set({ semverMode: 'keywords' });
+        context.set({ prTitle: 'BREAKING CHANGE: drop provider v3' });
+
+        expect(module.isReleaseTypeFromPrTitle()).toBe(true);
+        expect(module.getReleaseType()).toBe(RELEASE_TYPE.MAJOR);
+      });
+    });
+
     describe('getReleaseType() with conventional-commits mode', () => {
       beforeEach(() => {
         config.set({
