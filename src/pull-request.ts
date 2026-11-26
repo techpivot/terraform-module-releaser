@@ -18,6 +18,18 @@ import { debug, endGroup, info, startGroup, warning } from '@actions/core';
 import { RequestError } from '@octokit/request-error';
 
 /**
+ * Footnote reference appended to a release plan version whose release type comes from the pull
+ * request title (`analyze-pr-title`) rather than from one of the module's commits.
+ */
+const PR_TITLE_NOTE_MARK = '<sup>1</sup>';
+
+/**
+ * Footnote explaining {@link PR_TITLE_NOTE_MARK}. It also states which title each stage reads, because
+ * the plan is computed when the workflow runs and so can lag behind a title edited afterwards.
+ */
+const PR_TITLE_NOTE = `${PR_TITLE_NOTE_MARK} Release type set by the pull request title rather than by a commit (\`analyze-pr-title\`). This plan uses the title as of this workflow run; the release uses the title at merge.`;
+
+/**
  * GraphQL mutation to minimize (collapse) an issue/pull request comment as outdated.
  *
  * The GitHub REST API does not expose a way to collapse a comment, so we use the GraphQL
@@ -320,12 +332,19 @@ export async function addReleasePlanComment(
         '| Module | Type | Latest<br>Version | New<br>Version | Release<br>Details |',
         '|--|--|--|--|--|',
       );
+      // Whether any row carries the pull request title footnote, so the footnote is only added when referenced
+      let hasPrTitleNote = false;
+
       for (const module of terraformModulesToRelese) {
         // Prevent module name from wrapping on hyphens in table cells (Doesn't work reliably)
         const name = `<nobr><code>${module.name}</code></nobr>`;
         const type = module.getReleaseType();
         const latestVersion = module.getLatestTagVersion() ?? '';
         const releaseTagVersion = module.getReleaseTagVersion();
+
+        // Mark a version whose release type comes from the pull request title rather than from a commit
+        const prTitleNoteMark = module.isReleaseTypeFromPrTitle() ? PR_TITLE_NOTE_MARK : '';
+        hasPrTitleNote ||= prTitleNoteMark !== '';
 
         // Generate simple reason labels with emojis
         const reasonLabels = [];
@@ -348,8 +367,12 @@ export async function addReleasePlanComment(
         }
 
         commentBody.push(
-          `| ${name} | ${type} | ${latestVersion} | **${releaseTagVersion}** | ${reasonLabels.join('<br>')} |`,
+          `| ${name} | ${type} | ${latestVersion} | **${releaseTagVersion}**${prTitleNoteMark} | ${reasonLabels.join('<br>')} |`,
         );
+      }
+
+      if (hasPrTitleNote) {
+        commentBody.push(`\n${PR_TITLE_NOTE}`);
       }
     }
 
